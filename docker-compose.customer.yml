@@ -1,0 +1,59 @@
+# ==============================================================================
+# Customer-Facing Production Deployment Example
+#
+# Usage:
+#   DB_PASSWORD=$(openssl rand -hex 16) \
+#   COOKIE_SECRET=$(openssl rand -hex 32) \
+#   PUBLIC_URL=https://config.example.com \
+#   docker compose -f docker-compose.customer.yml up -d
+# ==============================================================================
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: config-platform-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-config_platform_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      POSTGRES_DB: ${DB_NAME:-config_platform}
+    # Security: Database is NOT published to host network ports; internal access only
+    expose:
+      - "5432"
+    volumes:
+      - postgres_customer_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-config_platform_user} -d $${POSTGRES_DB:-config_platform}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    image: config-platform:latest
+    container_name: config-platform-app
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${PORT:-4000}:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      HOST: 0.0.0.0
+      DATABASE_URL: postgres://${DB_USER:-config_platform_user}:${DB_PASSWORD:?DB_PASSWORD must be set}@postgres:5432/${DB_NAME:-config_platform}?sslmode=disable
+      COOKIE_SECRET: ${COOKIE_SECRET:?COOKIE_SECRET must be set}
+      PUBLIC_URL: ${PUBLIC_URL:?PUBLIC_URL must be set}
+      SIGNUP_MODE: ${SIGNUP_MODE:-invite_only}
+      REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-false}
+    networks:
+      - internal
+
+networks:
+  internal:
+    internal: false
+
+volumes:
+  postgres_customer_data:

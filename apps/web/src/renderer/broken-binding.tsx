@@ -1,0 +1,16 @@
+import React from 'react';
+import { AlertTriangle } from 'lucide-react';
+
+export interface BrokenBindingProps {
+  type: 'entity' | 'field';
+  id: string;
+}
+
+export const BrokenBinding: React.FC<BrokenBindingProps> = ({ type, id }) => {
+  return (
+    <span className="broken-binding" title={`Missing ${type} with ID: ${id}`}>
+      <AlertTriangle size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px' }} />
+      <span>[Broken {type}: {id}]</span>
+    </span>
+  );
+};

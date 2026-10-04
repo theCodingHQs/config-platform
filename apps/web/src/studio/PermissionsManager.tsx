@@ -1,0 +1,661 @@
+import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  Shield,
+  Users,
+  Check,
+  X,
+  Mail,
+  Plus,
+  Trash2,
+  Lock,
+  EyeOff,
+  Eye,
+  RefreshCw,
+  AlertCircle,
+} from 'lucide-react';
+import type { ErdTable } from '@config-platform/schema';
+import {
+  fetchSchemaEntities,
+  fetchEntityPermissions,
+  setEntityPermission,
+  fetchFieldPermissions,
+  setFieldPermission,
+  listMembers,
+  inviteMember,
+  changeMemberRole,
+  removeMember,
+  type EntityPermissionRecord,
+  type FieldPermissionRecord,
+  type MemberInfo,
+} from '../api/client';
+import { useMetadata } from '../context/metadata-context';
+
+const ROLES = ['owner', 'admin', 'builder', 'editor', 'viewer'] as const;
+type Role = typeof ROLES[number];
+
+export function PermissionsManager() {
+  const { tenantId } = useMetadata();
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<'entities' | 'members'>('entities');
+  const [selectedEntityId, setSelectedEntityId] = useState<string>('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<Role>('viewer');
+  const [generatedInviteToken, setGeneratedInviteToken] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+
+  // Entities query
+  const { data: entities = [], isLoading: entitiesLoading } = useQuery<ErdTable[]>({
+    queryKey: ['schema-entities', tenantId],
+    queryFn: () => fetchSchemaEntities(tenantId),
+  });
+
+  // Select first entity when available
+  useEffect(() => {
+    if (!selectedEntityId && entities.length > 0) {
+      setSelectedEntityId(entities[0].id);
+    }
+  }, [entities, selectedEntityId]);
+
+  const selectedEntity = entities.find((e) => e.id === selectedEntityId);
+
+  // Entity permissions query
+  const { data: entityPerms = [], isLoading: entityPermsLoading, refetch: refetchEntityPerms } = useQuery<EntityPermissionRecord[]>({
+    queryKey: ['entity-permissions', selectedEntityId],
+    queryFn: () => fetchEntityPermissions(selectedEntityId),
+    enabled: Boolean(selectedEntityId),
+  });
+
+  // Field permissions query
+  const { data: fieldPerms = [], isLoading: fieldPermsLoading, refetch: refetchFieldPerms } = useQuery<FieldPermissionRecord[]>({
+    queryKey: ['field-permissions', selectedEntityId],
+    queryFn: () => fetchFieldPermissions(selectedEntityId),
+    enabled: Boolean(selectedEntityId),
+  });
+
+  // Members query
+  const { data: members = [], isLoading: membersLoading, refetch: refetchMembers } = useQuery<MemberInfo[]>({
+    queryKey: ['tenant-members'],
+    queryFn: () => listMembers(),
+  });
+
+  // Entity perm toggle mutation
+  const entityPermMutation = useMutation({
+    mutationFn: async (vars: { role: Role; canRead?: boolean; canCreate?: boolean; canUpdate?: boolean; canDelete?: boolean }) => {
+      await setEntityPermission(selectedEntityId, vars.role, {
+        canRead: vars.canRead,
+        canCreate: vars.canCreate,
+        canUpdate: vars.canUpdate,
+        canDelete: vars.canDelete,
+      });
+    },
+    onSuccess: () => {
+      refetchEntityPerms();
+      setActionSuccess('Entity permission updated');
+      setTimeout(() => setActionSuccess(null), 3000);
+    },
+    onError: (err: any) => {
+      setActionError(err.message || 'Failed to update entity permission');
+    },
+  });
+
+  // Field perm toggle mutation
+  const fieldPermMutation = useMutation({
+    mutationFn: async (vars: { fieldId: string; role: Role; hidden?: boolean; readOnly?: boolean }) => {
+      await setFieldPermission(selectedEntityId, vars.fieldId, vars.role, {
+        hidden: vars.hidden,
+        readOnly: vars.readOnly,
+      });
+    },
+    onSuccess: () => {
+      refetchFieldPerms();
+      setActionSuccess('Field permission updated');
+      setTimeout(() => setActionSuccess(null), 3000);
+    },
+    onError: (err: any) => {
+      setActionError(err.message || 'Failed to update field permission');
+    },
+  });
+
+  // Invite member mutation
+  const inviteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await inviteMember(inviteEmail, inviteRole);
+      return res.token;
+    },
+    onSuccess: (token) => {
+      setGeneratedInviteToken(token);
+      setInviteEmail('');
+      refetchMembers();
+      setActionSuccess('Invite generated successfully');
+      setTimeout(() => setActionSuccess(null), 4000);
+    },
+    onError: (err: any) => {
+      setActionError(err.message || 'Failed to send invite');
+    },
+  });
+
+  // Change role mutation
+  const changeRoleMutation = useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: Role }) => {
+      await changeMemberRole(userId, role);
+    },
+    onSuccess: () => {
+      refetchMembers();
+      setActionSuccess('Member role updated');
+      setTimeout(() => setActionSuccess(null), 3000);
+    },
+    onError: (err: any) => {
+      setActionError(err.message || 'Failed to update member role');
+    },
+  });
+
+  // Remove member mutation
+  const removeMemberMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      await removeMember(userId);
+    },
+    onSuccess: () => {
+      refetchMembers();
+      setActionSuccess('Member removed');
+      setTimeout(() => setActionSuccess(null), 3000);
+    },
+    onError: (err: any) => {
+      setActionError(err.message || 'Failed to remove member');
+    },
+  });
+
+  // Helper to get effective entity perm for role
+  const getEntityPerm = (role: Role) => {
+    const found = entityPerms.find((p) => p.role === role);
+    if (found) return found;
+    // Defaults based on role hierarchy
+    if (role === 'owner' || role === 'admin' || role === 'builder' || role === 'editor') {
+      return { role, canRead: true, canCreate: true, canUpdate: true, canDelete: true };
+    }
+    return { role, canRead: true, canCreate: false, canUpdate: false, canDelete: false };
+  };
+
+  // Helper to get field perm for field + role
+  const getFieldPerm = (fieldId: string, role: Role) => {
+    const found = fieldPerms.find((p) => p.fieldId === fieldId && p.role === role);
+    return found || { fieldId, role, hidden: false, readOnly: false };
+  };
+
+  return (
+    <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <div>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+            <Shield size={24} style={{ color: 'var(--accent)' }} />
+            Access & Permissions
+          </h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.25rem' }}>
+            Configure role capabilities, entity access matrices, field-level restrictions, and tenant team members.
+          </p>
+        </div>
+
+        {/* Tab switchers */}
+        <div style={{ display: 'flex', gap: '0.5rem', backgroundColor: 'var(--surface-subtle)', padding: '0.25rem', borderRadius: 'var(--radius-md)' }}>
+          <button
+            type="button"
+            className={`btn ${activeTab === 'entities' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setActiveTab('entities')}
+            style={{ fontSize: '0.875rem', padding: '0.375rem 0.875rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}
+          >
+            <Shield size={15} /> Entity & Field Permissions
+          </button>
+          <button
+            type="button"
+            className={`btn ${activeTab === 'members' ? 'btn-primary' : 'btn-ghost'}`}
+            onClick={() => setActiveTab('members')}
+            style={{ fontSize: '0.875rem', padding: '0.375rem 0.875rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}
+          >
+            <Users size={15} /> Team Members
+          </button>
+        </div>
+      </div>
+
+      {/* Notifications */}
+      {actionError && (
+        <div style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 'var(--radius-md)', padding: '0.75rem 1rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#ef4444' }}>
+          <AlertCircle size={16} />
+          <span style={{ fontSize: '0.875rem' }}>{actionError}</span>
+          <button type="button" onClick={() => setActionError(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}>
+            <X size={14} />
+          </button>
+        </div>
+      )}
+      {actionSuccess && (
+        <div style={{ backgroundColor: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: 'var(--radius-md)', padding: '0.75rem 1rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#10b981' }}>
+          <Check size={16} />
+          <span style={{ fontSize: '0.875rem' }}>{actionSuccess}</span>
+        </div>
+      )}
+
+      {/* TAB 1: Entity & Field Permissions */}
+      {activeTab === 'entities' && (
+        <div>
+          {/* Entity Selector */}
+          <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '1.25rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <label style={{ fontWeight: 600, fontSize: '0.875rem' }}>Target Entity:</label>
+            <select
+              value={selectedEntityId}
+              onChange={(e) => setSelectedEntityId(e.target.value)}
+              className="input"
+              style={{ width: '280px' }}
+              disabled={entitiesLoading || entities.length === 0}
+            >
+              {entities.map((ent) => (
+                <option key={ent.id} value={ent.id}>
+                  {ent.label} ({ent.name})
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                refetchEntityPerms();
+                refetchFieldPerms();
+              }}
+              title="Refresh permissions"
+              style={{ padding: '0.5rem' }}
+            >
+              <RefreshCw size={15} />
+            </button>
+          </div>
+
+          {selectedEntity && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              {/* Entity Permission Matrix */}
+              <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '1.5rem' }}>
+                <h2 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                  CRUD Permissions: {selectedEntity.label}
+                </h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', marginBottom: '1.25rem' }}>
+                  Specify record-level actions each tenant role is permitted to perform on this entity.
+                </p>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
+                        <th style={{ padding: '0.75rem 1rem' }}>Role</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Can Read (GET)</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Can Create (POST)</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Can Update (PATCH)</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Can Delete (DELETE)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ROLES.map((role) => {
+                        const perm = getEntityPerm(role);
+                        const isImmutableRole = role === 'owner' || role === 'admin';
+                        return (
+                          <tr key={role} style={{ borderBottom: '1px solid var(--border)', fontSize: '0.875rem' }}>
+                            <td style={{ padding: '0.875rem 1rem', fontWeight: 600, textTransform: 'capitalize' }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}>
+                                {role === 'owner' ? <Shield size={14} style={{ color: 'var(--accent)' }} /> : null}
+                                {role}
+                              </span>
+                            </td>
+                            {/* Can Read */}
+                            <td style={{ padding: '0.875rem 1rem' }}>
+                              <input
+                                type="checkbox"
+                                checked={perm.canRead}
+                                disabled={isImmutableRole}
+                                onChange={(e) => {
+                                  entityPermMutation.mutate({
+                                    role,
+                                    canRead: e.target.checked,
+                                    canCreate: perm.canCreate,
+                                    canUpdate: perm.canUpdate,
+                                    canDelete: perm.canDelete,
+                                  });
+                                }}
+                              />
+                            </td>
+                            {/* Can Create */}
+                            <td style={{ padding: '0.875rem 1rem' }}>
+                              <input
+                                type="checkbox"
+                                checked={perm.canCreate}
+                                disabled={isImmutableRole}
+                                onChange={(e) => {
+                                  entityPermMutation.mutate({
+                                    role,
+                                    canRead: perm.canRead,
+                                    canCreate: e.target.checked,
+                                    canUpdate: perm.canUpdate,
+                                    canDelete: perm.canDelete,
+                                  });
+                                }}
+                              />
+                            </td>
+                            {/* Can Update */}
+                            <td style={{ padding: '0.875rem 1rem' }}>
+                              <input
+                                type="checkbox"
+                                checked={perm.canUpdate}
+                                disabled={isImmutableRole}
+                                onChange={(e) => {
+                                  entityPermMutation.mutate({
+                                    role,
+                                    canRead: perm.canRead,
+                                    canCreate: perm.canCreate,
+                                    canUpdate: e.target.checked,
+                                    canDelete: perm.canDelete,
+                                  });
+                                }}
+                              />
+                            </td>
+                            {/* Can Delete */}
+                            <td style={{ padding: '0.875rem 1rem' }}>
+                              <input
+                                type="checkbox"
+                                checked={perm.canDelete}
+                                disabled={isImmutableRole}
+                                onChange={(e) => {
+                                  entityPermMutation.mutate({
+                                    role,
+                                    canRead: perm.canRead,
+                                    canCreate: perm.canCreate,
+                                    canUpdate: perm.canUpdate,
+                                    canDelete: e.target.checked,
+                                  });
+                                }}
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Field-Level Permissions */}
+              <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '1.5rem' }}>
+                <h2 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                  Field-Level Restrictions
+                </h2>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', marginBottom: '1.25rem' }}>
+                  Hide confidential fields or make sensitive fields read-only per role. Hidden fields are omitted from responses and cannot be queried.
+                </p>
+
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
+                        <th style={{ padding: '0.75rem 1rem' }}>Field Name</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Type</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Viewer: Hidden</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Viewer: Read-Only</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Editor: Hidden</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Editor: Read-Only</th>
+                        <th style={{ padding: '0.75rem 1rem' }}>Builder: Hidden</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedEntity.columns.map((col: any) => {
+                        const viewerPerm = getFieldPerm(col.id, 'viewer');
+                        const editorPerm = getFieldPerm(col.id, 'editor');
+                        const builderPerm = getFieldPerm(col.id, 'builder');
+
+                        return (
+                          <tr key={col.id} style={{ borderBottom: '1px solid var(--border)', fontSize: '0.875rem' }}>
+                            <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>
+                              {col.label} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({col.name})</span>
+                            </td>
+                            <td style={{ padding: '0.75rem 1rem', color: 'var(--text-muted)' }}>
+                              {col.type}
+                            </td>
+                            {/* Viewer Hidden */}
+                            <td style={{ padding: '0.75rem 1rem' }}>
+                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={viewerPerm.hidden}
+                                  onChange={(e) => {
+                                    fieldPermMutation.mutate({
+                                      fieldId: col.id,
+                                      role: 'viewer',
+                                      hidden: e.target.checked,
+                                      readOnly: viewerPerm.readOnly,
+                                    });
+                                  }}
+                                />
+                                {viewerPerm.hidden ? <EyeOff size={14} style={{ color: '#ef4444' }} /> : <Eye size={14} style={{ color: 'var(--text-muted)' }} />}
+                              </label>
+                            </td>
+                            {/* Viewer Read-Only */}
+                            <td style={{ padding: '0.75rem 1rem' }}>
+                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={viewerPerm.readOnly}
+                                  onChange={(e) => {
+                                    fieldPermMutation.mutate({
+                                      fieldId: col.id,
+                                      role: 'viewer',
+                                      hidden: viewerPerm.hidden,
+                                      readOnly: e.target.checked,
+                                    });
+                                  }}
+                                />
+                                <Lock size={14} style={{ color: viewerPerm.readOnly ? 'var(--accent)' : 'var(--text-muted)' }} />
+                              </label>
+                            </td>
+                            {/* Editor Hidden */}
+                            <td style={{ padding: '0.75rem 1rem' }}>
+                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={editorPerm.hidden}
+                                  onChange={(e) => {
+                                    fieldPermMutation.mutate({
+                                      fieldId: col.id,
+                                      role: 'editor',
+                                      hidden: e.target.checked,
+                                      readOnly: editorPerm.readOnly,
+                                    });
+                                  }}
+                                />
+                                {editorPerm.hidden ? <EyeOff size={14} style={{ color: '#ef4444' }} /> : <Eye size={14} style={{ color: 'var(--text-muted)' }} />}
+                              </label>
+                            </td>
+                            {/* Editor Read-Only */}
+                            <td style={{ padding: '0.75rem 1rem' }}>
+                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={editorPerm.readOnly}
+                                  onChange={(e) => {
+                                    fieldPermMutation.mutate({
+                                      fieldId: col.id,
+                                      role: 'editor',
+                                      hidden: editorPerm.hidden,
+                                      readOnly: e.target.checked,
+                                    });
+                                  }}
+                                />
+                                <Lock size={14} style={{ color: editorPerm.readOnly ? 'var(--accent)' : 'var(--text-muted)' }} />
+                              </label>
+                            </td>
+                            {/* Builder Hidden */}
+                            <td style={{ padding: '0.75rem 1rem' }}>
+                              <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={builderPerm.hidden}
+                                  onChange={(e) => {
+                                    fieldPermMutation.mutate({
+                                      fieldId: col.id,
+                                      role: 'builder',
+                                      hidden: e.target.checked,
+                                      readOnly: builderPerm.readOnly,
+                                    });
+                                  }}
+                                />
+                                {builderPerm.hidden ? <EyeOff size={14} style={{ color: '#ef4444' }} /> : <Eye size={14} style={{ color: 'var(--text-muted)' }} />}
+                              </label>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 2: Team Members & Invites */}
+      {activeTab === 'members' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          {/* Invite New Member Card */}
+          <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '1.5rem' }}>
+            <h2 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Mail size={18} style={{ color: 'var(--accent)' }} /> Invite New Team Member
+            </h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', marginBottom: '1.25rem' }}>
+              Generate an invitation link or token for a new user to join this tenant with a designated role.
+            </p>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (inviteEmail.trim()) inviteMutation.mutate();
+              }}
+              style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}
+            >
+              <input
+                type="email"
+                placeholder="colleague@example.com"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                className="input"
+                style={{ minWidth: '280px', flex: 1 }}
+                required
+              />
+              <select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as Role)}
+                className="input"
+                style={{ width: '140px' }}
+              >
+                <option value="admin">Admin</option>
+                <option value="builder">Builder</option>
+                <option value="editor">Editor</option>
+                <option value="viewer">Viewer</option>
+              </select>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={inviteMutation.isPending || !inviteEmail.trim()}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem' }}
+              >
+                <Plus size={16} /> Send Invite
+              </button>
+            </form>
+
+            {generatedInviteToken && (
+              <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: 'var(--surface-subtle)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: '0.375rem' }}>
+                  Generated Invite Token (share with invitee):
+                </span>
+                <code style={{ fontSize: '0.875rem', fontFamily: 'monospace', color: 'var(--accent)', wordBreak: 'break-all' }}>
+                  {generatedInviteToken}
+                </code>
+              </div>
+            )}
+          </div>
+
+          {/* Members Table */}
+          <div style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-md)', padding: '1.5rem' }}>
+            <h2 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Users size={18} style={{ color: 'var(--accent)' }} /> Current Members ({members.length})
+            </h2>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', marginBottom: '1.25rem' }}>
+              Members who have access to this tenant and their current permission roles.
+            </p>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
+                    <th style={{ padding: '0.75rem 1rem' }}>User Email</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Role</th>
+                    <th style={{ padding: '0.75rem 1rem' }}>Joined Date</th>
+                    <th style={{ padding: '0.75rem 1rem', textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {members.map((member) => (
+                    <tr key={member.id} style={{ borderBottom: '1px solid var(--border)', fontSize: '0.875rem' }}>
+                      <td style={{ padding: '0.875rem 1rem', fontWeight: 500 }}>
+                        {member.email}
+                      </td>
+                      <td style={{ padding: '0.875rem 1rem' }}>
+                        {member.role === 'owner' ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontWeight: 600, color: 'var(--accent)' }}>
+                            <Shield size={14} /> Owner
+                          </span>
+                        ) : (
+                          <select
+                            value={member.role}
+                            onChange={(e) => changeRoleMutation.mutate({ userId: member.id, role: e.target.value as Role })}
+                            className="input"
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.8125rem', width: '120px' }}
+                          >
+                            <option value="admin">Admin</option>
+                            <option value="builder">Builder</option>
+                            <option value="editor">Editor</option>
+                            <option value="viewer">Viewer</option>
+                          </select>
+                        )}
+                      </td>
+                      <td style={{ padding: '0.875rem 1rem', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>
+                        {new Date(member.memberSince).toLocaleDateString()}
+                      </td>
+                      <td style={{ padding: '0.875rem 1rem', textAlign: 'right' }}>
+                        {member.role !== 'owner' && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={() => {
+                              if (window.confirm(`Are you sure you want to remove ${member.email}?`)) {
+                                removeMemberMutation.mutate(member.id);
+                              }
+                            }}
+                            style={{ color: '#ef4444', padding: '0.375rem 0.5rem' }}
+                            title="Remove member"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {members.length === 0 && !membersLoading && (
+                    <tr>
+                      <td colSpan={4} style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        No members found or permission denied.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

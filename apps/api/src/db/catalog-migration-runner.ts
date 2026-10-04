@@ -1,0 +1,363 @@
+import type { Pool, PoolClient } from 'pg';
+import { pool, directPool } from './pool.js';
+
+export const CATALOG_MIGRATION_LOCK_ID = 847291034;
+
+export interface MigrationReport {
+  version: number;
+  name: string;
+  rowsAffected?: number;
+  appliedAt?: string;
+}
+
+export let editorDeleteMigrationReport: { rowsChanged: number; executedAt: string } = {
+  rowsChanged: 0,
+  executedAt: new Date().toISOString(),
+};
+
+export interface CatalogMigration {
+  version: number;
+  name: string;
+  up: (client: PoolClient) => Promise<{ rowsAffected?: number } | void>;
+}
+
+export const catalogMigrations: CatalogMigration[] = [
+  {
+    version: 1,
+    name: '001_catalog_base',
+    up: async (client: PoolClient) => {
+      await client.query(`
+        -- Tenant table
+        CREATE TABLE IF NOT EXISTS public.tenant (
+          id VARCHAR(64) PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          schema_version INT NOT NULL DEFAULT 1,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        -- Entity definitions table
+        CREATE TABLE IF NOT EXISTS public.entity_def (
+          id VARCHAR(64) PRIMARY KEY,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          name VARCHAR(128) NOT NULL,
+          label VARCHAR(255) NOT NULL,
+          physical_table_name VARCHAR(64) NOT NULL,
+          version INT NOT NULL DEFAULT 1,
+          display_field_id VARCHAR(64),
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT uq_entity_tenant_name UNIQUE (tenant_id, name)
+        );
+
+        ALTER TABLE public.entity_def ADD COLUMN IF NOT EXISTS display_field_id VARCHAR(64);
+
+        -- Field definitions table
+        CREATE TABLE IF NOT EXISTS public.field_def (
+          id VARCHAR(64) PRIMARY KEY,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          entity_id VARCHAR(64) NOT NULL REFERENCES public.entity_def(id) ON DELETE CASCADE,
+          name VARCHAR(128) NOT NULL,
+          label VARCHAR(255) NOT NULL,
+          physical_column_name VARCHAR(64) NOT NULL,
+          type VARCHAR(32) NOT NULL,
+          required BOOLEAN NOT NULL DEFAULT FALSE,
+          is_unique BOOLEAN NOT NULL DEFAULT FALSE,
+          is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+          position INT NOT NULL DEFAULT 0,
+          config JSONB NOT NULL DEFAULT '{}'::jsonb,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT uq_field_entity_name UNIQUE (entity_id, name)
+        );
+
+        ALTER TABLE public.field_def ADD COLUMN IF NOT EXISTS position INT NOT NULL DEFAULT 0;
+
+        -- Relation definitions table
+        CREATE TABLE IF NOT EXISTS public.relation_def (
+          id VARCHAR(64) PRIMARY KEY,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          name VARCHAR(128) NOT NULL,
+          source_entity_id VARCHAR(64) NOT NULL REFERENCES public.entity_def(id) ON DELETE CASCADE,
+          source_field_id VARCHAR(64) NOT NULL REFERENCES public.field_def(id) ON DELETE CASCADE,
+          target_entity_id VARCHAR(64) NOT NULL REFERENCES public.entity_def(id) ON DELETE CASCADE,
+          target_field_id VARCHAR(64) REFERENCES public.field_def(id) ON DELETE SET NULL,
+          relation_type VARCHAR(32) NOT NULL DEFAULT 'many_to_one',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        -- Page definitions table
+        CREATE TABLE IF NOT EXISTS public.page_def (
+          id VARCHAR(64) PRIMARY KEY,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          name VARCHAR(128) NOT NULL,
+          route VARCHAR(255) NOT NULL,
+          draft JSONB NOT NULL,
+          published JSONB,
+          version INT NOT NULL DEFAULT 1,
+          allowed_roles TEXT[] DEFAULT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT uq_page_tenant_route UNIQUE (tenant_id, route)
+        );
+
+        ALTER TABLE public.page_def ADD COLUMN IF NOT EXISTS allowed_roles TEXT[] DEFAULT NULL;
+
+        -- Schema migration history table
+        CREATE TABLE IF NOT EXISTS public.schema_migration (
+          id VARCHAR(64) PRIMARY KEY,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          version INT NOT NULL,
+          ddl TEXT NOT NULL,
+          status VARCHAR(32) NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        -- Auth tables
+        CREATE TABLE IF NOT EXISTS public.app_user (
+          id VARCHAR(64) PRIMARY KEY,
+          email VARCHAR(255) NOT NULL UNIQUE,
+          password_hash TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS public.tenant_member (
+          user_id VARCHAR(64) NOT NULL REFERENCES public.app_user(id) ON DELETE CASCADE,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          role VARCHAR(32) NOT NULL DEFAULT 'viewer',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (user_id, tenant_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS public.app_session (
+          id VARCHAR(128) PRIMARY KEY,
+          user_id VARCHAR(64) NOT NULL REFERENCES public.app_user(id) ON DELETE CASCADE,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          role VARCHAR(32) NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE TABLE IF NOT EXISTS public.invite_token (
+          token VARCHAR(128) PRIMARY KEY,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          inviter_id VARCHAR(64) NOT NULL REFERENCES public.app_user(id) ON DELETE CASCADE,
+          invitee_email VARCHAR(255) NOT NULL,
+          role VARCHAR(32) NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL,
+          used_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT uq_invite_tenant_email UNIQUE (tenant_id, invitee_email)
+        );
+
+        CREATE TABLE IF NOT EXISTS public.entity_permission (
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          entity_id VARCHAR(64) NOT NULL REFERENCES public.entity_def(id) ON DELETE CASCADE,
+          role VARCHAR(32) NOT NULL,
+          can_read BOOLEAN NOT NULL DEFAULT TRUE,
+          can_create BOOLEAN NOT NULL DEFAULT FALSE,
+          can_update BOOLEAN NOT NULL DEFAULT FALSE,
+          can_delete BOOLEAN NOT NULL DEFAULT FALSE,
+          PRIMARY KEY (tenant_id, entity_id, role)
+        );
+
+        CREATE TABLE IF NOT EXISTS public.field_permission (
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          entity_id VARCHAR(64) NOT NULL REFERENCES public.entity_def(id) ON DELETE CASCADE,
+          field_id VARCHAR(64) NOT NULL REFERENCES public.field_def(id) ON DELETE CASCADE,
+          role VARCHAR(32) NOT NULL,
+          hidden BOOLEAN NOT NULL DEFAULT FALSE,
+          read_only BOOLEAN NOT NULL DEFAULT FALSE,
+          PRIMARY KEY (tenant_id, entity_id, field_id, role)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_entity_def_tenant ON public.entity_def(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_field_def_entity ON public.field_def(entity_id);
+        CREATE INDEX IF NOT EXISTS idx_relation_def_tenant ON public.relation_def(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_page_def_tenant ON public.page_def(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_schema_migration_tenant ON public.schema_migration(tenant_id, version);
+        CREATE INDEX IF NOT EXISTS idx_app_session_user ON public.app_session(user_id);
+        CREATE INDEX IF NOT EXISTS idx_app_session_expires ON public.app_session(expires_at);
+        CREATE INDEX IF NOT EXISTS idx_tenant_member_tenant ON public.tenant_member(tenant_id);
+      `);
+    },
+  },
+  {
+    version: 2,
+    name: '002_reset_editor_delete_permissions',
+    up: async (client: PoolClient) => {
+      // Part A.5: Resets entity permission rows where editor has canDelete false only if they match old UI default
+      // (can_read=true, can_create=true, can_update=true, can_delete=false)
+      const res = await client.query(`
+        UPDATE public.entity_permission
+        SET can_delete = true
+        WHERE role = 'editor'
+          AND can_read = true
+          AND can_create = true
+          AND can_update = true
+          AND can_delete = false;
+      `);
+      const count = res.rowCount || 0;
+      editorDeleteMigrationReport = { rowsChanged: count, executedAt: new Date().toISOString() };
+      console.log(`[MIGRATION 002] Reset editor canDelete permissions: ${count} rows updated to can_delete=true.`);
+      return { rowsAffected: count };
+    },
+  },
+  {
+    version: 3,
+    name: '003_multi_workspace_and_verification',
+    up: async (client: PoolClient) => {
+      await client.query(`
+        ALTER TABLE public.app_user ADD COLUMN IF NOT EXISTS last_tenant_id VARCHAR(64) REFERENCES public.tenant(id) ON DELETE SET NULL;
+        ALTER TABLE public.app_user ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;
+
+        CREATE TABLE IF NOT EXISTS public.email_verification_token (
+          token VARCHAR(128) PRIMARY KEY,
+          user_id VARCHAR(64) NOT NULL REFERENCES public.app_user(id) ON DELETE CASCADE,
+          email VARCHAR(255) NOT NULL,
+          expires_at TIMESTAMPTZ NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_email_verification_user ON public.email_verification_token(user_id);
+      `);
+    },
+  },
+  {
+    version: 4,
+    name: '004_tenant_plan_and_limits',
+    up: async (client: PoolClient) => {
+      await client.query(`
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS plan VARCHAR(32) NOT NULL DEFAULT 'free';
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS statement_timeout_ms INT NOT NULL DEFAULT 10000;
+      `);
+    },
+  },
+  {
+    version: 5,
+    name: '005_audit_log',
+    up: async (client: PoolClient) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.audit_log (
+          id VARCHAR(64) PRIMARY KEY,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          user_id VARCHAR(64) NOT NULL,
+          user_email VARCHAR(255) NOT NULL,
+          action VARCHAR(64) NOT NULL,
+          entity_type VARCHAR(64) NOT NULL,
+          entity_id VARCHAR(64) NOT NULL,
+          before_state JSONB,
+          after_state JSONB,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_audit_log_tenant_time ON public.audit_log(tenant_id, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_audit_log_entity ON public.audit_log(tenant_id, entity_type, entity_id);
+      `);
+    },
+  },
+  {
+    version: 6,
+    name: '006_audit_log_append_only',
+    up: async (client: PoolClient) => {
+      await client.query(`
+        ALTER TABLE public.audit_log DROP CONSTRAINT IF EXISTS audit_log_tenant_id_fkey;
+
+        CREATE OR REPLACE FUNCTION public.prevent_audit_log_modification()
+        RETURNS TRIGGER AS $$
+        BEGIN
+          IF current_setting('audit.allow_tenant_purge', true) = 'on' THEN
+            RETURN OLD;
+          END IF;
+          RAISE EXCEPTION 'audit_log is append-only: updates and deletes are prohibited';
+        END;
+        $$ LANGUAGE plpgsql;
+
+        DROP TRIGGER IF EXISTS trg_audit_log_append_only ON public.audit_log;
+        CREATE TRIGGER trg_audit_log_append_only
+        BEFORE UPDATE OR DELETE ON public.audit_log
+        FOR EACH ROW
+        EXECUTE FUNCTION public.prevent_audit_log_modification();
+      `);
+    },
+  },
+  {
+    version: 7,
+    name: '007_audit_log_scoped_purge',
+    up: async (client: PoolClient) => {
+      await client.query(`
+        CREATE OR REPLACE FUNCTION public.prevent_audit_log_modification()
+        RETURNS TRIGGER AS $$
+        BEGIN
+          IF current_setting('audit.allow_tenant_purge', true) = 'on' THEN
+            RETURN OLD;
+          END IF;
+          RAISE EXCEPTION 'audit_log is append-only: updates and deletes are prohibited';
+        END;
+        $$ LANGUAGE plpgsql;
+      `);
+    },
+  },
+];
+
+/**
+ * Runs all unapplied versioned catalog migrations behind a PostgreSQL advisory lock.
+ * Uses directPool (DATABASE_URL_DIRECT, unpooled) with a blocking advisory lock.
+ */
+export async function runCatalogMigrations(_customPool?: Pool): Promise<MigrationReport[] & { success: boolean }> {
+  const db = directPool;
+  const client = await db.connect();
+
+  try {
+    // Acquire blocking advisory lock on unpooled connection to prevent concurrent deploy race conditions
+    await client.query(`SELECT pg_advisory_lock($1)`, [CATALOG_MIGRATION_LOCK_ID]);
+
+    // Ensure schema migrations table exists
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS public.schema_migrations (
+        version INT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    // Fetch already applied migrations
+    const appliedRes = await client.query<{ version: number }>(
+      `SELECT version FROM public.schema_migrations ORDER BY version ASC`
+    );
+    const appliedVersions = new Set(appliedRes.rows.map((r) => r.version));
+
+    const reports: MigrationReport[] & { success: boolean } = Object.assign([] as MigrationReport[], { success: true });
+
+    for (const mig of catalogMigrations) {
+      if (!appliedVersions.has(mig.version)) {
+        await client.query('BEGIN');
+        try {
+          const result = await mig.up(client);
+          await client.query(
+            `INSERT INTO public.schema_migrations (version, name, applied_at)
+             VALUES ($1, $2, NOW())`,
+            [mig.version, mig.name]
+          );
+          await client.query('COMMIT');
+          reports.push({
+            version: mig.version,
+            name: mig.name,
+            rowsAffected: result?.rowsAffected,
+            appliedAt: new Date().toISOString(),
+          });
+        } catch (err) {
+          await client.query('ROLLBACK');
+          throw err;
+        }
+      }
+    }
+
+    return reports;
+  } finally {
+    try {
+      await client.query(`SELECT pg_advisory_unlock($1)`, [CATALOG_MIGRATION_LOCK_ID]);
+    } catch {
+      // ignore unlock error on disconnect
+    }
+    client.release();
+  }
+}

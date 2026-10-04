@@ -1,0 +1,21 @@
+{
+  "name": "config-platform",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:api": "pnpm --filter @config-platform/api dev",
+    "dev:web": "pnpm --filter @config-platform/web dev",
+    "bootstrap:owner": "pnpm --filter @config-platform/api bootstrap:owner",
+    "bootstrap:owner:prod": "pnpm --filter @config-platform/api bootstrap:owner:prod",
+    "user:add": "pnpm --filter @config-platform/api user:add",
+    "user:add:prod": "pnpm --filter @config-platform/api user:add:prod",
+    "check:db-clean": "pnpm --filter @config-platform/api check:db-clean",
+    "test:db:up": "docker compose up -d postgres",
+    "test:db:down": "docker compose down",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "name": "@config-platform/api",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "bootstrap:owner": "tsx src/scripts/bootstrap-owner.ts",
+    "bootstrap:owner:prod": "node dist/scripts/bootstrap-owner.js",
+    "user:add": "tsx src/scripts/add-user.ts",
+    "user:add:prod": "node dist/scripts/add-user.js",
+    "check:db-clean": "tsx src/scripts/check-db-clean.ts",
+    "test:db:up": "docker compose up -d postgres",
+    "test:db:down": "docker compose down",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@config-platform/schema": "workspace:*",
+    "@fastify/cookie": "^11.1.2",
+    "@fastify/cors": "^10.0.2",
+    "@fastify/csrf-protection": "^8.0.1",
+    "@fastify/rate-limit": "^11.2.0",
+    "@fastify/sensible": "^6.0.3",
+    "@fastify/static": "^10.1.5",
+    "argon2": "^0.45.1",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.1",
+    "nodemailer": "^10.0.13",
+    "pg": "^8.13.3",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.11.11",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.7"
+  }
+}
