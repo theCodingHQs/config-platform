@@ -34,7 +34,7 @@ export class NodeErrorBoundary extends Component<NodeErrorBoundaryProps, State> 
             <AlertTriangle size={15} style={{ color: 'var(--danger)' }} />
             <strong>Component Error: &lt;{this.props.nodeType}&gt; (id: {this.props.nodeId})</strong>
           </div>
-          <p style={{ marginTop: '0.25rem', fontSize: '0.8125rem' }}>
+          <p style={{ marginTop: 'var(--spacing-1)', fontSize: 'var(--font-size-sm)' }}>
             {this.state.error?.message || 'An unexpected rendering error occurred.'}
           </p>
         </div>

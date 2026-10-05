@@ -95,9 +95,8 @@ export function AcceptInvitePage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '1.5rem',
+        padding: 'var(--space-6)',
         backgroundColor: 'var(--bg)',
-        backgroundImage: 'radial-gradient(circle at 50% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 60%)',
       }}
     >
       <div
@@ -105,19 +104,19 @@ export function AcceptInvitePage() {
           width: '100%',
           maxWidth: '460px',
           backgroundColor: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg, 12px)',
-          boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.3)',
+          border: 'var(--border-width) solid var(--border)',
+          borderRadius: 'var(--radius-lg)',
+          boxShadow: 'var(--shadow-lg)',
           overflow: 'hidden',
         }}
       >
         {/* Header */}
         <div
           style={{
-            padding: '2rem 2rem 1.5rem',
+            padding: 'var(--space-6) var(--space-6) var(--space-4)',
             textAlign: 'center',
-            borderBottom: '1px solid var(--border)',
-            backgroundColor: 'var(--surface-subtle)',
+            borderBottom: 'var(--border-width) solid var(--border)',
+            backgroundColor: 'var(--surface-2)',
           }}
         >
           <div
@@ -125,27 +124,27 @@ export function AcceptInvitePage() {
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: '44px',
-              height: '44px',
-              borderRadius: '10px',
+              width: 'var(--control-height-md)',
+              height: 'var(--control-height-md)',
+              borderRadius: 'var(--radius-md)',
               backgroundColor: 'var(--accent-subtle)',
               color: 'var(--accent)',
-              marginBottom: '1rem',
+              marginBottom: 'var(--space-3)',
             }}
           >
             <Zap size={24} />
           </div>
           <h1
             style={{
-              fontSize: '1.375rem',
+              fontSize: 'var(--font-size-xl)',
               fontWeight: 700,
               letterSpacing: '-0.02em',
-              marginBottom: '0.25rem',
+              marginBottom: 'var(--space-1)',
             }}
           >
             Workspace Invitation
           </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+          <p style={{ color: 'var(--muted)', fontSize: 'var(--font-size-sm)' }}>
             {inviteInfo
               ? `You've been invited to join ${inviteInfo.tenantName}`
               : 'Accept invitation to join workspace'}
@@ -153,32 +152,32 @@ export function AcceptInvitePage() {
         </div>
 
         {/* Content Body */}
-        <div style={{ padding: '2rem' }}>
+        <div style={{ padding: 'var(--space-6)' }}>
           {loadingInfo ? (
-            <div style={{ textAlign: 'center', padding: '2rem 0', color: 'var(--text-muted)' }}>
-              <p style={{ fontSize: '0.875rem' }}>Verifying invitation...</p>
+            <div style={{ textAlign: 'center', padding: 'var(--space-6) 0', color: 'var(--muted)' }}>
+              <p style={{ fontSize: 'var(--font-size-sm)' }}>Verifying invitation...</p>
             </div>
           ) : infoError ? (
-            <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+            <div style={{ textAlign: 'center', padding: 'var(--space-4) 0' }}>
               <div
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '50%',
-                  backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                  color: '#ef4444',
-                  marginBottom: '1rem',
+                  width: 'var(--control-height-lg)',
+                  height: 'var(--control-height-lg)',
+                  borderRadius: 'var(--radius-full)',
+                  backgroundColor: 'var(--danger-subtle)',
+                  color: 'var(--danger)',
+                  marginBottom: 'var(--space-3)',
                 }}
               >
                 <AlertCircle size={24} />
               </div>
-              <h3 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+              <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, marginBottom: 'var(--space-2)' }}>
                 Invalid or Expired Invitation
               </h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+              <p style={{ color: 'var(--muted)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-4)' }}>
                 {infoError}
               </p>
               <a
@@ -189,7 +188,6 @@ export function AcceptInvitePage() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   width: '100%',
-                  padding: '0.625rem',
                   textDecoration: 'none',
                 }}
               >
@@ -197,26 +195,26 @@ export function AcceptInvitePage() {
               </a>
             </div>
           ) : success ? (
-            <div style={{ textAlign: 'center', padding: '1rem 0' }}>
+            <div style={{ textAlign: 'center', padding: 'var(--space-4) 0' }}>
               <div
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '50%',
-                  backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                  color: '#22c55e',
-                  marginBottom: '1rem',
+                  width: 'var(--control-height-lg)',
+                  height: 'var(--control-height-lg)',
+                  borderRadius: 'var(--radius-full)',
+                  backgroundColor: 'var(--success-subtle)',
+                  color: 'var(--success)',
+                  marginBottom: 'var(--space-3)',
                 }}
               >
                 <CheckCircle2 size={24} />
               </div>
-              <h3 style={{ fontSize: '1.125rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+              <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 600, marginBottom: 'var(--space-2)' }}>
                 Invitation Accepted!
               </h3>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+              <p style={{ color: 'var(--muted)', fontSize: 'var(--font-size-sm)' }}>
                 Redirecting you to the workspace...
               </p>
             </div>
@@ -226,42 +224,31 @@ export function AcceptInvitePage() {
               {inviteInfo && (
                 <div
                   style={{
-                    backgroundColor: 'var(--surface-subtle)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-md, 8px)',
-                    padding: '1rem',
-                    marginBottom: '1.5rem',
+                    backgroundColor: 'var(--surface-2)',
+                    border: 'var(--border-width) solid var(--border)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: 'var(--space-4)',
+                    marginBottom: 'var(--space-5)',
                     display: 'flex',
                     flexDirection: 'column',
-                    gap: '0.5rem',
+                    gap: 'var(--space-2)',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
-                    <Building size={15} style={{ color: 'var(--text-muted)' }} />
-                    <span style={{ color: 'var(--text-muted)' }}>Workspace:</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' }}>
+                    <Building size={15} style={{ color: 'var(--muted)' }} />
+                    <span style={{ color: 'var(--muted)' }}>Workspace:</span>
                     <strong style={{ color: 'var(--text)' }}>{inviteInfo.tenantName}</strong>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
-                    <Shield size={15} style={{ color: 'var(--text-muted)' }} />
-                    <span style={{ color: 'var(--text-muted)' }}>Role:</span>
-                    <span
-                      style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                        padding: '0.125rem 0.375rem',
-                        borderRadius: '4px',
-                        backgroundColor: 'var(--accent-subtle)',
-                        color: 'var(--accent)',
-                        border: '1px solid var(--accent)',
-                      }}
-                    >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' }}>
+                    <Shield size={15} style={{ color: 'var(--muted)' }} />
+                    <span style={{ color: 'var(--muted)' }}>Role:</span>
+                    <span className="badge badge-accent">
                       {inviteInfo.role}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
-                    <Mail size={15} style={{ color: 'var(--text-muted)' }} />
-                    <span style={{ color: 'var(--text-muted)' }}>Account:</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' }}>
+                    <Mail size={15} style={{ color: 'var(--muted)' }} />
+                    <span style={{ color: 'var(--muted)' }}>Account:</span>
                     <span style={{ color: 'var(--text)' }}>{inviteInfo.email}</span>
                   </div>
                 </div>
@@ -270,16 +257,16 @@ export function AcceptInvitePage() {
               {submitError && (
                 <div
                   style={{
-                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                    border: '1px solid rgba(239, 68, 68, 0.3)',
-                    borderRadius: 'var(--radius-md, 8px)',
-                    padding: '0.75rem 1rem',
-                    marginBottom: '1.25rem',
+                    backgroundColor: 'var(--danger-subtle)',
+                    border: 'var(--border-width) solid var(--danger)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: 'var(--space-3) var(--space-4)',
+                    marginBottom: 'var(--space-4)',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.5rem',
-                    color: '#ef4444',
-                    fontSize: '0.875rem',
+                    gap: 'var(--space-2)',
+                    color: 'var(--danger)',
+                    fontSize: 'var(--font-size-sm)',
                   }}
                 >
                   <AlertCircle size={16} style={{ flexShrink: 0 }} />
@@ -287,15 +274,15 @@ export function AcceptInvitePage() {
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
                 {!inviteInfo && (
                   <div>
                     <label
                       style={{
                         display: 'block',
-                        fontSize: '0.8125rem',
+                        fontSize: 'var(--font-size-xs)',
                         fontWeight: 600,
-                        marginBottom: '0.375rem',
+                        marginBottom: 'var(--space-1)',
                         color: 'var(--text)',
                       }}
                     >
@@ -306,10 +293,10 @@ export function AcceptInvitePage() {
                         size={16}
                         style={{
                           position: 'absolute',
-                          left: '0.75rem',
+                          left: 'var(--space-3)',
                           top: '50%',
                           transform: 'translateY(-50%)',
-                          color: 'var(--text-muted)',
+                          color: 'var(--muted)',
                         }}
                       />
                       <input
@@ -321,13 +308,7 @@ export function AcceptInvitePage() {
                         className="form-input"
                         style={{
                           width: '100%',
-                          padding: '0.625rem 0.875rem 0.625rem 2.5rem',
-                          backgroundColor: 'var(--surface-subtle)',
-                          color: 'var(--text)',
-                          border: '1px solid var(--border)',
-                          borderRadius: 'var(--radius-md, 8px)',
-                          fontSize: '0.875rem',
-                          height: '42px',
+                          paddingLeft: 'var(--space-8)',
                         }}
                       />
                     </div>
@@ -338,9 +319,9 @@ export function AcceptInvitePage() {
                   <label
                     style={{
                       display: 'block',
-                      fontSize: '0.8125rem',
+                      fontSize: 'var(--font-size-xs)',
                       fontWeight: 600,
-                      marginBottom: '0.375rem',
+                      marginBottom: 'var(--space-1)',
                       color: 'var(--text)',
                     }}
                   >
@@ -353,10 +334,10 @@ export function AcceptInvitePage() {
                       size={16}
                       style={{
                         position: 'absolute',
-                        left: '0.75rem',
+                        left: 'var(--space-3)',
                         top: '50%',
                         transform: 'translateY(-50%)',
-                        color: 'var(--text-muted)',
+                        color: 'var(--muted)',
                       }}
                     />
                     <input
@@ -369,22 +350,16 @@ export function AcceptInvitePage() {
                       className="form-input"
                       style={{
                         width: '100%',
-                        padding: '0.625rem 0.875rem 0.625rem 2.5rem',
-                        backgroundColor: 'var(--surface-subtle)',
-                        color: 'var(--text)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius-md, 8px)',
-                        fontSize: '0.875rem',
-                        height: '42px',
+                        paddingLeft: 'var(--space-8)',
                       }}
                     />
                   </div>
                   {inviteInfo?.userExists ? (
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
+                    <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)', marginTop: 'var(--space-1)', display: 'block' }}>
                       Enter your existing password to associate your account with this workspace.
                     </span>
                   ) : (
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
+                    <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)', marginTop: 'var(--space-1)', display: 'block' }}>
                       Choose a secure password for your new workspace account.
                     </span>
                   )}
@@ -396,16 +371,12 @@ export function AcceptInvitePage() {
                   className="btn btn-primary"
                   style={{
                     width: '100%',
-                    padding: '0.6875rem 1rem',
-                    fontSize: '0.875rem',
-                    fontWeight: 600,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    gap: '0.5rem',
-                    borderRadius: 'var(--radius-md, 8px)',
+                    gap: 'var(--space-2)',
                     cursor: submitting ? 'not-allowed' : 'pointer',
-                    marginTop: '0.5rem',
+                    marginTop: 'var(--space-2)',
                   }}
                 >
                   {submitting ? (

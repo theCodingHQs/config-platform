@@ -62,7 +62,7 @@ export const TemplatePickerModal: React.FC<TemplatePickerModalProps> = ({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.45)',
+        backgroundColor: 'var(--overlay-bg)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -73,48 +73,48 @@ export const TemplatePickerModal: React.FC<TemplatePickerModalProps> = ({
       <div
         style={{
           backgroundColor: 'var(--surface)',
-          borderRadius: 'var(--radius, 8px)',
+          borderRadius: 'var(--radius-lg)',
           width: '560px',
           maxWidth: '90vw',
           maxHeight: '85vh',
           display: 'flex',
           flexDirection: 'column',
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 10px 10px -5px rgba(0, 0, 0, 0.2)',
-          border: '1px solid var(--border)',
+          boxShadow: 'var(--shadow-xl)',
+          border: 'var(--border-width) solid var(--border)',
           overflow: 'hidden',
         }}
         onClick={(e) => e.stopPropagation()}
       >
         <div
           style={{
-            padding: '1rem 1.25rem',
-            borderBottom: '1px solid var(--border)',
+            padding: 'var(--space-4) var(--space-5)',
+            borderBottom: 'var(--border-width) solid var(--border)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
             <LayoutTemplate size={18} />
-            <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: 'var(--text)' }}>Create From Template</h3>
+            <h3 style={{ margin: 0, fontSize: 'var(--font-size-base)', fontWeight: 600, color: 'var(--text)' }}>Create From Template</h3>
           </div>
           <button
             type="button"
             className="btn btn-ghost"
             onClick={onClose}
-            style={{ padding: '0.25rem', display: 'flex', alignItems: 'center' }}
+            style={{ padding: 'var(--space-1)', display: 'flex', alignItems: 'center' }}
             aria-label="Close"
           >
             <X size={16} />
           </button>
         </div>
 
-        <div style={{ padding: '1.25rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div style={{ padding: 'var(--space-5)', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
           <div>
-            <label className="form-label" style={{ fontWeight: 600, marginBottom: '0.5rem' }}>
+            <label className="form-label" style={{ fontWeight: 600, marginBottom: 'var(--space-2)' }}>
               Choose a Template
             </label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
               {TEMPLATES.map((tmpl) => {
                 const Icon = tmpl.icon;
                 const isSelected = selectedTemplate === tmpl.id;
@@ -125,10 +125,10 @@ export const TemplatePickerModal: React.FC<TemplatePickerModalProps> = ({
                     style={{
                       display: 'flex',
                       alignItems: 'flex-start',
-                      gap: '0.75rem',
-                      padding: '0.75rem 1rem',
-                      borderRadius: 'var(--radius-sm, 6px)',
-                      border: `1.5px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
+                      gap: 'var(--space-3)',
+                      padding: 'var(--space-3) var(--space-4)',
+                      borderRadius: 'var(--radius-md)',
+                      border: `${isSelected ? '2px' : '1px'} solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
                       backgroundColor: isSelected ? 'var(--accent-subtle)' : 'transparent',
                       cursor: 'pointer',
                       transition: 'all 0.15s ease',
@@ -136,18 +136,18 @@ export const TemplatePickerModal: React.FC<TemplatePickerModalProps> = ({
                   >
                     <div
                       style={{
-                        padding: '0.375rem',
-                        borderRadius: 'var(--radius-sm, 4px)',
-                        backgroundColor: isSelected ? 'var(--accent)' : 'var(--surface-subtle)',
-                        color: isSelected ? '#ffffff' : 'var(--text-muted)',
+                        padding: 'var(--space-2)',
+                        borderRadius: 'var(--radius-sm)',
+                        backgroundColor: isSelected ? 'var(--accent)' : 'var(--surface-2)',
+                        color: isSelected ? 'var(--accent-contrast)' : 'var(--muted)',
                         display: 'flex',
                       }}
                     >
                       <Icon size={18} />
                     </div>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text)' }}>{tmpl.title}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.125rem' }}>
+                      <div style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)', color: 'var(--text)' }}>{tmpl.title}</div>
+                      <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)', marginTop: 'var(--space-1)' }}>
                         {tmpl.description}
                       </div>
                     </div>
@@ -175,7 +175,7 @@ export const TemplatePickerModal: React.FC<TemplatePickerModalProps> = ({
               ))}
             </select>
             {entities.length === 0 && (
-              <div style={{ fontSize: '0.75rem', color: 'var(--danger)', marginTop: '0.25rem' }}>
+              <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--danger)', marginTop: 'var(--space-1)' }}>
                 No entities found. Create an entity first in Data Entities.
               </div>
             )}
@@ -184,12 +184,12 @@ export const TemplatePickerModal: React.FC<TemplatePickerModalProps> = ({
 
         <div
           style={{
-            padding: '0.875rem 1.25rem',
-            borderTop: '1px solid var(--border)',
+            padding: 'var(--space-3) var(--space-5)',
+            borderTop: 'var(--border-width) solid var(--border)',
             display: 'flex',
             justifyContent: 'flex-end',
-            gap: '0.5rem',
-            backgroundColor: 'var(--surface-subtle)',
+            gap: 'var(--space-2)',
+            backgroundColor: 'var(--surface-2)',
           }}
         >
           <button type="button" className="btn btn-secondary" onClick={onClose}>

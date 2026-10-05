@@ -18,6 +18,7 @@ import { csrfCheckHook } from './session-middleware.js';
 import { createRateLimitHook } from './rate-limiter.js';
 import { tenantLimitsService } from '../limits/tenant-limits.js';
 import { auditLogService } from '../audit/audit-service.js';
+import { pool } from '../db/pool.js';
 
 const COOKIE_OPTS = {
   httpOnly: true,
@@ -67,7 +68,29 @@ export async function authRoutes(fastify: FastifyInstance) {
       tenantId: session.tenantId,
       tenantName: session.tenantName,
       role: session.role,
+      themePreference: session.themePreference || 'system',
     };
+  });
+
+  // ─── PATCH /auth/theme ───────────────────────────────────────
+  fastify.patch('/auth/theme', { preHandler: [csrfCheckHook] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const sessionId = (req.cookies as Record<string, string>)?.[SESSION_COOKIE];
+    if (!sessionId) {
+      return reply.status(401).send({ statusCode: 401, error: 'Unauthorized' });
+    }
+    const session = await authService.resolveSession(sessionId);
+    if (!session) {
+      return reply.status(401).send({ statusCode: 401, error: 'Unauthorized' });
+    }
+    const { theme } = (req.body as any) || {};
+    if (!theme || !['system', 'light', 'dark'].includes(theme)) {
+      return reply.status(400).send({ statusCode: 400, error: 'Invalid theme. Must be system, light, or dark.' });
+    }
+    await pool.query('UPDATE public.app_user SET theme_preference = $1, updated_at = NOW() WHERE id = $2', [
+      theme,
+      session.userId,
+    ]);
+    return { success: true, theme };
   });
 
   // ─── POST /auth/signup ───────────────────────────────────────

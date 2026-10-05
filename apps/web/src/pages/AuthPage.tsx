@@ -47,9 +47,8 @@ export function AuthPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '1.5rem',
+        padding: 'var(--space-6)',
         backgroundColor: 'var(--bg)',
-        backgroundImage: 'radial-gradient(circle at 50% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 60%)',
       }}
     >
       <div
@@ -57,19 +56,19 @@ export function AuthPage() {
           width: '100%',
           maxWidth: '440px',
           backgroundColor: 'var(--surface)',
-          border: '1px solid var(--border)',
-          borderRadius: 'var(--radius-lg, 12px)',
-          boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.3)',
+          border: 'var(--border-width) solid var(--border)',
+          borderRadius: 'var(--radius-lg)',
+          boxShadow: 'var(--shadow-lg)',
           overflow: 'hidden',
         }}
       >
         {/* Header / Brand Banner */}
         <div
           style={{
-            padding: '2rem 2rem 1.5rem',
+            padding: 'var(--space-6) var(--space-6) var(--space-4)',
             textAlign: 'center',
-            borderBottom: '1px solid var(--border)',
-            backgroundColor: 'var(--surface-subtle)',
+            borderBottom: 'var(--border-width) solid var(--border)',
+            backgroundColor: 'var(--surface-2)',
           }}
         >
           <div
@@ -77,28 +76,28 @@ export function AuthPage() {
               display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: '44px',
-              height: '44px',
-              borderRadius: '10px',
+              width: 'var(--control-height-md)',
+              height: 'var(--control-height-md)',
+              borderRadius: 'var(--radius-md)',
               backgroundColor: 'var(--accent-subtle)',
               color: 'var(--accent)',
-              marginBottom: '1rem',
+              marginBottom: 'var(--space-3)',
             }}
           >
             <Zap size={24} />
           </div>
           <h1
             style={{
-              fontSize: '1.375rem',
+              fontSize: 'var(--font-size-xl)',
               fontWeight: 700,
               letterSpacing: '-0.02em',
               color: 'var(--text)',
-              marginBottom: '0.375rem',
+              marginBottom: 'var(--space-1)',
             }}
           >
             ConfigPlatform
           </h1>
-          <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--muted)' }}>
             Dynamic Schema Engine, Studio & Page Runtime
           </p>
         </div>
@@ -107,7 +106,7 @@ export function AuthPage() {
         <div
           style={{
             display: 'flex',
-            borderBottom: '1px solid var(--border)',
+            borderBottom: 'var(--border-width) solid var(--border)',
             backgroundColor: 'var(--surface)',
           }}
         >
@@ -119,13 +118,13 @@ export function AuthPage() {
             }}
             style={{
               flex: 1,
-              padding: '0.875rem',
-              fontSize: '0.875rem',
+              padding: 'var(--space-3)',
+              fontSize: 'var(--font-size-sm)',
               fontWeight: 600,
               border: 'none',
               background: 'transparent',
               cursor: 'pointer',
-              color: mode === 'login' ? 'var(--accent)' : 'var(--text-muted)',
+              color: mode === 'login' ? 'var(--accent)' : 'var(--muted)',
               borderBottom: mode === 'login' ? '2px solid var(--accent)' : '2px solid transparent',
               transition: 'all 0.15s ease',
             }}
@@ -140,13 +139,13 @@ export function AuthPage() {
             }}
             style={{
               flex: 1,
-              padding: '0.875rem',
-              fontSize: '0.875rem',
+              padding: 'var(--space-3)',
+              fontSize: 'var(--font-size-sm)',
               fontWeight: 600,
               border: 'none',
               background: 'transparent',
               cursor: 'pointer',
-              color: mode === 'signup' ? 'var(--accent)' : 'var(--text-muted)',
+              color: mode === 'signup' ? 'var(--accent)' : 'var(--muted)',
               borderBottom: mode === 'signup' ? '2px solid var(--accent)' : '2px solid transparent',
               transition: 'all 0.15s ease',
             }}
@@ -156,20 +155,20 @@ export function AuthPage() {
         </div>
 
         {/* Form Body */}
-        <div style={{ padding: '2rem' }}>
+        <div style={{ padding: 'var(--space-6)' }}>
           {error && (
             <div
               style={{
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.3)',
-                borderRadius: 'var(--radius-md, 8px)',
-                padding: '0.75rem 1rem',
-                marginBottom: '1.25rem',
+                backgroundColor: 'var(--danger-subtle)',
+                border: 'var(--border-width) solid var(--danger)',
+                borderRadius: 'var(--radius-md)',
+                padding: 'var(--space-3) var(--space-4)',
+                marginBottom: 'var(--space-4)',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '0.5rem',
-                color: '#ef4444',
-                fontSize: '0.875rem',
+                gap: 'var(--space-2)',
+                color: 'var(--danger)',
+                fontSize: 'var(--font-size-sm)',
               }}
             >
               <AlertCircle size={16} style={{ flexShrink: 0 }} />
@@ -177,15 +176,15 @@ export function AuthPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
             {mode === 'signup' && (
               <div>
                 <label
                   style={{
                     display: 'block',
-                    fontSize: '0.8125rem',
+                    fontSize: 'var(--font-size-xs)',
                     fontWeight: 600,
-                    marginBottom: '0.375rem',
+                    marginBottom: 'var(--space-1)',
                     color: 'var(--text)',
                   }}
                 >
@@ -196,10 +195,10 @@ export function AuthPage() {
                     size={16}
                     style={{
                       position: 'absolute',
-                      left: '0.75rem',
+                      left: 'var(--space-3)',
                       top: '50%',
                       transform: 'translateY(-50%)',
-                      color: 'var(--text-muted)',
+                      color: 'var(--muted)',
                     }}
                   />
                   <input
@@ -210,13 +209,7 @@ export function AuthPage() {
                     className="form-input"
                     style={{
                       width: '100%',
-                      padding: '0.625rem 0.875rem 0.625rem 2.5rem',
-                      backgroundColor: 'var(--surface-subtle)',
-                      color: 'var(--text)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-md, 8px)',
-                      fontSize: '0.875rem',
-                      height: '42px',
+                      paddingLeft: 'var(--space-8)',
                     }}
                   />
                 </div>
@@ -227,9 +220,9 @@ export function AuthPage() {
               <label
                 style={{
                   display: 'block',
-                  fontSize: '0.8125rem',
+                  fontSize: 'var(--font-size-xs)',
                   fontWeight: 600,
-                  marginBottom: '0.375rem',
+                  marginBottom: 'var(--space-1)',
                   color: 'var(--text)',
                 }}
               >
@@ -240,10 +233,10 @@ export function AuthPage() {
                   size={16}
                   style={{
                     position: 'absolute',
-                    left: '0.875rem',
+                    left: 'var(--space-3)',
                     top: '50%',
                     transform: 'translateY(-50%)',
-                    color: 'var(--text-muted)',
+                    color: 'var(--muted)',
                     pointerEvents: 'none',
                   }}
                 />
@@ -255,13 +248,7 @@ export function AuthPage() {
                   className="form-input"
                   style={{
                     width: '100%',
-                    padding: '0.625rem 0.875rem 0.625rem 2.5rem',
-                    backgroundColor: 'var(--surface-subtle)',
-                    color: 'var(--text)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-md, 8px)',
-                    fontSize: '0.875rem',
-                    height: '42px',
+                    paddingLeft: 'var(--space-8)',
                   }}
                   required
                 />
@@ -269,10 +256,10 @@ export function AuthPage() {
             </div>
 
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-1)' }}>
                 <label
                   style={{
-                    fontSize: '0.8125rem',
+                    fontSize: 'var(--font-size-xs)',
                     fontWeight: 600,
                     color: 'var(--text)',
                   }}
@@ -280,7 +267,7 @@ export function AuthPage() {
                   Password
                 </label>
                 {mode === 'signup' && (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Min. 10 characters</span>
+                  <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)' }}>Min. 10 characters</span>
                 )}
               </div>
               <div style={{ position: 'relative' }}>
@@ -288,10 +275,10 @@ export function AuthPage() {
                   size={16}
                   style={{
                     position: 'absolute',
-                    left: '0.875rem',
+                    left: 'var(--space-3)',
                     top: '50%',
                     transform: 'translateY(-50%)',
-                    color: 'var(--text-muted)',
+                    color: 'var(--muted)',
                     pointerEvents: 'none',
                   }}
                 />
@@ -303,13 +290,7 @@ export function AuthPage() {
                   className="form-input"
                   style={{
                     width: '100%',
-                    padding: '0.625rem 0.875rem 0.625rem 2.5rem',
-                    backgroundColor: 'var(--surface-subtle)',
-                    color: 'var(--text)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 'var(--radius-md, 8px)',
-                    fontSize: '0.875rem',
-                    height: '42px',
+                    paddingLeft: 'var(--space-8)',
                   }}
                   required
                 />
@@ -322,14 +303,11 @@ export function AuthPage() {
               disabled={loading}
               style={{
                 width: '100%',
-                padding: '0.75rem',
-                fontSize: '0.9375rem',
-                fontWeight: 600,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '0.5rem',
-                marginTop: '0.5rem',
+                gap: 'var(--space-2)',
+                marginTop: 'var(--space-2)',
               }}
             >
               {loading ? (

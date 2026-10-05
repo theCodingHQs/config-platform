@@ -62,12 +62,12 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'var(--overlay-bg)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 1000,
-        padding: 20,
+        padding: 'var(--space-5)',
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -77,48 +77,48 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
         style={{
           background: 'var(--surface)',
           color: 'var(--text)',
-          borderRadius: 'var(--radius, 8px)',
-          boxShadow: '0 20px 25px -5px rgba(0,0,0,0.4), 0 10px 10px -5px rgba(0,0,0,0.2)',
+          borderRadius: 'var(--radius-lg)',
+          boxShadow: 'var(--shadow-xl)',
           width: '100%',
-          maxWidth: 680,
+          maxWidth: '680px',
           maxHeight: '90vh',
           display: 'flex',
           flexDirection: 'column',
-          border: '1px solid var(--border)',
+          border: 'var(--border-width) solid var(--border)',
           overflow: 'hidden',
         }}
       >
         <div
           style={{
-            padding: '14px 20px',
-            borderBottom: '1px solid var(--border)',
+            padding: 'var(--space-3) var(--space-5)',
+            borderBottom: 'var(--border-width) solid var(--border)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
           }}
         >
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--text)' }}>Data Sources</h3>
+          <h3 style={{ margin: 0, fontSize: 'var(--font-size-base)', fontWeight: 600, color: 'var(--text)' }}>Data Sources</h3>
           <button
             onClick={onClose}
             aria-label="Close"
             className="btn btn-ghost"
-            style={{ padding: 4, display: 'flex', alignItems: 'center' }}
+            style={{ padding: 'var(--space-1)', display: 'flex', alignItems: 'center' }}
           >
             <X size={18} />
           </button>
         </div>
 
-        <div style={{ padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+        <div style={{ padding: 'var(--space-5)', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--muted)', margin: 0 }}>
             Configure named data sources that fetch records and refetch when filter expressions change.
           </p>
 
           {list.length === 0 ? (
-            <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+            <div style={{ padding: 'var(--space-6)', textAlign: 'center', color: 'var(--muted)', fontSize: 'var(--font-size-sm)' }}>
               No data sources configured yet. Click "Add Data Source" to create one.
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
               {list.map((ds, idx) => {
                 const entity = entities.find((e) => e.id === ds.entityId);
                 const columns = entity?.columns || [];
@@ -128,18 +128,18 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
                     key={idx}
                     data-testid={`data-source-card-${idx}`}
                     style={{
-                      border: '1px solid var(--border)',
-                      borderRadius: 8,
-                      padding: 14,
-                      background: 'var(--surface-subtle)',
+                      border: 'var(--border-width) solid var(--border)',
+                      borderRadius: 'var(--radius-md)',
+                      padding: 'var(--space-3)',
+                      background: 'var(--surface-2)',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 12,
+                      gap: 'var(--space-3)',
                     }}
                   >
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
                       <div style={{ flex: 1 }}>
-                        <label className="form-label" style={{ fontSize: 12, marginBottom: 2 }}>Source ID</label>
+                        <label className="form-label" style={{ fontSize: 'var(--font-size-xs)', marginBottom: 'var(--space-1)' }}>Source ID</label>
                         <input
                           type="text"
                           aria-label={`Data Source ${idx + 1} ID`}
@@ -147,12 +147,12 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
                           value={ds.id}
                           placeholder="e.g. ds_items"
                           onChange={(e) => handleUpdate(idx, { ...ds, id: e.target.value })}
-                          style={{ fontSize: 13, padding: '4px 8px' }}
+                          style={{ fontSize: 'var(--font-size-sm)' }}
                         />
                       </div>
 
                       <div style={{ flex: 1 }}>
-                        <label className="form-label" style={{ fontSize: 12, marginBottom: 2 }}>Target Entity</label>
+                        <label className="form-label" style={{ fontSize: 'var(--font-size-xs)', marginBottom: 'var(--space-1)' }}>Target Entity</label>
                         <select
                           aria-label={`Data Source ${idx + 1} Entity`}
                           className="form-select"
@@ -165,7 +165,7 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
                             const newId = (wasAutoGenerated && nextEnt) ? `ds_${nextEnt.name}` : ds.id;
                             handleUpdate(idx, { ...ds, id: newId, entityId: newEntityId, filter: {} });
                           }}
-                          style={{ fontSize: 13, padding: '4px 8px' }}
+                          style={{ fontSize: 'var(--font-size-sm)' }}
                         >
                           <option value="">Select Entity</option>
                           {entities.map((ent) => (
@@ -183,8 +183,8 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
                           background: 'transparent',
                           border: 'none',
                           cursor: 'pointer',
-                          padding: 6,
-                          color: 'var(--danger, #ef4444)',
+                          padding: 'var(--space-1)',
+                          color: 'var(--danger)',
                           alignSelf: 'flex-end',
                         }}
                         aria-label="Delete Data Source"
@@ -195,12 +195,12 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
 
                     {/* Filter (Key-Values with Expressions) */}
                     <div>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>
+                      <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--muted)', marginBottom: 'var(--space-1)' }}>
                         Filter Criteria (Values can be <code>{'{{ state.<key> }}'}</code>)
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
                         {Object.entries(ds.filter || {}).map(([fKey, fVal], fIdx) => (
-                          <div key={fIdx} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                          <div key={fIdx} style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
                             <select
                               className="form-select"
                               value={fKey}
@@ -211,7 +211,7 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
                                 if (newKey) newFilter[newKey] = fVal;
                                 handleUpdate(idx, { ...ds, filter: newFilter });
                               }}
-                              style={{ width: '40%', fontSize: 12, padding: '4px 8px' }}
+                              style={{ width: '40%', fontSize: 'var(--font-size-xs)' }}
                             >
                               <option value="">Select Field</option>
                               {columns.map((c) => (
@@ -253,7 +253,7 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
                             const newFilter = { ...(ds.filter || {}), [availableCol]: '' };
                             handleUpdate(idx, { ...ds, filter: newFilter });
                           }}
-                          style={{ alignSelf: 'flex-start', fontSize: 11, padding: '2px 6px' }}
+                          style={{ alignSelf: 'flex-start', fontSize: 'var(--font-size-xs)', padding: 'var(--space-1) var(--space-2)' }}
                         >
                           + Add Filter Field
                         </button>
@@ -261,19 +261,19 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
                     </div>
 
                     {/* Limit and Sort */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--space-2)' }}>
                       <div>
-                        <label className="form-label" style={{ fontSize: 11, marginBottom: 2 }}>Limit</label>
+                        <label className="form-label" style={{ fontSize: 'var(--font-size-xs)', marginBottom: 'var(--space-1)' }}>Limit</label>
                         <input
                           type="number"
                           className="form-input"
                           value={ds.limit || 50}
                           onChange={(e) => handleUpdate(idx, { ...ds, limit: Number(e.target.value) })}
-                          style={{ fontSize: 12, padding: '4px 8px' }}
+                          style={{ fontSize: 'var(--font-size-xs)' }}
                         />
                       </div>
                       <div>
-                        <label className="form-label" style={{ fontSize: 11, marginBottom: 2 }}>Sort Field</label>
+                        <label className="form-label" style={{ fontSize: 'var(--font-size-xs)', marginBottom: 'var(--space-1)' }}>Sort Field</label>
                         <select
                           className="form-select"
                           value={ds.sort?.fieldId || ''}
@@ -285,7 +285,7 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
                                 : undefined,
                             })
                           }
-                          style={{ fontSize: 12, padding: '4px 8px' }}
+                          style={{ fontSize: 'var(--font-size-xs)' }}
                         >
                           <option value="">Default (id)</option>
                           {columns.map((c) => (
@@ -296,7 +296,7 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
                         </select>
                       </div>
                       <div>
-                        <label className="form-label" style={{ fontSize: 11, marginBottom: 2 }}>Sort Direction</label>
+                        <label className="form-label" style={{ fontSize: 'var(--font-size-xs)', marginBottom: 'var(--space-1)' }}>Sort Direction</label>
                         <select
                           className="form-select"
                           value={ds.sort?.order || 'asc'}
@@ -309,7 +309,7 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
                                 : undefined,
                             })
                           }
-                          style={{ fontSize: 12, padding: '4px 8px' }}
+                          style={{ fontSize: 'var(--font-size-xs)' }}
                         >
                           <option value="asc">Ascending</option>
                           <option value="desc">Descending</option>
@@ -326,7 +326,7 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
             type="button"
             className="btn btn-secondary"
             onClick={handleAdd}
-            style={{ alignSelf: 'flex-start', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+            style={{ alignSelf: 'flex-start', fontSize: 'var(--font-size-sm)', display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)' }}
           >
             <Plus size={14} /> Add Data Source
           </button>
@@ -334,17 +334,17 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
 
         <div
           style={{
-            padding: '12px 20px',
-            borderTop: '1px solid var(--border)',
+            padding: 'var(--space-3) var(--space-5)',
+            borderTop: 'var(--border-width) solid var(--border)',
             display: 'flex',
             justifyContent: 'flex-end',
-            gap: 8,
+            gap: 'var(--space-2)',
           }}
         >
-          <button type="button" className="btn btn-secondary" onClick={onClose} style={{ fontSize: 13 }}>
+          <button type="button" className="btn btn-secondary" onClick={onClose} style={{ fontSize: 'var(--font-size-sm)' }}>
             Cancel
           </button>
-          <button type="button" className="btn btn-primary" onClick={handleSave} style={{ fontSize: 13 }}>
+          <button type="button" className="btn btn-primary" onClick={handleSave} style={{ fontSize: 'var(--font-size-sm)' }}>
             Save Data Sources
           </button>
         </div>

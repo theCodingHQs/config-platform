@@ -374,25 +374,25 @@ export function PageRuntimeProvider({
           data-testid="toast-notification"
           style={{
             position: 'fixed',
-            bottom: 24,
-            right: 24,
+            bottom: 'var(--space-6)',
+            right: 'var(--space-6)',
             zIndex: 9999,
-            padding: '12px 20px',
-            borderRadius: 6,
+            padding: 'var(--space-3) var(--space-5)',
+            borderRadius: 'var(--radius-md)',
             background:
               toast.variant === 'error'
-                ? '#ef4444'
+                ? 'var(--danger)'
                 : toast.variant === 'success'
-                ? '#10b981'
+                ? 'var(--success)'
                 : toast.variant === 'warning'
-                ? '#f59e0b'
-                : '#1f2937',
-            color: '#ffffff',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                ? 'var(--warning)'
+                : 'var(--surface-2)',
+            color: toast.variant === 'warning' ? 'var(--warning-contrast)' : 'var(--accent-contrast)',
+            boxShadow: 'var(--shadow-lg)',
             display: 'flex',
             alignItems: 'center',
-            gap: 12,
-            fontSize: 14,
+            gap: 'var(--space-3)',
+            fontSize: 'var(--font-size-sm)',
             fontWeight: 500,
             animation: 'fadeIn 0.2s ease-out',
           }}
@@ -403,11 +403,11 @@ export function PageRuntimeProvider({
             style={{
               background: 'transparent',
               border: 'none',
-              color: 'rgba(255, 255, 255, 0.8)',
+              color: 'currentColor',
               cursor: 'pointer',
               padding: 0,
-              marginLeft: 8,
-              fontSize: 16,
+              marginLeft: 'var(--space-2)',
+              fontSize: 'var(--font-size-base)',
               lineHeight: 1,
             }}
           >
@@ -427,7 +427,7 @@ export function PageRuntimeProvider({
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            backgroundColor: 'var(--overlay-bg)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -437,24 +437,24 @@ export function PageRuntimeProvider({
           <div
             style={{
               backgroundColor: 'var(--surface)',
-              borderRadius: 'var(--radius)',
-              border: '1px solid var(--border)',
-              padding: '1.5rem',
+              borderRadius: 'var(--radius-lg)',
+              border: 'var(--border-width) solid var(--border)',
+              padding: 'var(--space-6)',
               maxWidth: '420px',
               width: '90%',
-              boxShadow: 'var(--shadow-lg)',
+              boxShadow: 'var(--shadow-xl)',
               display: 'flex',
               flexDirection: 'column',
-              gap: '1rem',
+              gap: 'var(--space-4)',
             }}
           >
-            <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600 }}>
+            <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>
               {confirmDialog.title || 'Confirm Action'}
             </h3>
-            <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+            <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--muted)' }}>
               {confirmDialog.message}
             </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
               <button
                 type="button"
                 className="btn btn-secondary"

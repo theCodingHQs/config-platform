@@ -9,7 +9,7 @@ export interface BrokenBindingProps {
 export const BrokenBinding: React.FC<BrokenBindingProps> = ({ type, id }) => {
   return (
     <span className="broken-binding" title={`Missing ${type} with ID: ${id}`}>
-      <AlertTriangle size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '3px' }} />
+      <AlertTriangle size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 'var(--spacing-1)' }} />
       <span>[Broken {type}: {id}]</span>
     </span>
   );

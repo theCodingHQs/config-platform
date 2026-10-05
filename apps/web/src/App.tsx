@@ -24,6 +24,7 @@ import { PageManager } from "./studio/PageManager";
 import { PageBuilder } from "./studio/PageBuilder";
 import { PermissionsManager } from "./studio/PermissionsManager";
 import { WorkspaceSettings } from "./studio/WorkspaceSettings";
+import { ThemeStudio } from "./studio/ThemeStudio";
 import {
   fetchWorkspaces,
   switchWorkspace,
@@ -31,6 +32,8 @@ import {
 } from "./api/client";
 import { AuthPage } from "./pages/AuthPage";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
+import { ThemeProvider } from "./context/theme-context";
+import { ThemeModeSwitch } from "./components/ThemeModeSwitch";
 import {
   Zap,
   Menu,
@@ -77,10 +80,10 @@ function RuntimeDynamicPage({
           <div style={{ marginBottom: "1rem", color: "var(--accent)" }}>
             <FileText size={48} style={{ margin: "0 auto", opacity: 0.8 }} />
           </div>
-          <h2 style={{ fontSize: "1.5rem", fontWeight: 600, marginBottom: "0.5rem" }}>
+          <h2 style={{ fontSize: "var(--font-size-2xl)", fontWeight: 600, marginBottom: "0.5rem" }}>
             No Pages in Workspace
           </h2>
-          <p style={{ color: "var(--text-muted)", marginBottom: "1.5rem", fontSize: "0.9375rem" }}>
+          <p style={{ color: "var(--text-muted)", marginBottom: "1.5rem", fontSize: "var(--font-size-sm)" }}>
             This workspace doesn't have any published pages yet. Use Page Studio to design and publish your first page.
           </p>
           <button
@@ -187,7 +190,7 @@ function WorkspaceSwitcher({
     return (
       <span
         style={{
-          fontSize: "0.75rem",
+          fontSize: "var(--font-size-xs)",
           fontFamily: "monospace",
           padding: "0.25rem 0.5rem",
           backgroundColor: "var(--surface-subtle)",
@@ -204,7 +207,7 @@ function WorkspaceSwitcher({
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
-      <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+      <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
         Workspace:
       </span>
       <select
@@ -212,7 +215,7 @@ function WorkspaceSwitcher({
         onChange={handleSwitch}
         disabled={switching}
         style={{
-          fontSize: "0.75rem",
+          fontSize: "var(--font-size-xs)",
           padding: "0.25rem 0.5rem",
           backgroundColor: "var(--surface-subtle)",
           color: "var(--text)",
@@ -263,6 +266,7 @@ function AppContent({ user }: { user: CurrentUser }) {
           position: "sticky",
           top: 0,
           zIndex: 30,
+          height: "var(--navbar-height)",
         }}
         className="nav-height"
       >
@@ -310,7 +314,7 @@ function AppContent({ user }: { user: CurrentUser }) {
               to="/"
               style={{
                 fontWeight: 700,
-                fontSize: "1rem",
+                fontSize: "var(--font-size-md)",
                 letterSpacing: "-0.02em",
                 color: "var(--accent)",
                 textDecoration: "none",
@@ -330,7 +334,7 @@ function AppContent({ user }: { user: CurrentUser }) {
             >
               <span
                 style={{
-                  fontSize: "0.75rem",
+                  fontSize: "var(--font-size-xs)",
                   fontWeight: 600,
                   color: "var(--text-muted)",
                   textTransform: "uppercase",
@@ -345,7 +349,7 @@ function AppContent({ user }: { user: CurrentUser }) {
                   isActive ? "btn btn-secondary active" : "btn btn-ghost"
                 }
                 style={({ isActive }) => ({
-                  fontSize: "0.8125rem",
+                  fontSize: "var(--font-size-sm)",
                   padding: "0.25rem 0.625rem",
                   fontWeight: isActive ? 600 : 500,
                   color: isActive ? "var(--accent)" : "var(--text)",
@@ -362,7 +366,7 @@ function AppContent({ user }: { user: CurrentUser }) {
                   isActive ? "btn btn-secondary active" : "btn btn-ghost"
                 }
                 style={({ isActive }) => ({
-                  fontSize: "0.8125rem",
+                  fontSize: "var(--font-size-sm)",
                   padding: "0.25rem 0.625rem",
                   fontWeight: isActive ? 600 : 500,
                   color: isActive ? "var(--accent)" : "var(--text)",
@@ -379,7 +383,7 @@ function AppContent({ user }: { user: CurrentUser }) {
                   isActive ? "btn btn-secondary active" : "btn btn-ghost"
                 }
                 style={({ isActive }) => ({
-                  fontSize: "0.8125rem",
+                  fontSize: "var(--font-size-sm)",
                   padding: "0.25rem 0.625rem",
                   fontWeight: isActive ? 600 : 500,
                   color: isActive ? "var(--accent)" : "var(--text)",
@@ -391,12 +395,29 @@ function AppContent({ user }: { user: CurrentUser }) {
                 Permissions
               </NavLink>
               <NavLink
+                to="/studio/theme"
+                className={({ isActive }) =>
+                  isActive ? "btn btn-secondary active" : "btn btn-ghost"
+                }
+                style={({ isActive }) => ({
+                  fontSize: "var(--font-size-sm)",
+                  padding: "0.25rem 0.625rem",
+                  fontWeight: isActive ? 600 : 500,
+                  color: isActive ? "var(--accent)" : "var(--text)",
+                  backgroundColor: isActive
+                    ? "var(--accent-subtle)"
+                    : "transparent",
+                })}
+              >
+                Theme
+              </NavLink>
+              <NavLink
                 to="/studio/settings"
                 className={({ isActive }) =>
                   isActive ? "btn btn-secondary active" : "btn btn-ghost"
                 }
                 style={({ isActive }) => ({
-                  fontSize: "0.8125rem",
+                  fontSize: "var(--font-size-sm)",
                   padding: "0.25rem 0.625rem",
                   fontWeight: isActive ? 600 : 500,
                   color: isActive ? "var(--accent)" : "var(--text)",
@@ -410,9 +431,9 @@ function AppContent({ user }: { user: CurrentUser }) {
             </nav>
           </div>
 
-          {/* User Profile & Tenant Badge */}
+          {/* User Profile, Theme Mode Switch & Tenant Badge */}
           <div
-            style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}
+            style={{ display: "flex", alignItems: "center", gap: "var(--spacing-3)" }}
           >
             <WorkspaceSwitcher
               currentTenantId={user.tenantId}
@@ -421,18 +442,18 @@ function AppContent({ user }: { user: CurrentUser }) {
 
             <span
               style={{
-                fontSize: "0.6875rem",
+                fontSize: "var(--font-size-xs)",
                 fontWeight: 700,
                 textTransform: "uppercase",
                 letterSpacing: "0.04em",
-                padding: "0.2rem 0.5rem",
-                borderRadius: "4px",
+                padding: "var(--spacing-1) var(--spacing-2)",
+                borderRadius: "var(--radius-sm)",
                 backgroundColor: "var(--accent-subtle)",
                 color: "var(--accent)",
-                border: "1px solid var(--accent)",
+                border: "var(--border-width-sm) solid var(--accent)",
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "0.25rem",
+                gap: "var(--spacing-1)",
               }}
             >
               <Shield size={11} /> {user.role}
@@ -440,7 +461,7 @@ function AppContent({ user }: { user: CurrentUser }) {
 
             <span
               style={{
-                fontSize: "0.8125rem",
+                fontSize: "var(--font-size-xs)",
                 fontWeight: 500,
                 color: "var(--text)",
               }}
@@ -448,16 +469,18 @@ function AppContent({ user }: { user: CurrentUser }) {
               {user.email}
             </span>
 
+            <ThemeModeSwitch compact />
+
             <button
               type="button"
               className="btn btn-ghost"
               onClick={logout}
               style={{
-                fontSize: "0.8125rem",
-                padding: "0.25rem 0.5rem",
+                fontSize: "var(--font-size-xs)",
+                padding: "var(--spacing-1) var(--spacing-2)",
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "0.375rem",
+                gap: "var(--spacing-1)",
                 color: "var(--text-muted)",
               }}
               title="Sign Out"
@@ -530,6 +553,10 @@ function AppContent({ user }: { user: CurrentUser }) {
                 </div>
               }
             />
+            <Route
+              path="/studio/theme"
+              element={<ThemeStudio />}
+            />
             <Route path="/studio/pages/:id" element={<PageBuilder />} />
           </Routes>
         </main>
@@ -575,7 +602,7 @@ function AppContent({ user }: { user: CurrentUser }) {
                   style={{
                     padding: "1rem 0.75rem",
                     color: "var(--text-muted)",
-                    fontSize: "0.8125rem",
+                    fontSize: "var(--font-size-sm)",
                     textAlign: "center",
                   }}
                 >
@@ -586,7 +613,7 @@ function AppContent({ user }: { user: CurrentUser }) {
                     to="/studio/pages"
                     className="btn btn-secondary"
                     style={{
-                      fontSize: "0.75rem",
+                      fontSize: "var(--font-size-xs)",
                       padding: "0.25rem 0.625rem",
                       display: "inline-block",
                     }}
@@ -623,7 +650,7 @@ function AppContent({ user }: { user: CurrentUser }) {
                 title="Build New Page"
                 style={{
                   width: "100%",
-                  fontSize: "0.75rem",
+                  fontSize: "var(--font-size-xs)",
                   gap: "0.375rem",
                   display: "inline-flex",
                   alignItems: "center",
@@ -685,7 +712,7 @@ function AuthenticatedApp() {
             style={{
               display: "inline-flex",
               padding: "0.75rem",
-              borderRadius: "12px",
+              borderRadius: "var(--radius-xl)",
               backgroundColor: "var(--accent-subtle)",
               color: "var(--accent)",
               marginBottom: "1rem",
@@ -693,7 +720,7 @@ function AuthenticatedApp() {
           >
             <Zap size={28} />
           </div>
-          <p style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>
+          <p style={{ color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
             Loading workspace session...
           </p>
         </div>
@@ -725,7 +752,9 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <AuthenticatedApp />
+        <ThemeProvider>
+          <AuthenticatedApp />
+        </ThemeProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

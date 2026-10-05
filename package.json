@@ -12,6 +12,8 @@
     "check:db-clean": "pnpm --filter @config-platform/api check:db-clean",
     "test:db:up": "docker compose up -d postgres",
     "test:db:down": "docker compose down",
+    "tokens:generate": "node scripts/generate-tokens.cjs",
+    "lint:theme": "node scripts/lint-theme.cjs",
     "build": "pnpm -r build",
     "test": "pnpm -r test"
   },

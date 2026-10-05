@@ -119,8 +119,8 @@ export function WorkspaceSettings() {
     <div style={{ padding: '2rem 1.5rem', maxWidth: '1100px', margin: '0 auto' }}>
       <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>Workspace Settings</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.25rem' }}>
+          <h1 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 700, margin: 0 }}>Workspace Settings</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-sm)', marginTop: '0.25rem' }}>
             Plan limits, data bundle export/import, and activity audit trail.
           </p>
         </div>
@@ -129,33 +129,34 @@ export function WorkspaceSettings() {
       {error && (
         <div
           style={{
-            padding: '0.75rem 1rem',
-            backgroundColor: 'var(--danger-subtle, rgba(239, 68, 68, 0.1))',
-            color: 'var(--danger, #ef4444)',
-            borderRadius: '6px',
-            marginBottom: '1rem',
-            fontSize: '0.875rem',
+            padding: 'var(--space-3) var(--space-4)',
+            backgroundColor: 'var(--danger-subtle)',
+            color: 'var(--danger)',
+            border: 'var(--border-width) solid var(--danger)',
+            borderRadius: 'var(--radius-md)',
+            marginBottom: 'var(--space-4)',
+            fontSize: 'var(--font-size-sm)',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.5rem',
+            gap: 'var(--space-2)',
           }}
         >
           <AlertTriangle size={16} /> {error}
         </div>
       )}
-
       {success && (
         <div
           style={{
-            padding: '0.75rem 1rem',
-            backgroundColor: 'var(--success-subtle, rgba(34, 197, 94, 0.1))',
-            color: 'var(--success, #22c55e)',
-            borderRadius: '6px',
-            marginBottom: '1rem',
-            fontSize: '0.875rem',
+            padding: 'var(--space-3) var(--space-4)',
+            backgroundColor: 'var(--success-subtle)',
+            color: 'var(--success)',
+            border: 'var(--border-width) solid var(--success)',
+            borderRadius: 'var(--radius-md)',
+            marginBottom: 'var(--space-4)',
+            fontSize: 'var(--font-size-sm)',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.5rem',
+            gap: 'var(--space-2)',
           }}
         >
           <CheckCircle size={16} /> {success}
@@ -163,22 +164,22 @@ export function WorkspaceSettings() {
       )}
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem' }}>
+      <div style={{ display: 'flex', gap: 'var(--space-2)', borderBottom: 'var(--border-width) solid var(--border)', marginBottom: 'var(--space-5)' }}>
         <button
           type="button"
           onClick={() => setActiveTab('usage')}
           style={{
-            padding: '0.625rem 1rem',
+            padding: 'var(--space-3) var(--space-4)',
             border: 'none',
             background: 'transparent',
             fontWeight: 600,
-            fontSize: '0.875rem',
+            fontSize: 'var(--font-size-sm)',
             cursor: 'pointer',
-            color: activeTab === 'usage' ? 'var(--accent)' : 'var(--text-muted)',
+            color: activeTab === 'usage' ? 'var(--accent)' : 'var(--muted)',
             borderBottom: activeTab === 'usage' ? '2px solid var(--accent)' : '2px solid transparent',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.375rem',
+            gap: 'var(--space-1)',
           }}
         >
           <Sliders size={15} /> Resource Usage & Plan
@@ -188,17 +189,17 @@ export function WorkspaceSettings() {
           type="button"
           onClick={() => setActiveTab('export-import')}
           style={{
-            padding: '0.625rem 1rem',
+            padding: 'var(--space-3) var(--space-4)',
             border: 'none',
             background: 'transparent',
             fontWeight: 600,
-            fontSize: '0.875rem',
+            fontSize: 'var(--font-size-sm)',
             cursor: 'pointer',
-            color: activeTab === 'export-import' ? 'var(--accent)' : 'var(--text-muted)',
+            color: activeTab === 'export-import' ? 'var(--accent)' : 'var(--muted)',
             borderBottom: activeTab === 'export-import' ? '2px solid var(--accent)' : '2px solid transparent',
             display: 'flex',
             alignItems: 'center',
-            gap: '0.375rem',
+            gap: 'var(--space-1)',
           }}
         >
           <Download size={15} /> Export & Import
@@ -209,17 +210,17 @@ export function WorkspaceSettings() {
             type="button"
             onClick={() => setActiveTab('audit')}
             style={{
-              padding: '0.625rem 1rem',
+              padding: 'var(--space-3) var(--space-4)',
               border: 'none',
               background: 'transparent',
               fontWeight: 600,
-              fontSize: '0.875rem',
+              fontSize: 'var(--font-size-sm)',
               cursor: 'pointer',
-              color: activeTab === 'audit' ? 'var(--accent)' : 'var(--text-muted)',
+              color: activeTab === 'audit' ? 'var(--accent)' : 'var(--muted)',
               borderBottom: activeTab === 'audit' ? '2px solid var(--accent)' : '2px solid transparent',
               display: 'flex',
               alignItems: 'center',
-              gap: '0.375rem',
+              gap: 'var(--space-1)',
             }}
           >
             <Activity size={15} /> Audit Log
@@ -231,65 +232,65 @@ export function WorkspaceSettings() {
       {activeTab === 'usage' && (
         <div>
           {loadingUsage ? (
-            <p style={{ color: 'var(--text-muted)' }}>Loading usage metrics...</p>
+            <p style={{ color: 'var(--muted)' }}>Loading usage metrics...</p>
           ) : usage ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-4)' }}>
               <div
                 style={{
-                  padding: '1.25rem',
+                  padding: 'var(--space-4)',
                   backgroundColor: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
+                  border: 'var(--border-width) solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
                   <Layers size={18} color="var(--accent)" />
-                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Entities</h3>
+                  <h3 style={{ margin: 0, fontSize: 'var(--font-size-base)', fontWeight: 600 }}>Entities</h3>
                 </div>
-                <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>
+                <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 700 }}>
                   {usage.usage.entities} / {usage.limits.maxEntities}
                 </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', marginTop: '0.5rem' }}>
+                <div style={{ color: 'var(--muted)', fontSize: 'var(--font-size-xs)', marginTop: 'var(--space-2)' }}>
                   Max fields per entity: {usage.limits.maxFieldsPerEntity}
                 </div>
               </div>
 
               <div
                 style={{
-                  padding: '1.25rem',
+                  padding: 'var(--space-4)',
                   backgroundColor: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
+                  border: 'var(--border-width) solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
                   <FileText size={18} color="var(--accent)" />
-                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Pages</h3>
+                  <h3 style={{ margin: 0, fontSize: 'var(--font-size-base)', fontWeight: 600 }}>Pages</h3>
                 </div>
-                <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>
+                <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 700 }}>
                   {usage.usage.pages} / {usage.limits.maxPages}
                 </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', marginTop: '0.5rem' }}>
+                <div style={{ color: 'var(--muted)', fontSize: 'var(--font-size-xs)', marginTop: 'var(--space-2)' }}>
                   Total published and draft pages
                 </div>
               </div>
 
               <div
                 style={{
-                  padding: '1.25rem',
+                  padding: 'var(--space-4)',
                   backgroundColor: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
+                  border: 'var(--border-width) solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
                   <Users size={18} color="var(--accent)" />
-                  <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>Members</h3>
+                  <h3 style={{ margin: 0, fontSize: 'var(--font-size-base)', fontWeight: 600 }}>Members</h3>
                 </div>
-                <div style={{ fontSize: '1.75rem', fontWeight: 700 }}>
+                <div style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 700 }}>
                   {usage.usage.members} / {usage.limits.maxMembers}
                 </div>
-                <div style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', marginTop: '0.5rem' }}>
+                <div style={{ color: 'var(--muted)', fontSize: 'var(--font-size-xs)', marginTop: 'var(--space-2)' }}>
                   Current Plan: <strong style={{ textTransform: 'capitalize' }}>{usage.plan}</strong>
                 </div>
               </div>
@@ -300,17 +301,17 @@ export function WorkspaceSettings() {
 
       {/* Tab: Export / Import */}
       {activeTab === 'export-import' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-6)' }}>
           <div
             style={{
-              padding: '1.5rem',
+              padding: 'var(--space-5)',
               backgroundColor: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
+              border: 'var(--border-width) solid var(--border)',
+              borderRadius: 'var(--radius-md)',
             }}
           >
-            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.125rem', fontWeight: 600 }}>Export Workspace</h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1rem' }}>
+            <h3 style={{ margin: '0 0 var(--space-2) 0', fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>Export Workspace</h3>
+            <p style={{ color: 'var(--muted)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-4)' }}>
               Export all entity schemas, fields, relations, and page configurations as a versioned JSON bundle.
             </p>
             <button
@@ -318,7 +319,7 @@ export function WorkspaceSettings() {
               className="btn btn-primary"
               onClick={handleExport}
               disabled={exportLoading}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}
             >
               <Download size={16} /> {exportLoading ? 'Exporting...' : 'Export JSON Bundle'}
             </button>
@@ -326,14 +327,14 @@ export function WorkspaceSettings() {
 
           <div
             style={{
-              padding: '1.5rem',
+              padding: 'var(--space-5)',
               backgroundColor: 'var(--surface)',
-              border: '1px solid var(--border)',
-              borderRadius: '8px',
+              border: 'var(--border-width) solid var(--border)',
+              borderRadius: 'var(--radius-md)',
             }}
           >
-            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.125rem', fontWeight: 600 }}>Import Workspace</h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginBottom: '1rem' }}>
+            <h3 style={{ margin: '0 0 var(--space-2) 0', fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>Import Workspace</h3>
+            <p style={{ color: 'var(--muted)', fontSize: 'var(--font-size-sm)', marginBottom: 'var(--space-4)' }}>
               Paste a valid workspace bundle JSON to import schemas and pages into this workspace.
             </p>
             <textarea
@@ -341,26 +342,23 @@ export function WorkspaceSettings() {
               value={importJson}
               onChange={(e) => setImportJson(e.target.value)}
               placeholder="Paste WorkspaceBundle JSON here..."
+              className="form-input"
               style={{
                 width: '100%',
-                padding: '0.75rem',
-                backgroundColor: 'var(--surface-subtle)',
-                color: 'var(--text)',
-                border: '1px solid var(--border)',
-                borderRadius: '6px',
-                fontFamily: 'monospace',
-                fontSize: '0.8125rem',
-                marginBottom: '1rem',
+                padding: 'var(--space-3)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--font-size-xs)',
+                marginBottom: 'var(--space-4)',
               }}
             />
 
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', gap: 'var(--space-3)' }}>
               <button
                 type="button"
                 className="btn btn-secondary"
                 disabled={importLoading || !importJson.trim()}
                 onClick={() => handleImport(true)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}
               >
                 <Eye size={16} /> Validate & Check Conflicts (Dry Run)
               </button>
@@ -369,7 +367,7 @@ export function WorkspaceSettings() {
                 className="btn btn-primary"
                 disabled={importLoading || !importJson.trim()}
                 onClick={() => handleImport(false)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-2)' }}
               >
                 <Upload size={16} /> Import Bundle
               </button>
@@ -378,23 +376,23 @@ export function WorkspaceSettings() {
             {importResult && (
               <div
                 style={{
-                  marginTop: '1rem',
-                  padding: '1rem',
-                  backgroundColor: importResult.success ? 'var(--surface-subtle)' : 'var(--danger-subtle, rgba(239, 68, 68, 0.1))',
-                  border: '1px solid var(--border)',
-                  borderRadius: '6px',
-                  fontSize: '0.875rem',
+                  marginTop: 'var(--space-4)',
+                  padding: 'var(--space-4)',
+                  backgroundColor: importResult.success ? 'var(--surface-2)' : 'var(--danger-subtle)',
+                  border: 'var(--border-width) solid var(--border)',
+                  borderRadius: 'var(--radius-md)',
+                  fontSize: 'var(--font-size-sm)',
                 }}
               >
                 <strong>{importResult.dryRun ? 'Validation Result:' : 'Import Result:'}</strong>
                 {importResult.conflicts.length > 0 ? (
-                  <ul style={{ margin: '0.5rem 0 0 1.25rem', color: 'var(--danger, #ef4444)' }}>
+                  <ul style={{ margin: 'var(--space-2) 0 0 var(--space-5)', color: 'var(--danger)' }}>
                     {importResult.conflicts.map((c: string, idx: number) => (
                       <li key={idx}>{c}</li>
                     ))}
                   </ul>
                 ) : (
-                  <p style={{ margin: '0.5rem 0 0 0', color: 'var(--success, #22c55e)' }}>
+                  <p style={{ margin: 'var(--space-2) 0 0 0', color: 'var(--success)' }}>
                     Bundle is valid with {importResult.entitiesCount} entities and {importResult.pagesCount} pages. No conflicts found.
                   </p>
                 )}
@@ -407,52 +405,52 @@ export function WorkspaceSettings() {
       {/* Tab: Audit Log */}
       {activeTab === 'audit' && (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600 }}>Activity Audit Trail</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+            <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>Activity Audit Trail</h3>
             <button
               type="button"
               className="btn btn-ghost"
               onClick={loadLogs}
               disabled={loadingLogs}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8125rem' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)', fontSize: 'var(--font-size-xs)' }}
             >
               <RefreshCw size={14} /> Refresh
             </button>
           </div>
 
           {loadingLogs ? (
-            <p style={{ color: 'var(--text-muted)' }}>Loading audit trail...</p>
+            <p style={{ color: 'var(--muted)' }}>Loading audit trail...</p>
           ) : logs.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)' }}>No audit events recorded yet.</p>
+            <p style={{ color: 'var(--muted)' }}>No audit events recorded yet.</p>
           ) : (
-            <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: '8px' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+            <div style={{ overflowX: 'auto', border: 'var(--border-width) solid var(--border)', borderRadius: 'var(--radius-md)' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-xs)' }}>
                 <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border)', backgroundColor: 'var(--surface-subtle)', textAlign: 'left' }}>
-                    <th style={{ padding: '0.75rem 1rem' }}>Time</th>
-                    <th style={{ padding: '0.75rem 1rem' }}>User</th>
-                    <th style={{ padding: '0.75rem 1rem' }}>Action</th>
-                    <th style={{ padding: '0.75rem 1rem' }}>Entity Type</th>
-                    <th style={{ padding: '0.75rem 1rem' }}>Entity ID</th>
-                    <th style={{ padding: '0.75rem 1rem' }}>Details</th>
+                  <tr style={{ borderBottom: 'var(--border-width) solid var(--border)', backgroundColor: 'var(--surface-2)', textAlign: 'left' }}>
+                    <th style={{ padding: 'var(--space-3) var(--space-4)' }}>Time</th>
+                    <th style={{ padding: 'var(--space-3) var(--space-4)' }}>User</th>
+                    <th style={{ padding: 'var(--space-3) var(--space-4)' }}>Action</th>
+                    <th style={{ padding: 'var(--space-3) var(--space-4)' }}>Entity Type</th>
+                    <th style={{ padding: 'var(--space-3) var(--space-4)' }}>Entity ID</th>
+                    <th style={{ padding: 'var(--space-3) var(--space-4)' }}>Details</th>
                   </tr>
                 </thead>
                 <tbody>
                   {logs.map((log) => (
-                    <tr key={log.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: '0.75rem 1rem', whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>
+                    <tr key={log.id} style={{ borderBottom: 'var(--border-width) solid var(--border)' }}>
+                      <td style={{ padding: 'var(--space-3) var(--space-4)', whiteSpace: 'nowrap', color: 'var(--muted)' }}>
                         {new Date(log.createdAt).toLocaleString()}
                       </td>
-                      <td style={{ padding: '0.75rem 1rem' }}>{log.userEmail}</td>
-                      <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace', fontWeight: 600 }}>{log.action}</td>
-                      <td style={{ padding: '0.75rem 1rem', textTransform: 'capitalize' }}>{log.entityType}</td>
-                      <td style={{ padding: '0.75rem 1rem', fontFamily: 'monospace' }}>{log.entityId}</td>
-                      <td style={{ padding: '0.75rem 1rem' }}>
+                      <td style={{ padding: 'var(--space-3) var(--space-4)' }}>{log.userEmail}</td>
+                      <td style={{ padding: 'var(--space-3) var(--space-4)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{log.action}</td>
+                      <td style={{ padding: 'var(--space-3) var(--space-4)', textTransform: 'capitalize' }}>{log.entityType}</td>
+                      <td style={{ padding: 'var(--space-3) var(--space-4)', fontFamily: 'var(--font-mono)' }}>{log.entityId}</td>
+                      <td style={{ padding: 'var(--space-3) var(--space-4)' }}>
                         <button
                           type="button"
                           className="btn btn-ghost"
                           onClick={() => setSelectedLog(log)}
-                          style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                          style={{ padding: 'var(--space-1) var(--space-2)', fontSize: 'var(--font-size-xs)' }}
                         >
                           View Diff
                         </button>
@@ -472,28 +470,29 @@ export function WorkspaceSettings() {
                 left: 0,
                 right: 0,
                 bottom: 0,
-                backgroundColor: 'rgba(0,0,0,0.5)',
+                backgroundColor: 'var(--overlay-bg)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 zIndex: 1000,
-                padding: '1rem',
+                padding: 'var(--space-4)',
               }}
             >
               <div
                 style={{
                   backgroundColor: 'var(--surface)',
-                  border: '1px solid var(--border)',
-                  borderRadius: '8px',
+                  border: 'var(--border-width) solid var(--border)',
+                  borderRadius: 'var(--radius-lg)',
+                  boxShadow: 'var(--shadow-xl)',
                   width: '100%',
                   maxWidth: '650px',
-                  padding: '1.5rem',
+                  padding: 'var(--space-6)',
                   maxHeight: '85vh',
                   overflowY: 'auto',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--space-4)' }}>
+                  <h4 style={{ margin: 0, fontSize: 'var(--font-size-base)', fontWeight: 600 }}>
                     Audit Event: {selectedLog.action} ({selectedLog.entityId})
                   </h4>
                   <button type="button" className="btn btn-ghost" onClick={() => setSelectedLog(null)}>
@@ -501,15 +500,16 @@ export function WorkspaceSettings() {
                   </button>
                 </div>
 
-                <div style={{ marginBottom: '1rem' }}>
+                <div style={{ marginBottom: 'var(--space-4)' }}>
                   <strong>Before State:</strong>
                   <pre
                     style={{
-                      padding: '0.75rem',
-                      backgroundColor: 'var(--surface-subtle)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '6px',
-                      fontSize: '0.75rem',
+                      padding: 'var(--space-3)',
+                      backgroundColor: 'var(--surface-2)',
+                      border: 'var(--border-width) solid var(--border)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: 'var(--font-size-xs)',
+                      fontFamily: 'var(--font-mono)',
                       maxHeight: '150px',
                       overflowY: 'auto',
                     }}
@@ -522,11 +522,12 @@ export function WorkspaceSettings() {
                   <strong>After State:</strong>
                   <pre
                     style={{
-                      padding: '0.75rem',
-                      backgroundColor: 'var(--surface-subtle)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '6px',
-                      fontSize: '0.75rem',
+                      padding: 'var(--space-3)',
+                      backgroundColor: 'var(--surface-2)',
+                      border: 'var(--border-width) solid var(--border)',
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: 'var(--font-size-xs)',
+                      fontFamily: 'var(--font-mono)',
                       maxHeight: '150px',
                       overflowY: 'auto',
                     }}

@@ -296,6 +296,26 @@ export const catalogMigrations: CatalogMigration[] = [
       `);
     },
   },
+  {
+    version: 8,
+    name: '008_user_theme_preference',
+    up: async (client: PoolClient) => {
+      await client.query(`
+        ALTER TABLE public.app_user
+        ADD COLUMN IF NOT EXISTS theme_preference VARCHAR(16) NOT NULL DEFAULT 'system';
+      `);
+    },
+  },
+  {
+    version: 9,
+    name: '009_tenant_theme_config',
+    up: async (client: PoolClient) => {
+      await client.query(`
+        ALTER TABLE public.tenant
+        ADD COLUMN IF NOT EXISTS theme_config JSONB NOT NULL DEFAULT '{"presetId":"neutral","overrides":{}}'::jsonb;
+      `);
+    },
+  },
 ];
 
 /**

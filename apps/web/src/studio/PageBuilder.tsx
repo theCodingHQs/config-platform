@@ -196,26 +196,26 @@ const SortableTreeItem: React.FC<{
           backgroundColor: isSelected
             ? "var(--accent-subtle)"
             : isHovered
-              ? "rgba(14, 165, 233, 0.12)"
+              ? "var(--surface-2)"
               : "transparent",
           border: isSelected
             ? "1px solid var(--accent)"
             : isHovered
-              ? "1px dashed #0284c7"
+              ? "1px dashed var(--accent)"
               : "1px solid transparent",
           cursor: "pointer",
-          fontSize: "0.8125rem",
-          marginBottom: "2px",
+          fontSize: "var(--font-size-xs)",
+          marginBottom: "var(--spacing-1)",
           transition: "all 0.12s ease",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
           <span
             {...attributes}
             {...listeners}
             style={{
               cursor: "grab",
-              color: "var(--text-muted)",
+              color: "var(--muted)",
               display: "inline-flex",
               alignItems: "center",
             }}
@@ -228,7 +228,7 @@ const SortableTreeItem: React.FC<{
               color: isSelected
                 ? "var(--accent)"
                 : isHovered
-                  ? "#0284c7"
+                  ? "var(--accent)"
                   : "var(--text)",
             }}
           >
@@ -236,9 +236,9 @@ const SortableTreeItem: React.FC<{
           </span>
           <span
             style={{
-              color: "var(--text-muted)",
-              fontSize: "0.6875rem",
-              fontFamily: "monospace",
+              color: "var(--muted)",
+              fontSize: "var(--font-size-xs)",
+              fontFamily: "var(--font-mono)",
             }}
           >
             {node.id}
@@ -439,7 +439,7 @@ export const PageBuilder: React.FC = () => {
   };
 
   const publishMut = useMutation({
-    mutationFn: () => publishPage(tenantId, pageDetail!.id),
+    mutationFn: () => publishPage(tenantId, pageDetail?.id || id!),
     onSuccess: (updated) => {
       setPageDetail(updated);
       setSaveStatus("Published successfully!");
@@ -814,13 +814,13 @@ export const PageBuilder: React.FC = () => {
             <ArrowLeft size={16} /> Pages
           </button>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <span style={{ fontWeight: 600, fontSize: "0.9375rem" }}>
+            <span style={{ fontWeight: 600, fontSize: "var(--font-size-sm)" }}>
               {pageDetail.name}
             </span>
-            <span style={{ color: "var(--text-muted)", fontSize: "0.8125rem" }}>
+            <span style={{ color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
               {pageDetail.route}
             </span>
-            <span className="badge" style={{ fontSize: "0.6875rem" }}>
+            <span className="badge" style={{ fontSize: "var(--font-size-xs)" }}>
               v{pageDetail.version}
             </span>
 
@@ -829,15 +829,15 @@ export const PageBuilder: React.FC = () => {
               <span
                 data-testid="status-unpublished-badge"
                 style={{
-                  fontSize: "0.6875rem",
-                  padding: "0.15rem 0.5rem",
-                  borderRadius: "9999px",
-                  backgroundColor: "rgba(245, 158, 11, 0.15)",
-                  color: "#f59e0b",
-                  border: "1px solid rgba(245, 158, 11, 0.35)",
+                  fontSize: "var(--font-size-xs)",
+                  padding: "0.15rem var(--space-2)",
+                  borderRadius: "var(--radius-full)",
+                  backgroundColor: "var(--warning-subtle)",
+                  color: "var(--warning)",
+                  border: "var(--border-width) solid var(--warning)",
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: "0.375rem",
+                  gap: "var(--space-1)",
                   fontWeight: 600,
                   letterSpacing: "0.01em",
                 }}
@@ -847,9 +847,8 @@ export const PageBuilder: React.FC = () => {
                   style={{
                     width: 6,
                     height: 6,
-                    borderRadius: "50%",
-                    backgroundColor: "#f59e0b",
-                    boxShadow: "0 0 6px #f59e0b",
+                    borderRadius: "var(--radius-full)",
+                    backgroundColor: "var(--warning)",
                   }}
                 />
                 Unpublished Changes
@@ -858,15 +857,15 @@ export const PageBuilder: React.FC = () => {
               <span
                 data-testid="status-uptodate-badge"
                 style={{
-                  fontSize: "0.6875rem",
-                  padding: "0.15rem 0.5rem",
-                  borderRadius: "9999px",
-                  backgroundColor: "rgba(16, 185, 129, 0.12)",
-                  color: "#10b981",
-                  border: "1px solid rgba(16, 185, 129, 0.3)",
+                  fontSize: "var(--font-size-xs)",
+                  padding: "0.15rem var(--space-2)",
+                  borderRadius: "var(--radius-full)",
+                  backgroundColor: "var(--success-subtle)",
+                  color: "var(--success)",
+                  border: "var(--border-width) solid var(--success)",
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: "0.375rem",
+                  gap: "var(--space-1)",
                   fontWeight: 600,
                 }}
                 title="All draft changes are published and live"
@@ -875,8 +874,8 @@ export const PageBuilder: React.FC = () => {
                   style={{
                     width: 6,
                     height: 6,
-                    borderRadius: "50%",
-                    backgroundColor: "#10b981",
+                    borderRadius: "var(--radius-full)",
+                    backgroundColor: "var(--success)",
                   }}
                 />
                 Up to Date
@@ -887,7 +886,7 @@ export const PageBuilder: React.FC = () => {
 
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
           {saveStatus && (
-            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+            <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
               {saveStatus}
             </span>
           )}
@@ -922,7 +921,7 @@ export const PageBuilder: React.FC = () => {
             className="btn btn-secondary"
             onClick={() => setIsStateModalOpen(true)}
             style={{
-              fontSize: "0.75rem",
+              fontSize: "var(--font-size-xs)",
               padding: "0.375rem 0.625rem",
               display: "inline-flex",
               alignItems: "center",
@@ -938,7 +937,7 @@ export const PageBuilder: React.FC = () => {
             className="btn btn-secondary"
             onClick={() => setIsDataSourceModalOpen(true)}
             style={{
-              fontSize: "0.75rem",
+              fontSize: "var(--font-size-xs)",
               padding: "0.375rem 0.625rem",
               display: "inline-flex",
               alignItems: "center",
@@ -954,7 +953,7 @@ export const PageBuilder: React.FC = () => {
             className="btn btn-secondary"
             onClick={() => setIsTemplateModalOpen(true)}
             style={{
-              fontSize: "0.75rem",
+              fontSize: "var(--font-size-xs)",
               padding: "0.375rem 0.625rem",
               display: "inline-flex",
               alignItems: "center",
@@ -969,7 +968,7 @@ export const PageBuilder: React.FC = () => {
             className="btn btn-secondary"
             onClick={() => setIsRolesModalOpen(true)}
             style={{
-              fontSize: "0.75rem",
+              fontSize: "var(--font-size-xs)",
               padding: "0.375rem 0.625rem",
               display: "inline-flex",
               alignItems: "center",
@@ -994,7 +993,7 @@ export const PageBuilder: React.FC = () => {
                 gap: "0.25rem",
                 padding: "0.25rem 0.5rem",
                 borderRadius: "var(--radius-sm)",
-                fontSize: "0.75rem",
+                fontSize: "var(--font-size-xs)",
                 cursor: "pointer",
                 backgroundColor:
                   brokenBindings.length === 0
@@ -1030,12 +1029,12 @@ export const PageBuilder: React.FC = () => {
                   border: "1px solid var(--border)",
                   borderRadius: "var(--radius)",
                   padding: "0.75rem",
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                  boxShadow: "var(--shadow-md)",
                   zIndex: 50,
-                  fontSize: "0.8125rem",
+                  fontSize: "var(--font-size-xs)",
                 }}
               >
-                <div style={{ fontWeight: 600, marginBottom: "0.375rem" }}>
+                <div style={{ fontWeight: 600, marginBottom: "var(--space-1)" }}>
                   Binding Validation
                 </div>
                 {brokenBindings.length === 0 ? (
@@ -1045,11 +1044,11 @@ export const PageBuilder: React.FC = () => {
                 ) : (
                   <ul
                     style={{
-                      paddingLeft: "1.25rem",
+                      paddingLeft: "var(--space-5)",
                       color: "var(--danger)",
                       display: "flex",
                       flexDirection: "column",
-                      gap: "0.25rem",
+                      gap: "var(--space-1)",
                     }}
                   >
                     {brokenBindings.map((msg, i) => (
@@ -1066,7 +1065,7 @@ export const PageBuilder: React.FC = () => {
             type="button"
             className="btn btn-secondary"
             onClick={() => setIsPreviewPublished(!isPreviewPublished)}
-            style={{ fontSize: "0.75rem", padding: "0.375rem 0.625rem" }}
+            style={{ fontSize: "var(--font-size-xs)", padding: "var(--space-1) var(--space-3)" }}
             title={
               pageDetail.published
                 ? isPreviewPublished
@@ -1085,11 +1084,11 @@ export const PageBuilder: React.FC = () => {
             onClick={handleSaveDraft}
             disabled={isSaving || !isDraftDirty}
             style={{
-              fontSize: "0.75rem",
-              padding: "0.375rem 0.625rem",
+              fontSize: "var(--font-size-xs)",
+              padding: "var(--space-1) var(--space-3)",
               display: "inline-flex",
               alignItems: "center",
-              gap: "0.375rem",
+              gap: "var(--space-1)",
               opacity: !isDraftDirty && !isSaving ? 0.65 : 1,
             }}
             title={isDraftDirty ? "Save changes to draft" : "Draft is already saved"}
@@ -1102,8 +1101,8 @@ export const PageBuilder: React.FC = () => {
                   style={{
                     width: 6,
                     height: 6,
-                    borderRadius: "50%",
-                    backgroundColor: "#f59e0b",
+                    borderRadius: "var(--radius-full)",
+                    backgroundColor: "var(--warning)",
                   }}
                 />
                 Save Draft
@@ -1125,14 +1124,14 @@ export const PageBuilder: React.FC = () => {
             onClick={handlePublish}
             disabled={publishMut.isPending || !hasUnpublishedChanges}
             style={{
-              fontSize: "0.75rem",
-              padding: "0.375rem 0.75rem",
+              fontSize: "var(--font-size-xs)",
+              padding: "var(--space-1) var(--space-3)",
               display: "inline-flex",
               alignItems: "center",
-              gap: "0.375rem",
+              gap: "var(--space-1)",
               fontWeight: 600,
               boxShadow: hasUnpublishedChanges
-                ? "0 0 0 1px var(--accent), 0 2px 8px rgba(99, 102, 241, 0.3)"
+                ? "var(--shadow-sm)"
                 : "none",
               opacity: !hasUnpublishedChanges && !publishMut.isPending ? 0.65 : 1,
               cursor: !hasUnpublishedChanges && !publishMut.isPending ? "not-allowed" : "pointer",
@@ -1151,9 +1150,8 @@ export const PageBuilder: React.FC = () => {
                   style={{
                     width: 7,
                     height: 7,
-                    borderRadius: "50%",
-                    backgroundColor: "#ffffff",
-                    boxShadow: "0 0 6px rgba(255,255,255,0.8)",
+                    borderRadius: "var(--radius-full)",
+                    backgroundColor: "var(--accent-contrast)",
                   }}
                 />
                 Publish
@@ -1201,7 +1199,7 @@ export const PageBuilder: React.FC = () => {
           >
             <div
               style={{
-                fontSize: "0.75rem",
+                fontSize: "var(--font-size-xs)",
                 fontWeight: 600,
                 color: "var(--text-muted)",
                 textTransform: "uppercase",
@@ -1243,7 +1241,7 @@ export const PageBuilder: React.FC = () => {
                   aria-label={`+ ${type}`}
                   style={{
                     padding: "0.375rem 0.5rem",
-                    fontSize: "0.75rem",
+                    fontSize: "var(--font-size-xs)",
                     textTransform: "capitalize",
                     display: "inline-flex",
                     alignItems: "center",
@@ -1261,7 +1259,7 @@ export const PageBuilder: React.FC = () => {
           <div style={{ padding: "0.875rem", flex: 1 }}>
             <div
               style={{
-                fontSize: "0.75rem",
+                fontSize: "var(--font-size-xs)",
                 fontWeight: 600,
                 color: "var(--text-muted)",
                 textTransform: "uppercase",
@@ -1312,7 +1310,7 @@ export const PageBuilder: React.FC = () => {
             display: "flex",
             justifyContent: "center",
             flex: 1,
-            margin: "4px",
+            margin: "var(--spacing-1)",
           }}
         >
           <div
@@ -1324,8 +1322,8 @@ export const PageBuilder: React.FC = () => {
               // backgroundColor: "var(--surface)",
               // border: "1px solid var(--border)",
               // borderRadius: "var(--radius)",
-              padding: "2rem",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+              padding: "var(--spacing-8)",
+              boxShadow: "var(--shadow-sm)",
             }}
           >
             <PageRuntimeProvider
@@ -1338,16 +1336,16 @@ export const PageBuilder: React.FC = () => {
                     {hasUnpublishedChanges && (
                       <div
                         style={{
-                          backgroundColor: "rgba(245, 158, 11, 0.1)",
-                          border: "1px solid rgba(245, 158, 11, 0.3)",
+                          backgroundColor: "var(--warning-subtle)",
+                          border: "1px solid var(--warning)",
                           borderRadius: "var(--radius-sm)",
-                          padding: "0.5rem 0.875rem",
-                          marginBottom: "1.25rem",
+                          padding: "var(--spacing-2) var(--spacing-3)",
+                          marginBottom: "var(--spacing-5)",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "space-between",
-                          fontSize: "0.8125rem",
-                          color: "#f59e0b",
+                          fontSize: "var(--font-size-sm)",
+                          color: "var(--warning)",
                         }}
                       >
                         <div
@@ -1368,7 +1366,7 @@ export const PageBuilder: React.FC = () => {
                           className="btn btn-secondary"
                           onClick={() => setIsPreviewPublished(false)}
                           style={{
-                            fontSize: "0.75rem",
+                            fontSize: "var(--font-size-xs)",
                             padding: "0.2rem 0.5rem",
                           }}
                         >
@@ -1454,13 +1452,13 @@ export const PageBuilder: React.FC = () => {
             }}
           >
             <div>
-              <h3 style={{ fontSize: "0.875rem", fontWeight: 600 }}>
+              <h3 style={{ fontSize: "var(--font-size-sm)", fontWeight: 600 }}>
                 Properties
               </h3>
               {selectedNode ? (
                 <div
                   style={{
-                    fontSize: "0.75rem",
+                    fontSize: "var(--font-size-xs)",
                     color: "var(--text-muted)",
                     fontFamily: "monospace",
                   }}
@@ -1470,7 +1468,7 @@ export const PageBuilder: React.FC = () => {
               ) : (
                 <div
                   style={{
-                    fontSize: "0.75rem",
+                    fontSize: "var(--font-size-xs)",
                     color: "var(--text-muted)",
                   }}
                 >
@@ -1484,7 +1482,7 @@ export const PageBuilder: React.FC = () => {
                 className="btn btn-ghost"
                 onClick={() => setSelectedNodeId(null)}
                 style={{
-                  fontSize: "0.75rem",
+                  fontSize: "var(--font-size-xs)",
                   padding: "0.25rem 0.5rem",
                   display: "inline-flex",
                   alignItems: "center",
@@ -1539,7 +1537,7 @@ export const PageBuilder: React.FC = () => {
                           <label
                             className="form-label"
                             style={{
-                              fontSize: "0.75rem",
+                              fontSize: "var(--font-size-xs)",
                               color: "var(--text-muted)",
                             }}
                             htmlFor="prop-table-source"
@@ -1626,7 +1624,7 @@ export const PageBuilder: React.FC = () => {
                         return (
                           <div
                             style={{
-                              fontSize: "0.75rem",
+                              fontSize: "var(--font-size-xs)",
                               color: "var(--text-muted)",
                             }}
                           >
@@ -1657,7 +1655,7 @@ export const PageBuilder: React.FC = () => {
                                   display: "flex",
                                   alignItems: "center",
                                   gap: "0.5rem",
-                                  fontSize: "0.8125rem",
+                                  fontSize: "var(--font-size-sm)",
                                   cursor: "pointer",
                                 }}
                               >
@@ -1683,7 +1681,7 @@ export const PageBuilder: React.FC = () => {
                                 <span
                                   style={{
                                     color: "var(--text-muted)",
-                                    fontSize: "0.6875rem",
+                                    fontSize: "var(--font-size-xs)",
                                   }}
                                 >
                                   ({col.type})
@@ -1720,7 +1718,7 @@ export const PageBuilder: React.FC = () => {
                     />
                     <span
                       style={{
-                        fontSize: "0.75rem",
+                        fontSize: "var(--font-size-xs)",
                         color: "var(--text-muted)",
                       }}
                     >
@@ -1758,7 +1756,7 @@ export const PageBuilder: React.FC = () => {
                           <label
                             className="form-label"
                             style={{
-                              fontSize: "0.75rem",
+                              fontSize: "var(--font-size-xs)",
                               color: "var(--text-muted)",
                             }}
                           >
@@ -1794,7 +1792,7 @@ export const PageBuilder: React.FC = () => {
                           <label
                             className="form-label"
                             style={{
-                              fontSize: "0.75rem",
+                              fontSize: "var(--font-size-xs)",
                               color: "var(--text-muted)",
                             }}
                           >
@@ -1855,7 +1853,7 @@ export const PageBuilder: React.FC = () => {
                         return (
                           <div
                             style={{
-                              fontSize: "0.75rem",
+                              fontSize: "var(--font-size-xs)",
                               color: "var(--text-muted)",
                             }}
                           >
@@ -1886,7 +1884,7 @@ export const PageBuilder: React.FC = () => {
                                   display: "flex",
                                   alignItems: "center",
                                   gap: "0.5rem",
-                                  fontSize: "0.8125rem",
+                                  fontSize: "var(--font-size-sm)",
                                   cursor: "pointer",
                                 }}
                               >
@@ -1912,7 +1910,7 @@ export const PageBuilder: React.FC = () => {
                                 <span
                                   style={{
                                     color: "var(--text-muted)",
-                                    fontSize: "0.6875rem",
+                                    fontSize: "var(--font-size-xs)",
                                   }}
                                 >
                                   ({col.type})
@@ -2003,7 +2001,7 @@ export const PageBuilder: React.FC = () => {
                         return (
                           <div
                             style={{
-                              fontSize: "0.75rem",
+                              fontSize: "var(--font-size-xs)",
                               color: "var(--text-muted)",
                             }}
                           >
@@ -2059,7 +2057,7 @@ export const PageBuilder: React.FC = () => {
                                       display: "flex",
                                       alignItems: "center",
                                       gap: "0.5rem",
-                                      fontSize: "0.8125rem",
+                                      fontSize: "var(--font-size-sm)",
                                       cursor: "pointer",
                                       fontWeight: isChecked ? 600 : 400,
                                     }}
@@ -2091,7 +2089,7 @@ export const PageBuilder: React.FC = () => {
                                     <span
                                       style={{
                                         color: "var(--text-muted)",
-                                        fontSize: "0.6875rem",
+                                        fontSize: "var(--font-size-xs)",
                                       }}
                                     >
                                       ({col.type})
@@ -2106,7 +2104,7 @@ export const PageBuilder: React.FC = () => {
                                         display: "flex",
                                         flexDirection: "column",
                                         gap: "0.375rem",
-                                        fontSize: "0.75rem",
+                                        fontSize: "var(--font-size-xs)",
                                       }}
                                     >
                                       <div>
@@ -2142,7 +2140,7 @@ export const PageBuilder: React.FC = () => {
                                             });
                                           }}
                                           style={{
-                                            fontSize: "0.75rem",
+                                            fontSize: "var(--font-size-xs)",
                                             padding: "0.25rem 0.5rem",
                                           }}
                                         />
@@ -2180,7 +2178,7 @@ export const PageBuilder: React.FC = () => {
                                             });
                                           }}
                                           style={{
-                                            fontSize: "0.75rem",
+                                            fontSize: "var(--font-size-xs)",
                                             padding: "0.25rem 0.5rem",
                                           }}
                                         />
@@ -2623,7 +2621,7 @@ export const PageBuilder: React.FC = () => {
                         display: "flex",
                         alignItems: "center",
                         gap: "0.5rem",
-                        fontSize: "0.8125rem",
+                        fontSize: "var(--font-size-sm)",
                         cursor: "pointer",
                       }}
                     >
@@ -2692,7 +2690,7 @@ export const PageBuilder: React.FC = () => {
                         display: "flex",
                         alignItems: "center",
                         gap: "0.5rem",
-                        fontSize: "0.8125rem",
+                        fontSize: "var(--font-size-sm)",
                         cursor: "pointer",
                       }}
                     >
@@ -2794,7 +2792,7 @@ export const PageBuilder: React.FC = () => {
                                 }}
                                 style={{
                                   width: "40%",
-                                  fontSize: "0.75rem",
+                                  fontSize: "var(--font-size-xs)",
                                   padding: "0.25rem 0.5rem",
                                 }}
                               />
@@ -2816,7 +2814,7 @@ export const PageBuilder: React.FC = () => {
                                 }}
                                 style={{
                                   flex: 1,
-                                  fontSize: "0.75rem",
+                                  fontSize: "var(--font-size-xs)",
                                   padding: "0.25rem 0.5rem",
                                 }}
                               />
@@ -2855,7 +2853,7 @@ export const PageBuilder: React.FC = () => {
                               });
                             }}
                             style={{
-                              fontSize: "0.75rem",
+                              fontSize: "var(--font-size-xs)",
                               padding: "0.25rem 0.5rem",
                               alignSelf: "flex-start",
                             }}
@@ -3064,7 +3062,7 @@ export const PageBuilder: React.FC = () => {
                           <label
                             className="form-label"
                             style={{
-                              fontSize: "0.75rem",
+                              fontSize: "var(--font-size-xs)",
                               color: "var(--text-muted)",
                             }}
                             htmlFor="prop-chart-source"
@@ -3269,7 +3267,7 @@ export const PageBuilder: React.FC = () => {
                 alignItems: "center",
                 justifyContent: "center",
                 color: "var(--text-muted)",
-                fontSize: "0.8125rem",
+                fontSize: "var(--font-size-sm)",
                 textAlign: "center",
                 padding: "3.5rem 1rem",
                 gap: "0.75rem",
@@ -3280,7 +3278,7 @@ export const PageBuilder: React.FC = () => {
                 style={{
                   width: 44,
                   height: 44,
-                  borderRadius: "50%",
+                  borderRadius: "var(--radius-full)",
                   backgroundColor: "var(--bg)",
                   display: "flex",
                   alignItems: "center",
@@ -3296,7 +3294,7 @@ export const PageBuilder: React.FC = () => {
               </div>
               <div
                 style={{
-                  fontSize: "0.75rem",
+                  fontSize: "var(--font-size-xs)",
                   lineHeight: 1.5,
                   maxWidth: "220px",
                 }}
@@ -3362,7 +3360,7 @@ export const PageBuilder: React.FC = () => {
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.6)",
+            backgroundColor: "var(--overlay-bg)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -3376,9 +3374,9 @@ export const PageBuilder: React.FC = () => {
               maxWidth: "480px",
               backgroundColor: "var(--surface)",
               border: "1px solid var(--border)",
-              borderRadius: "var(--radius-lg, 12px)",
-              padding: "1.5rem",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.4)",
+              borderRadius: "var(--radius-lg)",
+              padding: "var(--spacing-6)",
+              boxShadow: "var(--shadow-xl)",
             }}
           >
             <div
@@ -3393,7 +3391,7 @@ export const PageBuilder: React.FC = () => {
                 style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
               >
                 <Shield size={18} style={{ color: "var(--accent)" }} />
-                <h3 style={{ fontSize: "1.125rem", fontWeight: 600 }}>
+                <h3 style={{ fontSize: "var(--font-size-lg)", fontWeight: 600 }}>
                   Page Access Permissions
                 </h3>
               </div>
@@ -3408,7 +3406,7 @@ export const PageBuilder: React.FC = () => {
             </div>
             <p
               style={{
-                fontSize: "0.8125rem",
+                fontSize: "var(--font-size-sm)",
                 color: "var(--text-muted)",
                 marginBottom: "1.25rem",
               }}
@@ -3443,7 +3441,7 @@ export const PageBuilder: React.FC = () => {
                           : "var(--surface-subtle)",
                         border: `1px solid ${isChecked ? "var(--accent)" : "var(--border)"}`,
                         cursor: "pointer",
-                        fontSize: "0.875rem",
+                        fontSize: "var(--font-size-sm)",
                         textTransform: "capitalize",
                       }}
                     >
@@ -3486,7 +3484,7 @@ export const PageBuilder: React.FC = () => {
                     allowedRoles: undefined,
                   });
                 }}
-                style={{ fontSize: "0.8125rem" }}
+                style={{ fontSize: "var(--font-size-sm)" }}
               >
                 Reset to All Roles
               </button>
@@ -3494,7 +3492,7 @@ export const PageBuilder: React.FC = () => {
                 type="button"
                 className="btn btn-primary"
                 onClick={() => setIsRolesModalOpen(false)}
-                style={{ fontSize: "0.8125rem" }}
+                style={{ fontSize: "var(--font-size-sm)" }}
               >
                 Done
               </button>

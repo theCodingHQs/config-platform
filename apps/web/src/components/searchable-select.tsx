@@ -108,9 +108,9 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           alignItems: 'center',
           justifyContent: 'space-between',
           cursor: disabled ? 'not-allowed' : 'pointer',
-          backgroundColor: disabled ? 'var(--surface-subtle)' : 'var(--surface)',
+          backgroundColor: disabled ? 'var(--surface-2)' : 'var(--surface)',
           opacity: disabled ? 0.6 : 1,
-          padding: '0.4rem 0.65rem',
+          padding: 'var(--spacing-1) var(--spacing-2)',
         }}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
@@ -126,7 +126,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           {displaySelectedText || placeholder}
         </span>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'var(--text-muted)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)', color: 'var(--text-muted)' }}>
           {value && !disabled && (
             <button
               type="button"
@@ -138,7 +138,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 background: 'transparent',
                 border: 'none',
                 cursor: 'pointer',
-                padding: '2px',
+                padding: 'var(--spacing-1)',
                 display: 'inline-flex',
                 color: 'var(--text-muted)',
               }}
@@ -161,9 +161,9 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
             right: 0,
             zIndex: 50,
             backgroundColor: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius, 6px)',
-            boxShadow: 'var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.4))',
+            border: 'var(--border-width-sm) solid var(--border)',
+            borderRadius: 'var(--radius)',
+            boxShadow: 'var(--shadow-lg)',
             maxHeight: '220px',
             display: 'flex',
             flexDirection: 'column',
@@ -173,11 +173,11 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           {/* Search box inside dropdown */}
           <div
             style={{
-              padding: '0.375rem 0.5rem',
-              borderBottom: '1px solid var(--border)',
+              padding: 'var(--spacing-1) var(--spacing-2)',
+              borderBottom: 'var(--border-width-sm) solid var(--border)',
               display: 'flex',
               alignItems: 'center',
-              gap: '0.375rem',
+              gap: 'var(--spacing-1)',
             }}
           >
             <Search size={13} style={{ color: 'var(--text-muted)' }} />
@@ -192,7 +192,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 border: 'none',
                 outline: 'none',
                 width: '100%',
-                fontSize: '0.8125rem',
+                fontSize: 'var(--font-size-xs)',
                 backgroundColor: 'transparent',
                 color: 'var(--text)',
               }}
@@ -201,13 +201,13 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           </div>
 
           {/* Options list */}
-          <div style={{ overflowY: 'auto', flex: 1, padding: '0.25rem 0' }}>
+          <div style={{ overflowY: 'auto', flex: 1, padding: 'var(--spacing-1) 0' }}>
             {isLoading ? (
-              <div style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              <div style={{ padding: 'var(--spacing-2)', textAlign: 'center', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
                 Loading options...
               </div>
             ) : filteredRecords.length === 0 ? (
-              <div style={{ padding: '0.5rem', textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              <div style={{ padding: 'var(--spacing-2)', textAlign: 'center', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
                 No records found
               </div>
             ) : (
@@ -224,15 +224,15 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                       setSearch('');
                     }}
                     style={{
-                      padding: '0.375rem 0.75rem',
+                      padding: 'var(--spacing-1) var(--spacing-3)',
                       cursor: 'pointer',
-                      fontSize: '0.8125rem',
+                      fontSize: 'var(--font-size-xs)',
                       backgroundColor: isSelected ? 'var(--accent-subtle)' : 'transparent',
                       color: isSelected ? 'var(--accent)' : 'var(--text)',
                       fontWeight: isSelected ? 600 : 400,
                     }}
                     onMouseEnter={(e) => {
-                      if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--surface-subtle)';
+                      if (!isSelected) e.currentTarget.style.backgroundColor = 'var(--surface-hover)';
                     }}
                     onMouseLeave={(e) => {
                       if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent';

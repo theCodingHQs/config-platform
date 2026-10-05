@@ -60,41 +60,41 @@ export const ActionEditor: React.FC<ActionEditorProps> = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <label className="form-label" style={{ margin: 0, fontWeight: 600 }}>{label}</label>
         <button
           type="button"
           className="btn btn-secondary"
           onClick={handleAddAction}
-          style={{ fontSize: '0.6875rem', padding: '0.25rem 0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+          style={{ fontSize: 'var(--font-size-xs)', padding: 'var(--space-1) var(--space-2)', display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)' }}
         >
           <Plus size={12} /> Add Action
         </button>
       </div>
 
       {actions.length === 0 ? (
-        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic', padding: '0.25rem 0' }}>
+        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)', fontStyle: 'italic', padding: 'var(--space-1) 0' }}>
           No actions configured
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
           {actions.map((action, idx) => (
             <div
               key={idx}
               data-testid={`action-card-${idx}`}
               style={{
-                backgroundColor: 'var(--surface-subtle)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius, 6px)',
-                padding: '0.625rem',
+                backgroundColor: 'var(--surface-2)',
+                border: 'var(--border-width) solid var(--border)',
+                borderRadius: 'var(--radius-md)',
+                padding: 'var(--space-2)',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '0.5rem',
+                gap: 'var(--space-2)',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.375rem' }}>
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>#{idx + 1}</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--space-1)' }}>
+                <span style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--muted)' }}>#{idx + 1}</span>
                 <select
                   aria-label={`Action ${idx + 1} Type`}
                   className="form-select"
@@ -107,7 +107,7 @@ export const ActionEditor: React.FC<ActionEditorProps> = ({
                       params: getDefaultParams(newType),
                     });
                   }}
-                  style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', flex: 1 }}
+                  style={{ fontSize: 'var(--font-size-xs)', flex: 1 }}
                 >
                   {ACTION_TYPES.map((t) => (
                     <option key={t.type} value={t.type}>
@@ -116,12 +116,12 @@ export const ActionEditor: React.FC<ActionEditorProps> = ({
                   ))}
                 </select>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.125rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
                   <button
                     type="button"
                     onClick={() => handleMoveAction(idx, 'up')}
                     disabled={idx === 0}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, opacity: idx === 0 ? 0.3 : 1 }}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 'var(--space-1)', opacity: idx === 0 ? 0.3 : 1 }}
                     aria-label="Move Up"
                   >
                     <ChevronUp size={14} />
@@ -130,7 +130,7 @@ export const ActionEditor: React.FC<ActionEditorProps> = ({
                     type="button"
                     onClick={() => handleMoveAction(idx, 'down')}
                     disabled={idx === actions.length - 1}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, opacity: idx === actions.length - 1 ? 0.3 : 1 }}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 'var(--space-1)', opacity: idx === actions.length - 1 ? 0.3 : 1 }}
                     aria-label="Move Down"
                   >
                     <ChevronDown size={14} />
@@ -138,7 +138,7 @@ export const ActionEditor: React.FC<ActionEditorProps> = ({
                   <button
                     type="button"
                     onClick={() => handleDeleteAction(idx)}
-                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--danger, #ef4444)' }}
+                    style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 'var(--space-1)', color: 'var(--danger)' }}
                     aria-label="Delete Action"
                   >
                     <Trash2 size={14} />
@@ -215,7 +215,7 @@ function ActionParamsFields({
       return (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.375rem' }}>
           <div>
-            <label className="form-label" style={{ fontSize: '0.6875rem' }}>State Key</label>
+            <label className="form-label" style={{ fontSize: "var(--font-size-xs)" }}>State Key</label>
             <input
               type="text"
               aria-label="State Key"
@@ -223,7 +223,7 @@ function ActionParamsFields({
               value={params.key || ''}
               placeholder="e.g. selectedId"
               onChange={(e) => onChange({ ...params, key: e.target.value })}
-              style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+              style={{ fontSize: "var(--font-size-xs)", padding: '0.25rem 0.5rem' }}
             />
           </div>
           <div>
@@ -241,7 +241,7 @@ function ActionParamsFields({
     case 'closeModal':
       return (
         <div>
-          <label className="form-label" style={{ fontSize: '0.6875rem' }}>Modal State Key</label>
+          <label className="form-label" style={{ fontSize: "var(--font-size-xs)" }}>Modal State Key</label>
           <input
             type="text"
             aria-label="Modal State Key"
@@ -249,7 +249,7 @@ function ActionParamsFields({
             value={params.modalKey || ''}
             placeholder="e.g. modal_details_open"
             onChange={(e) => onChange({ ...params, modalKey: e.target.value })}
-            style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+            style={{ fontSize: "var(--font-size-xs)", padding: '0.25rem 0.5rem' }}
           />
         </div>
       );
@@ -269,7 +269,7 @@ function ActionParamsFields({
     case 'refetch':
       return (
         <div>
-          <label className="form-label" style={{ fontSize: '0.6875rem' }}>Data Source to Refetch</label>
+          <label className="form-label" style={{ fontSize: "var(--font-size-xs)" }}>Data Source to Refetch</label>
           <input
             type="text"
             aria-label="Data Source to Refetch"
@@ -277,7 +277,7 @@ function ActionParamsFields({
             value={params.source || ''}
             placeholder="Leave empty to refetch all"
             onChange={(e) => onChange({ ...params, source: e.target.value })}
-            style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+            style={{ fontSize: "var(--font-size-xs)", padding: '0.25rem 0.5rem' }}
           />
         </div>
       );
@@ -294,13 +294,13 @@ function ActionParamsFields({
             />
           </div>
           <div>
-            <label className="form-label" style={{ fontSize: '0.6875rem' }}>Variant</label>
+            <label className="form-label" style={{ fontSize: "var(--font-size-xs)" }}>Variant</label>
             <select
               aria-label="Toast Variant"
               className="form-select"
               value={params.variant || 'success'}
               onChange={(e) => onChange({ ...params, variant: e.target.value })}
-              style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+              style={{ fontSize: "var(--font-size-xs)", padding: '0.25rem 0.5rem' }}
             >
               <option value="success">Success</option>
               <option value="info">Info</option>
@@ -315,7 +315,7 @@ function ActionParamsFields({
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
           <div>
-            <label className="form-label" style={{ fontSize: '0.6875rem' }}>Target Entity ID</label>
+            <label className="form-label" style={{ fontSize: "var(--font-size-xs)" }}>Target Entity ID</label>
             <input
               type="text"
               aria-label="Target Entity ID"
@@ -323,7 +323,7 @@ function ActionParamsFields({
               value={params.entityId || ''}
               placeholder="e.g. entity_id"
               onChange={(e) => onChange({ ...params, entityId: e.target.value })}
-              style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+              style={{ fontSize: "var(--font-size-xs)", padding: '0.25rem 0.5rem' }}
             />
           </div>
           <ExpressionInput
@@ -346,7 +346,7 @@ function ActionParamsFields({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.375rem' }}>
             <div>
-              <label className="form-label" style={{ fontSize: '0.6875rem' }}>Target Entity ID</label>
+              <label className="form-label" style={{ fontSize: "var(--font-size-xs)" }}>Target Entity ID</label>
               <input
                 type="text"
                 aria-label="Target Entity ID"
@@ -354,7 +354,7 @@ function ActionParamsFields({
                 value={params.entityId || ''}
                 placeholder="e.g. entity_id"
                 onChange={(e) => onChange({ ...params, entityId: e.target.value })}
-                style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                style={{ fontSize: "var(--font-size-xs)", padding: '0.25rem 0.5rem' }}
               />
             </div>
             <div>
@@ -385,7 +385,7 @@ function ActionParamsFields({
       return (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.375rem' }}>
           <div>
-            <label className="form-label" style={{ fontSize: '0.6875rem' }}>Entity ID</label>
+            <label className="form-label" style={{ fontSize: "var(--font-size-xs)" }}>Entity ID</label>
             <input
               type="text"
               aria-label="Target Entity ID"
@@ -393,7 +393,7 @@ function ActionParamsFields({
               value={params.entityId || ''}
               placeholder="e.g. entity_id"
               onChange={(e) => onChange({ ...params, entityId: e.target.value })}
-              style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+              style={{ fontSize: "var(--font-size-xs)", padding: '0.25rem 0.5rem' }}
             />
           </div>
           <div>
@@ -411,7 +411,7 @@ function ActionParamsFields({
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
           <div>
-            <label className="form-label" style={{ fontSize: '0.6875rem' }}>Title</label>
+            <label className="form-label" style={{ fontSize: "var(--font-size-xs)" }}>Title</label>
             <input
               type="text"
               aria-label="Confirm Title"
@@ -419,11 +419,11 @@ function ActionParamsFields({
               value={params.title || ''}
               placeholder="e.g. Confirm Delete"
               onChange={(e) => onChange({ ...params, title: e.target.value })}
-              style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+              style={{ fontSize: "var(--font-size-xs)", padding: '0.25rem 0.5rem' }}
             />
           </div>
           <div>
-            <label className="form-label" style={{ fontSize: '0.6875rem' }}>Message</label>
+            <label className="form-label" style={{ fontSize: "var(--font-size-xs)" }}>Message</label>
             <input
               type="text"
               aria-label="Confirm Message"
@@ -431,12 +431,12 @@ function ActionParamsFields({
               value={params.message || ''}
               placeholder="e.g. Are you sure you want to delete this record?"
               onChange={(e) => onChange({ ...params, message: e.target.value })}
-              style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+              style={{ fontSize: "var(--font-size-xs)", padding: '0.25rem 0.5rem' }}
             />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.375rem' }}>
             <div>
-              <label className="form-label" style={{ fontSize: '0.6875rem' }}>Confirm Button Label</label>
+              <label className="form-label" style={{ fontSize: "var(--font-size-xs)" }}>Confirm Button Label</label>
               <input
                 type="text"
                 aria-label="Confirm Label"
@@ -444,11 +444,11 @@ function ActionParamsFields({
                 value={params.confirmLabel || ''}
                 placeholder="Confirm"
                 onChange={(e) => onChange({ ...params, confirmLabel: e.target.value })}
-                style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                style={{ fontSize: "var(--font-size-xs)", padding: '0.25rem 0.5rem' }}
               />
             </div>
             <div>
-              <label className="form-label" style={{ fontSize: '0.6875rem' }}>Cancel Button Label</label>
+              <label className="form-label" style={{ fontSize: "var(--font-size-xs)" }}>Cancel Button Label</label>
               <input
                 type="text"
                 aria-label="Cancel Label"
@@ -456,7 +456,7 @@ function ActionParamsFields({
                 value={params.cancelLabel || ''}
                 placeholder="Cancel"
                 onChange={(e) => onChange({ ...params, cancelLabel: e.target.value })}
-                style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+                style={{ fontSize: "var(--font-size-xs)", padding: '0.25rem 0.5rem' }}
               />
             </div>
           </div>
@@ -467,12 +467,12 @@ function ActionParamsFields({
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
           <div>
-            <label className="form-label" style={{ fontSize: '0.6875rem' }}>Data Source (optional)</label>
+            <label className="form-label" style={{ fontSize: "var(--font-size-xs)" }}>Data Source (optional)</label>
             <select
               className="form-select"
               value={params.source || ''}
               onChange={(e) => onChange({ ...params, source: e.target.value || undefined })}
-              style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+              style={{ fontSize: "var(--font-size-xs)", padding: '0.25rem 0.5rem' }}
             >
               <option value="">None (Fetch by Entity)</option>
               {availableDataSources.map((ds) => (
@@ -481,25 +481,25 @@ function ActionParamsFields({
             </select>
           </div>
           <div>
-            <label className="form-label" style={{ fontSize: '0.6875rem' }}>Entity ID</label>
+            <label className="form-label" style={{ fontSize: "var(--font-size-xs)" }}>Entity ID</label>
             <input
               type="text"
               className="form-input"
               value={params.entityId || ''}
               placeholder="e.g. t_4befbc3a"
               onChange={(e) => onChange({ ...params, entityId: e.target.value })}
-              style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+              style={{ fontSize: "var(--font-size-xs)", padding: '0.25rem 0.5rem' }}
             />
           </div>
           <div>
-            <label className="form-label" style={{ fontSize: '0.6875rem' }}>Filename</label>
+            <label className="form-label" style={{ fontSize: "var(--font-size-xs)" }}>Filename</label>
             <input
               type="text"
               className="form-input"
               value={params.filename || ''}
               placeholder="e.g. telemetry_export.csv"
               onChange={(e) => onChange({ ...params, filename: e.target.value })}
-              style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem' }}
+              style={{ fontSize: "var(--font-size-xs)", padding: '0.25rem 0.5rem' }}
             />
           </div>
         </div>

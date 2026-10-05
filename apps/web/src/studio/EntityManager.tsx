@@ -273,8 +273,8 @@ export const EntityManager: React.FC = () => {
       {/* Top action header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ fontSize: '1.5rem' }}>Data Entities</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+          <h1 style={{ fontSize: "var(--font-size-2xl)" }}>Data Entities</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: "var(--font-size-sm)" }}>
             Catalog metadata management. Tables and columns use stable immutable IDs.
           </p>
         </div>
@@ -329,10 +329,10 @@ export const EntityManager: React.FC = () => {
             gap: '0.25rem',
           }}
         >
-          <div style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
+          <div style={{ padding: '0.25rem 0.5rem', fontSize: "var(--font-size-xs)", fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
             Entities ({entities.length})
           </div>
-          {isLoading && <div style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: '0.8125rem' }}>Loading...</div>}
+          {isLoading && <div style={{ padding: '1rem', color: 'var(--text-muted)', fontSize: "var(--font-size-sm)" }}>Loading...</div>}
           {entities.map((e) => {
             const isSelected = selectedEntity?.id === e.id;
             return (
@@ -357,14 +357,14 @@ export const EntityManager: React.FC = () => {
                 }}
               >
                 <div>
-                  <div style={{ fontWeight: isSelected ? 600 : 500, fontSize: '0.875rem', color: 'var(--text)' }}>
+                  <div style={{ fontWeight: isSelected ? 600 : 500, fontSize: "var(--font-size-sm)", color: 'var(--text)' }}>
                     {e.label}
                   </div>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                  <div style={{ fontSize: "var(--font-size-xs)", color: 'var(--text-muted)', fontFamily: 'monospace' }}>
                     {e.id}
                   </div>
                 </div>
-                <span className="badge" style={{ fontSize: '0.6875rem' }}>v{e.version}</span>
+                <span className="badge" style={{ fontSize: "var(--font-size-xs)" }}>v{e.version}</span>
               </button>
             );
           })}
@@ -386,14 +386,14 @@ export const EntityManager: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <h2 style={{ fontSize: '1.25rem' }}>{selectedEntity.label}</h2>
+                  <h2 style={{ fontSize: "var(--font-size-xl)" }}>{selectedEntity.label}</h2>
                   <span className="badge">v{selectedEntity.version}</span>
                 </div>
-                <div style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
-                  Slug: <code style={{ backgroundColor: 'var(--surface-subtle)', padding: '0.125rem 0.375rem', borderRadius: '4px' }}>{selectedEntity.name}</code> | Physical Table: <code style={{ backgroundColor: 'var(--surface-subtle)', padding: '0.125rem 0.375rem', borderRadius: '4px' }}>{selectedEntity.physicalTableName}</code>
+                <div style={{ fontSize: "var(--font-size-sm)", color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                  Slug: <code style={{ backgroundColor: 'var(--surface-subtle)', padding: '0.125rem 0.375rem', borderRadius: 'var(--radius-sm)' }}>{selectedEntity.name}</code> | Physical Table: <code style={{ backgroundColor: 'var(--surface-subtle)', padding: '0.125rem 0.375rem', borderRadius: 'var(--radius-sm)' }}>{selectedEntity.physicalTableName}</code>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
-                  <label htmlFor="entity-display-field" style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text-muted)' }}>
+                  <label htmlFor="entity-display-field" style={{ fontSize: "var(--font-size-sm)", fontWeight: 500, color: 'var(--text-muted)' }}>
                     Display Field:
                   </label>
                   <select
@@ -406,7 +406,7 @@ export const EntityManager: React.FC = () => {
                       const val = e.target.value || null;
                       updateDisplayFieldMut.mutate(val);
                     }}
-                    style={{ fontSize: '0.8125rem', padding: '0.2rem 0.5rem', width: 'auto' }}
+                    style={{ fontSize: "var(--font-size-sm)", padding: '0.2rem 0.5rem', width: 'auto' }}
                   >
                     <option value="">Default (name / title / id)</option>
                     {(selectedEntity.columns || []).map((col) => (
@@ -467,11 +467,11 @@ export const EntityManager: React.FC = () => {
                       return (
                         <tr key={col.id}>
                           <td style={{ fontWeight: 500 }}>{col.label}</td>
-                          <td style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: '0.8125rem' }}>{col.name}</td>
+                          <td style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: "var(--font-size-sm)" }}>{col.name}</td>
                           <td>
                             <span className="badge">{col.type}</span>
                           </td>
-                          <td style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: '0.75rem' }}>{col.id}</td>
+                          <td style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: "var(--font-size-xs)" }}>{col.id}</td>
                           <td>{col.required ? <span className="badge badge-success">Required</span> : <span style={{ color: 'var(--text-muted)' }}>Optional</span>}</td>
                           <td style={{ textAlign: 'right' }}>
                             {!isSystem && (
@@ -501,7 +501,7 @@ export const EntityManager: React.FC = () => {
                                 <button
                                   type="button"
                                   className="btn btn-ghost"
-                                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}
+                                  style={{ padding: '0.25rem 0.5rem', fontSize: "var(--font-size-xs)" }}
                                   onClick={() => openEditFieldModal(col)}
                                 >
                                   Rename
@@ -509,7 +509,7 @@ export const EntityManager: React.FC = () => {
                                 <button
                                   type="button"
                                   className="btn btn-ghost"
-                                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', color: 'var(--danger)' }}
+                                  style={{ padding: '0.25rem 0.5rem', fontSize: "var(--font-size-xs)", color: 'var(--danger)' }}
                                   onClick={() => {
                                     if (confirm(`Delete field "${col.label}"?`)) {
                                       deleteFieldMut.mutate(col.id);
@@ -520,7 +520,7 @@ export const EntityManager: React.FC = () => {
                                 </button>
                               </div>
                             )}
-                            {isSystem && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>System</span>}
+                            {isSystem && <span style={{ fontSize: "var(--font-size-xs)", color: 'var(--text-muted)' }}>System</span>}
                           </td>
                         </tr>
                       );
@@ -550,7 +550,7 @@ export const EntityManager: React.FC = () => {
               style={{
                 width: '48px',
                 height: '48px',
-                borderRadius: '12px',
+                borderRadius: 'var(--radius-xl)',
                 backgroundColor: 'var(--accent-subtle)',
                 color: 'var(--accent)',
                 display: 'flex',
@@ -560,10 +560,10 @@ export const EntityManager: React.FC = () => {
             >
               <Plus size={24} />
             </div>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 600, margin: 0 }}>
+            <h3 style={{ fontSize: "var(--font-size-xl)", fontWeight: 600, margin: 0 }}>
               Welcome to Your New Workspace
             </h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', lineHeight: 1.6, margin: 0 }}>
+            <p style={{ color: 'var(--text-muted)', fontSize: "var(--font-size-sm)", lineHeight: 1.6, margin: 0 }}>
               Workspaces start clean with no entities or pages.
               <br />
               <strong>Step 1:</strong> Create a Data Entity (e.g. Products, Customers, Orders) to define your schema and fields.
@@ -601,7 +601,7 @@ export const EntityManager: React.FC = () => {
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontSize: '0.9375rem' }}>
+              <h3 style={{ fontSize: "var(--font-size-sm)" }}>
                 {activeSideTab === 'erd' ? 'Live ERD Model' : 'Live Projected DDL'}
               </h3>
               <button
@@ -619,8 +619,8 @@ export const EntityManager: React.FC = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {liveErd?.tables?.map((table: any) => (
                   <div key={table.id} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.75rem' }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.875rem' }}>{table.label} ({table.physicalTableName})</div>
-                    <ul style={{ paddingLeft: '1rem', fontSize: '0.75rem', marginTop: '0.5rem', color: 'var(--text-muted)' }}>
+                    <div style={{ fontWeight: 600, fontSize: "var(--font-size-sm)" }}>{table.label} ({table.physicalTableName})</div>
+                    <ul style={{ paddingLeft: '1rem', fontSize: "var(--font-size-xs)", marginTop: '0.5rem', color: 'var(--text-muted)' }}>
                       {table.columns.map((c: any) => (
                         <li key={c.id}>
                           {c.label} (<span style={{ fontFamily: 'monospace' }}>{c.type}</span>)
@@ -635,7 +635,7 @@ export const EntityManager: React.FC = () => {
             {activeSideTab === 'ddl' && (
               <pre
                 style={{
-                  fontSize: '0.75rem',
+                  fontSize: "var(--font-size-xs)",
                   fontFamily: 'monospace',
                   backgroundColor: 'var(--surface-subtle)',
                   padding: '0.75rem',
@@ -653,11 +653,11 @@ export const EntityManager: React.FC = () => {
 
       {/* Modal: Create Entity */}
       {showCreateModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ backgroundColor: 'var(--surface)', padding: '1.5rem', borderRadius: 'var(--radius)', width: '420px', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid var(--border)' }}>
-            <h3>Create Entity</h3>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--overlay-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ backgroundColor: 'var(--surface)', padding: 'var(--space-6)', borderRadius: 'var(--radius-lg)', width: '420px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', border: 'var(--border-width) solid var(--border)', boxShadow: 'var(--shadow-xl)' }}>
+            <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>Create Entity</h3>
             <div>
-              <label className="form-label" htmlFor="new-entity-label">Display Label</label>
+              <label className="form-label" htmlFor="new-entity-label" style={{ fontSize: 'var(--font-size-xs)' }}>Display Label</label>
               <input
                 id="new-entity-label"
                 type="text"
@@ -668,7 +668,7 @@ export const EntityManager: React.FC = () => {
               />
             </div>
             <div>
-              <label className="form-label" htmlFor="new-entity-name">Slug / Name</label>
+              <label className="form-label" htmlFor="new-entity-name" style={{ fontSize: 'var(--font-size-xs)' }}>Slug / Name</label>
               <input
                 id="new-entity-name"
                 type="text"
@@ -677,7 +677,7 @@ export const EntityManager: React.FC = () => {
                 onChange={(e) => setNewEntityName(e.target.value)}
               />
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>Cancel</button>
               <button type="button" className="btn btn-primary" disabled={!newEntityLabel} onClick={() => createEntityMut.mutate()}>Create</button>
             </div>
@@ -687,11 +687,11 @@ export const EntityManager: React.FC = () => {
 
       {/* Modal: Add Field */}
       {showAddFieldModal && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ backgroundColor: 'var(--surface)', padding: '1.5rem', borderRadius: 'var(--radius)', width: '450px', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid var(--border)' }}>
-            <h3>Add Field to {selectedEntity?.label}</h3>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--overlay-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ backgroundColor: 'var(--surface)', padding: 'var(--space-6)', borderRadius: 'var(--radius-lg)', width: '450px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', border: 'var(--border-width) solid var(--border)', boxShadow: 'var(--shadow-xl)' }}>
+            <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>Add Field to {selectedEntity?.label}</h3>
             <div>
-              <label className="form-label" htmlFor="add-field-label">Field Label</label>
+              <label className="form-label" htmlFor="add-field-label" style={{ fontSize: 'var(--font-size-xs)' }}>Field Label</label>
               <input
                 id="add-field-label"
                 type="text"
@@ -702,7 +702,7 @@ export const EntityManager: React.FC = () => {
               />
             </div>
             <div>
-              <label className="form-label" htmlFor="add-field-slug">Field Slug</label>
+              <label className="form-label" htmlFor="add-field-slug" style={{ fontSize: 'var(--font-size-xs)' }}>Field Slug</label>
               <input
                 id="add-field-slug"
                 type="text"
@@ -712,7 +712,7 @@ export const EntityManager: React.FC = () => {
               />
             </div>
             <div>
-              <label className="form-label" htmlFor="add-field-type">Type</label>
+              <label className="form-label" htmlFor="add-field-type" style={{ fontSize: 'var(--font-size-xs)' }}>Type</label>
               <select id="add-field-type" className="form-select" value={fieldType} onChange={(e) => setFieldType(e.target.value as FieldType)}>
                 <option value="text">Text</option>
                 <option value="number">Number</option>
@@ -725,7 +725,7 @@ export const EntityManager: React.FC = () => {
 
             {fieldType === 'select' && (
               <div>
-                <label className="form-label" htmlFor="add-field-options">Select Options (comma-separated)</label>
+                <label className="form-label" htmlFor="add-field-options" style={{ fontSize: 'var(--font-size-xs)' }}>Select Options (comma-separated)</label>
                 <input
                   id="add-field-options"
                   type="text"
@@ -738,7 +738,7 @@ export const EntityManager: React.FC = () => {
 
             {fieldType === 'reference' && (
               <div>
-                <label className="form-label" htmlFor="add-field-target">Target Entity</label>
+                <label className="form-label" htmlFor="add-field-target" style={{ fontSize: 'var(--font-size-xs)' }}>Target Entity</label>
                 <select id="add-field-target" className="form-select" value={fieldRefTarget} onChange={(e) => setFieldRefTarget(e.target.value)}>
                   <option value="">Select Target Entity</option>
                   {entities.filter((e) => e.id !== selectedEntity?.id).map((e) => (
@@ -749,13 +749,13 @@ export const EntityManager: React.FC = () => {
             )}
 
             <div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', fontSize: 'var(--font-size-sm)' }}>
                 <input type="checkbox" checked={fieldRequired} onChange={(e) => setFieldRequired(e.target.checked)} />
                 <span>Required Field</span>
               </label>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
               <button type="button" className="btn btn-secondary" onClick={() => { setShowAddFieldModal(false); resetFieldForm(); }}>Cancel</button>
               <button type="button" className="btn btn-primary" disabled={!fieldLabel || !fieldName} onClick={() => addFieldMut.mutate()}>Add Field</button>
             </div>
@@ -763,13 +763,12 @@ export const EntityManager: React.FC = () => {
         </div>
       )}
 
-      {/* Modal: Rename Field */}
       {editingField && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ backgroundColor: 'var(--surface)', padding: '1.5rem', borderRadius: 'var(--radius)', width: '420px', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid var(--border)' }}>
-            <h3>Rename Field ({editingField.id})</h3>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--overlay-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ backgroundColor: 'var(--surface)', padding: 'var(--space-6)', borderRadius: 'var(--radius-lg)', width: '420px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', border: 'var(--border-width) solid var(--border)', boxShadow: 'var(--shadow-xl)' }}>
+            <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>Rename Field ({editingField.id})</h3>
             <div>
-              <label className="form-label" htmlFor="edit-field-label">Field Label</label>
+              <label className="form-label" htmlFor="edit-field-label" style={{ fontSize: 'var(--font-size-xs)' }}>Field Label</label>
               <input
                 id="edit-field-label"
                 type="text"
@@ -780,7 +779,7 @@ export const EntityManager: React.FC = () => {
               />
             </div>
             <div>
-              <label className="form-label" htmlFor="edit-field-slug">Field Slug</label>
+              <label className="form-label" htmlFor="edit-field-slug" style={{ fontSize: 'var(--font-size-xs)' }}>Field Slug</label>
               <input
                 id="edit-field-slug"
                 type="text"
@@ -791,7 +790,7 @@ export const EntityManager: React.FC = () => {
             </div>
             {editingField.type === 'select' && (
               <div>
-                <label className="form-label" htmlFor="edit-field-options">Select Options (comma-separated)</label>
+                <label className="form-label" htmlFor="edit-field-options" style={{ fontSize: 'var(--font-size-xs)' }}>Select Options (comma-separated)</label>
                 <input
                   id="edit-field-options"
                   type="text"
@@ -801,7 +800,7 @@ export const EntityManager: React.FC = () => {
                 />
               </div>
             )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setEditingField(null)}>Cancel</button>
               <button type="button" className="btn btn-primary" onClick={() => updateFieldMut.mutate()}>Save Changes</button>
             </div>

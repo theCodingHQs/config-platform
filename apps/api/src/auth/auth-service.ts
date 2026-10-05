@@ -252,7 +252,8 @@ export class AuthService {
     const hashed = hashToken(sessionId);
     const res = await pool.query(
       `SELECT s.id AS "sessionId", s.user_id AS "userId", s.tenant_id AS "tenantId",
-              t.name AS "tenantName", s.role, s.expires_at AS "expiresAt", u.email
+              t.name AS "tenantName", s.role, s.expires_at AS "expiresAt", u.email,
+              u.theme_preference AS "themePreference"
        FROM public.app_session s
        JOIN public.app_user u ON u.id = s.user_id
        JOIN public.tenant t ON t.id = s.tenant_id
@@ -269,6 +270,7 @@ export class AuthService {
       tenantName: row.tenantName,
       role: row.role as TenantRole,
       email: row.email,
+      themePreference: (row.themePreference as any) || 'system',
       expiresAt: row.expiresAt,
     };
   }

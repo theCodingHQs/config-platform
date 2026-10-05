@@ -127,23 +127,23 @@ export const FormComponent: React.FC<FormProps> = ({
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: '1rem',
-        padding: '1.25rem',
+        gap: 'var(--spacing-4)',
+        padding: 'var(--spacing-5)',
         backgroundColor: 'var(--surface)',
-        border: '1px solid var(--border)',
+        border: 'var(--border-width-sm) solid var(--border)',
         borderRadius: 'var(--radius)',
         maxWidth: '560px',
         width: '100%',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <h3 style={{ fontSize: '1rem', fontWeight: 600 }}>
+        <h3 style={{ fontSize: 'var(--font-size-md)', fontWeight: 600 }}>
           {mode === 'edit' ? `Edit ${entity.label || entity.name}` : `Create ${entity.label || entity.name}`}
         </h3>
       </div>
 
       {generalError && (
-        <div className="props-error" style={{ padding: '0.5rem 0.75rem', fontSize: '0.8125rem' }}>
+        <div className="props-error" style={{ padding: 'var(--spacing-2) var(--spacing-3)', fontSize: 'var(--font-size-xs)' }}>
           {generalError}
         </div>
       )}
@@ -153,12 +153,12 @@ export const FormComponent: React.FC<FormProps> = ({
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '0.375rem',
-            padding: '0.5rem 0.75rem',
-            backgroundColor: 'var(--success-bg, #ecfdf5)',
-            color: 'var(--success, #10b981)',
+            gap: 'var(--spacing-1)',
+            padding: 'var(--spacing-2) var(--spacing-3)',
+            backgroundColor: 'var(--success-subtle)',
+            color: 'var(--success)',
             borderRadius: 'var(--radius)',
-            fontSize: '0.8125rem',
+            fontSize: 'var(--font-size-xs)',
           }}
         >
           <Check size={14} />
@@ -188,7 +188,7 @@ export const FormComponent: React.FC<FormProps> = ({
             <label className="form-label" htmlFor={`field-${fieldName}`}>
               {displayLabel}
               {fieldDef.required && !f.readOnly && (
-                <span style={{ color: 'var(--danger)', marginLeft: '0.25rem' }}>*</span>
+                <span style={{ color: 'var(--danger)', marginLeft: 'var(--spacing-1)' }}>*</span>
               )}
             </label>
 
@@ -201,7 +201,7 @@ export const FormComponent: React.FC<FormProps> = ({
             )}
 
             {f.helpText && (
-              <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+              <small style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)', marginTop: 'var(--spacing-1)' }}>
                 {f.helpText}
               </small>
             )}
@@ -211,7 +211,7 @@ export const FormComponent: React.FC<FormProps> = ({
         );
       })}
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--spacing-2)' }}>
         <button
           type="submit"
           className="btn btn-primary"
@@ -253,7 +253,7 @@ function renderFieldInput(
 
     case 'boolean':
       return (
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: readOnly ? 'default' : 'pointer', fontSize: '0.875rem' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)', cursor: readOnly ? 'default' : 'pointer', fontSize: 'var(--font-size-sm)' }}>
           <input
             id={`field-${fieldDef.name}`}
             type="checkbox"

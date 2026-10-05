@@ -63,7 +63,7 @@ export const TableComponent: React.FC<TableProps> = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)', width: '100%' }}>
       <div className="table-container">
         <table className="data-table">
           <thead>
@@ -85,19 +85,19 @@ export const TableComponent: React.FC<TableProps> = ({
           <tbody>
             {isLoading ? (
               <tr>
-                <td colSpan={columns.length} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                <td colSpan={columns.length} style={{ textAlign: 'center', padding: 'var(--spacing-8)', color: 'var(--text-muted)' }}>
                   Loading records...
                 </td>
               </tr>
             ) : !isDataSourceMode && isError ? (
               <tr>
-                <td colSpan={columns.length} style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--danger)' }}>
+                <td colSpan={columns.length} style={{ textAlign: 'center', padding: 'var(--spacing-6)', color: 'var(--danger)' }}>
                   Error loading records: {error?.message}
                 </td>
               </tr>
             ) : records.length === 0 ? (
               <tr>
-                <td colSpan={columns.length} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                <td colSpan={columns.length} style={{ textAlign: 'center', padding: 'var(--spacing-8)', color: 'var(--text-muted)' }}>
                   No records found.
                 </td>
               </tr>
@@ -117,7 +117,7 @@ export const TableComponent: React.FC<TableProps> = ({
                     style={{
                       cursor: onRowClick ? 'pointer' : 'default',
                       transition: 'background-color 0.15s ease',
-                      backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.12)' : undefined,
+                      backgroundColor: isSelected ? 'var(--accent-subtle)' : undefined,
                     }}
                     className={`${onRowClick ? 'table-row-clickable' : ''} ${isSelected ? 'table-row-selected' : ''}`.trim()}
                   >
@@ -144,17 +144,17 @@ export const TableComponent: React.FC<TableProps> = ({
 
       {/* Pagination controls for entityId mode */}
       {!isDataSourceMode && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0.25rem' }}>
-          <span style={{ fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 var(--spacing-1)' }}>
+          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
             Page {pageIndex + 1} {records.length > 0 && `(${records.length} items)`}
           </span>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', gap: 'var(--spacing-2)' }}>
             <button
               type="button"
               className="btn btn-secondary"
               onClick={handlePrevious}
               disabled={pageIndex === 0 || isLoading}
-              style={{ padding: '0.375rem 0.75rem', fontSize: '0.8125rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+              style={{ padding: 'var(--spacing-1) var(--spacing-3)', fontSize: 'var(--font-size-xs)', display: 'inline-flex', alignItems: 'center', gap: 'var(--spacing-1)' }}
             >
               <ChevronLeft size={14} /> Previous
             </button>
@@ -163,7 +163,7 @@ export const TableComponent: React.FC<TableProps> = ({
               className="btn btn-secondary"
               onClick={handleNext}
               disabled={!nextCursor || isLoading}
-              style={{ padding: '0.375rem 0.75rem', fontSize: '0.8125rem', display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+              style={{ padding: 'var(--spacing-1) var(--spacing-3)', fontSize: 'var(--font-size-xs)', display: 'inline-flex', alignItems: 'center', gap: 'var(--spacing-1)' }}
             >
               Next <ChevronRight size={14} />
             </button>

@@ -49,10 +49,10 @@ export const ExpressionInput: React.FC<ExpressionInputProps> = ({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', position: 'relative' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-1)', position: 'relative' }}>
       {label && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <label htmlFor={id} className="form-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+          <label htmlFor={id} className="form-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)' }}>
             <Code size={12} style={{ color: 'var(--text-muted)' }} />
             {label}
           </label>
@@ -65,7 +65,7 @@ export const ExpressionInput: React.FC<ExpressionInputProps> = ({
               border: 'none',
               cursor: 'pointer',
               color: showHints ? 'var(--accent)' : 'var(--text-muted)',
-              padding: 2,
+              padding: 'var(--spacing-1)',
               display: 'flex',
               alignItems: 'center',
             }}
@@ -82,7 +82,7 @@ export const ExpressionInput: React.FC<ExpressionInputProps> = ({
         value={value || ''}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        style={{ fontFamily: 'monospace', fontSize: '0.8125rem' }}
+        style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-xs)' }}
       />
 
       {showHints && (
@@ -95,18 +95,18 @@ export const ExpressionInput: React.FC<ExpressionInputProps> = ({
             right: 0,
             zIndex: 100,
             backgroundColor: 'var(--surface)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius, 6px)',
-            padding: '0.5rem',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+            border: 'var(--border-width-sm) solid var(--border)',
+            borderRadius: 'var(--radius)',
+            padding: 'var(--spacing-2)',
+            boxShadow: 'var(--shadow-md)',
             maxHeight: '180px',
             overflowY: 'auto',
           }}
         >
-          <div style={{ fontSize: '0.6875rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '0.375rem', textTransform: 'uppercase' }}>
+          <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, color: 'var(--text-muted)', marginBottom: 'var(--spacing-1)', textTransform: 'uppercase' }}>
             Available Scopes & Functions
           </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--spacing-1)' }}>
             {scopeHints.map((hint) => (
               <button
                 key={hint}
@@ -116,12 +116,12 @@ export const ExpressionInput: React.FC<ExpressionInputProps> = ({
                   setShowHints(false);
                 }}
                 style={{
-                  background: 'var(--surface-subtle)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 4,
-                  padding: '2px 6px',
-                  fontSize: '0.6875rem',
-                  fontFamily: 'monospace',
+                  background: 'var(--surface-2)',
+                  border: 'var(--border-width-sm) solid var(--border)',
+                  borderRadius: 'var(--radius-xs)',
+                  padding: 'var(--spacing-1) var(--spacing-2)',
+                  fontSize: 'var(--font-size-xs)',
+                  fontFamily: 'var(--font-mono)',
                   cursor: 'pointer',
                   color: 'var(--text)',
                 }}

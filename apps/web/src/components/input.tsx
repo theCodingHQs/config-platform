@@ -27,24 +27,14 @@ export function InputComponent({
   };
 
   return (
-    <div className="form-group" style={{ marginBottom: 12 }}>
-      {label && <label className="form-label" style={{ display: 'block', marginBottom: 4, fontWeight: 500, fontSize: 13 }}>{label}</label>}
+    <div className="form-group" style={{ marginBottom: 'var(--spacing-3)' }}>
+      {label && <label className="form-label">{label}</label>}
       <input
         type={type}
         className="form-input"
         placeholder={placeholder}
         value={value}
         onChange={handleChange}
-        style={{
-          width: '100%',
-          padding: '8px 12px',
-          borderRadius: 6,
-          border: '1px solid var(--border)',
-          fontSize: 14,
-          background: 'var(--surface)',
-          color: 'var(--text)',
-          outline: 'none',
-        }}
       />
     </div>
   );

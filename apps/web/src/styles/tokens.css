@@ -1,0 +1,273 @@
+/**
+ * Design Tokens - Single Source of Truth
+ * Generated from @config-platform/schema theme definitions
+ * Preset: Neutral (neutral)
+ */
+
+:root {
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
+
+  /* Radius Scale */
+  --radius-none: 0px;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+  --radius: 6px;
+
+  /* Border Widths */
+  --border-width-none: 0px;
+  --border-width-sm: 1px;
+  --border-width-md: 2px;
+  --border-width-lg: 4px;
+  --border-width: var(--border-width-sm);
+
+  /* Spacing Scale */
+  --spacing-0: 0px;
+  --spacing-1: 0.25rem;
+  --spacing-2: 0.5rem;
+  --spacing-3: 0.75rem;
+  --spacing-4: 1rem;
+  --spacing-5: 1.25rem;
+  --spacing-6: 1.5rem;
+  --spacing-8: 2rem;
+  --spacing-10: 2.5rem;
+  --spacing-12: 3rem;
+  --spacing-16: 4rem;
+
+  /* Spacing Scale Aliases (--space-*) */
+  --space-0: var(--spacing-0);
+  --space-1: var(--spacing-1);
+  --space-2: var(--spacing-2);
+  --space-3: var(--spacing-3);
+  --space-4: var(--spacing-4);
+  --space-5: var(--spacing-5);
+  --space-6: var(--spacing-6);
+  --space-8: var(--spacing-8);
+  --space-10: var(--spacing-10);
+  --space-12: var(--spacing-12);
+  --space-16: var(--spacing-16);
+
+  /* Control & Layout Heights */
+  --control-height-sm: 28px;
+  --control-height-md: 36px;
+  --control-height-lg: 44px;
+  --navbar-height: 60px;
+
+  /* Shadows */
+  --shadow-none: none;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.15);
+
+  /* Overlays */
+  --overlay-bg: rgba(0, 0, 0, 0.5);
+
+  /* Fixed Studio Overlay Tokens - invariant across themes for visibility */
+  --editor-overlay-selected: #2563eb;
+  --editor-overlay-selected-bg: rgba(37, 99, 235, 0.12);
+  --editor-overlay-hover: #9333ea;
+  --editor-overlay-hover-bg: rgba(147, 51, 234, 0.08);
+  --editor-overlay-badge-text: #ffffff;
+}
+
+/* =========================================================================
+   Light Theme (Default and [data-theme="light"])
+   ========================================================================= */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Surfaces & Background */
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --surface-hover: #f4f4f5;
+  --border: #e4e4e7;
+  --border-subtle: #f4f4f5;
+
+  /* Typography */
+  --text: #18181b;
+  --text-muted: #52525b;
+
+  /* Accent */
+  --accent: #2563eb;
+  --accent-contrast: #ffffff;
+  --accent-subtle: #eff6ff;
+  --accent-hover: #1d4ed8;
+
+  /* Status Colors */
+  --danger: #b91c1c;
+  --danger-contrast: #ffffff;
+  --danger-subtle: #fef2f2;
+  --danger-hover: #991b1b;
+
+  --success: #15803d;
+  --success-contrast: #ffffff;
+  --success-subtle: #f0fdf4;
+  --success-hover: #166534;
+
+  --warning: #b45309;
+  --warning-contrast: #ffffff;
+  --warning-subtle: #fffbeb;
+  --warning-hover: #92400e;
+
+  /* Overlays */
+  --overlay-bg: rgba(0, 0, 0, 0.5);
+
+  /* Compatibility & Semantic Aliases */
+  --muted: var(--text-muted);
+  --muted-bg: var(--surface-2);
+  --bg-surface: var(--surface);
+  --bg-surface-secondary: var(--surface-2);
+  --bg-muted: var(--surface-2);
+  --surface-subtle: var(--surface-2);
+  --border-color: var(--border);
+  --text-primary: var(--text);
+  --text-inverse: var(--accent-contrast);
+  --primary: var(--accent);
+  --primary-hover: var(--accent-hover);
+  --primary-subtle: var(--accent-subtle);
+  --danger-bg: var(--danger-subtle);
+  --danger-border: var(--danger);
+  --warning-bg: var(--warning-subtle);
+  --warning-border: var(--warning);
+  --success-bg: var(--success-subtle);
+}
+
+/* =========================================================================
+   Dark Theme ([data-theme="dark"])
+   ========================================================================= */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Surfaces & Background */
+  --bg: #09090b;
+  --surface: #18181b;
+  --surface-2: #27272a;
+  --surface-hover: #27272a;
+  --border: #27272a;
+  --border-subtle: #1f1f23;
+
+  /* Typography */
+  --text: #f4f4f5;
+  --text-muted: #a1a1aa;
+
+  /* Accent */
+  --accent: #3b82f6;
+  --accent-contrast: #09090b;
+  --accent-subtle: #1e293b;
+  --accent-hover: #60a5fa;
+
+  /* Status Colors */
+  --danger: #f87171;
+  --danger-contrast: #09090b;
+  --danger-subtle: #450a0a;
+  --danger-hover: #fca5a5;
+
+  --success: #22c55e;
+  --success-contrast: #09090b;
+  --success-subtle: #052e16;
+  --success-hover: #4ade80;
+
+  --warning: #f59e0b;
+  --warning-contrast: #09090b;
+  --warning-subtle: #451a03;
+  --warning-hover: #fbbf24;
+
+  /* Overlays */
+  --overlay-bg: rgba(0, 0, 0, 0.7);
+
+  /* Compatibility & Semantic Aliases */
+  --muted: var(--text-muted);
+  --muted-bg: var(--surface-2);
+  --bg-surface: var(--surface);
+  --bg-surface-secondary: var(--surface-2);
+  --bg-muted: var(--surface-2);
+  --surface-subtle: var(--surface-2);
+  --border-color: var(--border);
+  --text-primary: var(--text);
+  --text-inverse: var(--accent-contrast);
+  --primary: var(--accent);
+  --primary-hover: var(--accent-hover);
+  --primary-subtle: var(--accent-subtle);
+  --danger-bg: var(--danger-subtle);
+  --danger-border: var(--danger);
+  --warning-bg: var(--warning-subtle);
+  --warning-border: var(--warning);
+  --success-bg: var(--success-subtle);
+}
+
+/* =========================================================================
+   System Preference - Follows OS dark mode when theme is system
+   ========================================================================= */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]),
+  [data-theme="system"] {
+    color-scheme: dark;
+
+    --bg: #09090b;
+    --surface: #18181b;
+    --surface-2: #27272a;
+    --surface-hover: #27272a;
+    --border: #27272a;
+    --border-subtle: #1f1f23;
+
+    --text: #f4f4f5;
+    --text-muted: #a1a1aa;
+
+    --accent: #3b82f6;
+    --accent-contrast: #09090b;
+    --accent-subtle: #1e293b;
+    --accent-hover: #60a5fa;
+
+    --danger: #f87171;
+    --danger-contrast: #09090b;
+    --danger-subtle: #450a0a;
+    --danger-hover: #fca5a5;
+
+    --success: #22c55e;
+    --success-contrast: #09090b;
+    --success-subtle: #052e16;
+    --success-hover: #4ade80;
+
+    --warning: #f59e0b;
+    --warning-contrast: #09090b;
+    --warning-subtle: #451a03;
+    --warning-hover: #fbbf24;
+
+    --overlay-bg: rgba(0, 0, 0, 0.7);
+
+    --muted: var(--text-muted);
+    --muted-bg: var(--surface-2);
+    --bg-surface: var(--surface);
+    --bg-surface-secondary: var(--surface-2);
+    --bg-muted: var(--surface-2);
+    --surface-subtle: var(--surface-2);
+    --border-color: var(--border);
+    --text-primary: var(--text);
+    --text-inverse: var(--accent-contrast);
+    --primary: var(--accent);
+    --primary-hover: var(--accent-hover);
+    --primary-subtle: var(--accent-subtle);
+    --danger-bg: var(--danger-subtle);
+    --danger-border: var(--danger);
+    --warning-bg: var(--warning-subtle);
+    --warning-border: var(--warning);
+    --success-bg: var(--success-subtle);
+  }
+}

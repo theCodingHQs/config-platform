@@ -7,3 +7,4 @@ export * from './action.js';
 export * from './data-source.js';
 export * from './expression.js';
 export * from './migrator.js';
+export * from './theme.js';

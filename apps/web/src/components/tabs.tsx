@@ -21,15 +21,15 @@ export const TabsComponent: React.FC<TabsProps & { children?: React.ReactNode }>
         display: 'flex',
         flexDirection: 'column',
         width: '100%',
-        gap: '0.75rem',
+        gap: 'var(--spacing-3)',
       }}
     >
       {/* Tab Navigation Headers */}
       <div
         style={{
           display: 'flex',
-          borderBottom: '1px solid var(--border, #e5e7eb)',
-          gap: '0.5rem',
+          borderBottom: 'var(--border-width-sm) solid var(--border)',
+          gap: 'var(--spacing-2)',
         }}
         role="tablist"
       >
@@ -47,11 +47,11 @@ export const TabsComponent: React.FC<TabsProps & { children?: React.ReactNode }>
               style={{
                 background: 'transparent',
                 border: 'none',
-                borderBottom: isActive ? '2px solid var(--accent, #4f46e5)' : '2px solid transparent',
-                color: isActive ? 'var(--accent, #4f46e5)' : 'var(--text-muted, #6b7280)',
+                borderBottom: isActive ? 'var(--border-width-md) solid var(--accent)' : 'var(--border-width-md) solid transparent',
+                color: isActive ? 'var(--accent)' : 'var(--text-muted)',
                 fontWeight: isActive ? 600 : 500,
-                fontSize: '0.875rem',
-                padding: '0.5rem 0.75rem',
+                fontSize: 'var(--font-size-sm)',
+                padding: 'var(--spacing-2) var(--spacing-3)',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
               }}

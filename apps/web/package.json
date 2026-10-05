@@ -6,6 +6,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
+    "lint:theme": "node ../../scripts/lint-theme.cjs",
     "test": "vitest run"
   },
   "dependencies": {

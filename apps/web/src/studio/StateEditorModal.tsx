@@ -59,12 +59,12 @@ export const StateEditorModal: React.FC<StateEditorModalProps> = ({
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'var(--overlay-bg)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 1000,
-        padding: 20,
+        padding: 'var(--space-5)',
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -74,45 +74,45 @@ export const StateEditorModal: React.FC<StateEditorModalProps> = ({
         style={{
           background: 'var(--surface)',
           color: 'var(--text)',
-          borderRadius: 'var(--radius, 8px)',
-          boxShadow: '0 20px 25px -5px rgba(0,0,0,0.4), 0 10px 10px -5px rgba(0,0,0,0.2)',
+          borderRadius: 'var(--radius-lg)',
+          boxShadow: 'var(--shadow-xl)',
           width: '100%',
-          maxWidth: 500,
+          maxWidth: '500px',
           maxHeight: '85vh',
           display: 'flex',
           flexDirection: 'column',
-          border: '1px solid var(--border)',
+          border: 'var(--border-width) solid var(--border)',
           overflow: 'hidden',
         }}
       >
         <div
           style={{
-            padding: '14px 20px',
-            borderBottom: '1px solid var(--border)',
+            padding: 'var(--space-3) var(--space-5)',
+            borderBottom: 'var(--border-width) solid var(--border)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
           }}
         >
-          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 600, color: 'var(--text)' }}>Page State Editor</h3>
+          <h3 style={{ margin: 0, fontSize: 'var(--font-size-base)', fontWeight: 600, color: 'var(--text)' }}>Page State Editor</h3>
           <button
             onClick={onClose}
             aria-label="Close"
             className="btn btn-ghost"
-            style={{ padding: 4, display: 'flex', alignItems: 'center' }}
+            style={{ padding: 'var(--space-1)', display: 'flex', alignItems: 'center' }}
           >
             <X size={18} />
           </button>
         </div>
 
-        <div style={{ padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
+        <div style={{ padding: 'var(--space-5)', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          <p style={{ fontSize: 'var(--font-size-sm)', color: 'var(--muted)', margin: 0 }}>
             Define initial state variables accessible in expressions as <code>state.&lt;key&gt;</code>.
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
             {entries.map((entry, idx) => (
-              <div key={idx} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div key={idx} style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
                 <input
                   type="text"
                   placeholder="Key (e.g. selectedId)"
@@ -123,7 +123,7 @@ export const StateEditorModal: React.FC<StateEditorModalProps> = ({
                     next[idx].key = e.target.value;
                     setEntries(next);
                   }}
-                  style={{ flex: 1, fontSize: 13 }}
+                  style={{ flex: 1, fontSize: 'var(--font-size-sm)' }}
                 />
                 <input
                   type="text"
@@ -135,12 +135,12 @@ export const StateEditorModal: React.FC<StateEditorModalProps> = ({
                     next[idx].value = e.target.value;
                     setEntries(next);
                   }}
-                  style={{ flex: 1, fontSize: 13 }}
+                  style={{ flex: 1, fontSize: 'var(--font-size-sm)' }}
                 />
                 <button
                   type="button"
                   onClick={() => handleRemove(idx)}
-                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--danger)' }}
+                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 'var(--space-1)', color: 'var(--danger)' }}
                   aria-label="Remove Key"
                 >
                   <Trash2 size={16} />
@@ -153,7 +153,7 @@ export const StateEditorModal: React.FC<StateEditorModalProps> = ({
             type="button"
             className="btn btn-secondary"
             onClick={handleAdd}
-            style={{ alignSelf: 'flex-start', fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+            style={{ alignSelf: 'flex-start', fontSize: 'var(--font-size-sm)', display: 'inline-flex', alignItems: 'center', gap: 'var(--space-1)' }}
           >
             <Plus size={14} /> Add Variable
           </button>
@@ -161,17 +161,17 @@ export const StateEditorModal: React.FC<StateEditorModalProps> = ({
 
         <div
           style={{
-            padding: '12px 20px',
-            borderTop: '1px solid var(--border)',
+            padding: 'var(--space-3) var(--space-5)',
+            borderTop: 'var(--border-width) solid var(--border)',
             display: 'flex',
             justifyContent: 'flex-end',
-            gap: 8,
+            gap: 'var(--space-2)',
           }}
         >
-          <button type="button" className="btn btn-secondary" onClick={onClose} style={{ fontSize: 13 }}>
+          <button type="button" className="btn btn-secondary" onClick={onClose} style={{ fontSize: 'var(--font-size-sm)' }}>
             Cancel
           </button>
-          <button type="button" className="btn btn-primary" onClick={handleSave} style={{ fontSize: 13 }}>
+          <button type="button" className="btn btn-primary" onClick={handleSave} style={{ fontSize: 'var(--font-size-sm)' }}>
             Save State
           </button>
         </div>

@@ -143,10 +143,10 @@ export const ComponentOverlay: React.FC<ComponentOverlayProps> = ({
             left: activeRect.left,
             width: activeRect.width,
             height: activeRect.height,
-            border: '2px solid #6366f1',
-            backgroundColor: 'rgba(99, 102, 241, 0.08)',
+            border: 'var(--border-width-md) solid var(--editor-overlay-selected)',
+            backgroundColor: 'var(--editor-overlay-selected-bg)',
             borderRadius: activeRect.borderRadius,
-            boxShadow: '0 0 0 1px rgba(99, 102, 241, 0.25), 0 4px 16px rgba(99, 102, 241, 0.15)',
+            boxShadow: 'var(--shadow-md)',
             transition: 'all 0.12s ease-out',
             boxSizing: 'border-box',
             pointerEvents: 'none',
@@ -158,22 +158,22 @@ export const ComponentOverlay: React.FC<ComponentOverlayProps> = ({
               position: 'absolute',
               top: activeRect.top < 26 ? '2px' : '-24px',
               left: 0,
-              backgroundColor: '#4f46e5',
-              color: '#ffffff',
-              fontSize: '11px',
+              backgroundColor: 'var(--editor-overlay-selected)',
+              color: 'var(--editor-overlay-badge-text)',
+              fontSize: 'var(--font-size-xs)',
               fontWeight: 600,
-              padding: '2px 6px',
-              borderRadius: '4px',
+              padding: 'var(--spacing-1) var(--spacing-2)',
+              borderRadius: 'var(--radius-sm)',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '4px',
+              gap: 'var(--spacing-1)',
               whiteSpace: 'nowrap',
-              boxShadow: '0 2px 5px rgba(0,0,0,0.25)',
+              boxShadow: 'var(--shadow-sm)',
               zIndex: 52,
             }}
           >
             <span>{selectedNode?.type || 'active'}</span>
-            <span style={{ opacity: 0.75, fontFamily: 'monospace' }}>#{selectedNodeId}</span>
+            <span style={{ opacity: 0.75, fontFamily: 'var(--font-mono)' }}>#{selectedNodeId}</span>
           </div>
 
           {/* 4 Corner Accent Handles */}
@@ -184,9 +184,9 @@ export const ComponentOverlay: React.FC<ComponentOverlayProps> = ({
               left: -3,
               width: 6,
               height: 6,
-              backgroundColor: '#ffffff',
-              border: '1.5px solid #4f46e5',
-              borderRadius: '1px',
+              backgroundColor: 'var(--editor-overlay-badge-text)',
+              border: 'var(--border-width-sm) solid var(--editor-overlay-selected)',
+              borderRadius: 'var(--radius-xs)',
             }}
           />
           <div
@@ -196,21 +196,21 @@ export const ComponentOverlay: React.FC<ComponentOverlayProps> = ({
               right: -3,
               width: 6,
               height: 6,
-              backgroundColor: '#ffffff',
-              border: '1.5px solid #4f46e5',
-              borderRadius: '1px',
+              backgroundColor: 'var(--editor-overlay-badge-text)',
+              border: 'var(--border-width-sm) solid var(--editor-overlay-selected)',
+              borderRadius: 'var(--radius-xs)',
             }}
           />
           <div
             style={{
               position: 'absolute',
-              bottom: -3,
+              top: -3,
               left: -3,
               width: 6,
               height: 6,
-              backgroundColor: '#ffffff',
-              border: '1.5px solid #4f46e5',
-              borderRadius: '1px',
+              backgroundColor: 'var(--editor-overlay-badge-text)',
+              border: 'var(--border-width-sm) solid var(--editor-overlay-selected)',
+              borderRadius: 'var(--radius-xs)',
             }}
           />
           <div
@@ -220,9 +220,9 @@ export const ComponentOverlay: React.FC<ComponentOverlayProps> = ({
               right: -3,
               width: 6,
               height: 6,
-              backgroundColor: '#ffffff',
-              border: '1.5px solid #4f46e5',
-              borderRadius: '1px',
+              backgroundColor: 'var(--editor-overlay-badge-text)',
+              border: 'var(--border-width-sm) solid var(--editor-overlay-selected)',
+              borderRadius: 'var(--radius-xs)',
             }}
           />
         </div>
@@ -238,8 +238,8 @@ export const ComponentOverlay: React.FC<ComponentOverlayProps> = ({
             left: hoveredRect.left,
             width: hoveredRect.width,
             height: hoveredRect.height,
-            border: '2px dashed #0284c7',
-            backgroundColor: 'rgba(2, 132, 199, 0.08)',
+            border: 'var(--border-width-md) dashed var(--editor-overlay-hover)',
+            backgroundColor: 'var(--editor-overlay-hover-bg)',
             borderRadius: hoveredRect.borderRadius,
             transition: 'all 0.08s ease-out',
             boxSizing: 'border-box',
@@ -252,22 +252,22 @@ export const ComponentOverlay: React.FC<ComponentOverlayProps> = ({
               position: 'absolute',
               top: hoveredRect.top < 24 ? '2px' : '-22px',
               left: 0,
-              backgroundColor: '#0284c7',
-              color: '#ffffff',
-              fontSize: '10px',
+              backgroundColor: 'var(--editor-overlay-hover)',
+              color: 'var(--editor-overlay-badge-text)',
+              fontSize: 'var(--font-size-xs)',
               fontWeight: 600,
-              padding: '2px 6px',
-              borderRadius: '4px',
+              padding: 'var(--spacing-1) var(--spacing-2)',
+              borderRadius: 'var(--radius-sm)',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '4px',
+              gap: 'var(--spacing-1)',
               whiteSpace: 'nowrap',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+              boxShadow: 'var(--shadow-sm)',
               zIndex: 51,
             }}
           >
             <span>{hoveredNode?.type || 'component'}</span>
-            <span style={{ opacity: 0.75, fontFamily: 'monospace' }}>#{hoveredNodeId}</span>
+            <span style={{ opacity: 0.75, fontFamily: 'var(--font-mono)' }}>#{hoveredNodeId}</span>
           </div>
         </div>
       )}

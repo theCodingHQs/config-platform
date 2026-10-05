@@ -7,9 +7,112 @@ import { hasMinRole } from '../auth/auth-types.js';
 import { pool } from '../db/pool.js';
 import { defaultStorageAdapter } from '../db/storage-adapter.js';
 import { auditLogService } from '../audit/audit-service.js';
+import { WorkspaceThemeConfigSchema, validateAccentContrast } from '@config-platform/schema';
 import argon2 from 'argon2';
 
 export async function workspaceRoutes(fastify: FastifyInstance) {
+  // GET /workspace/theme - Returns workspace theme configuration and policy
+  fastify.get('/workspace/theme', async (req: FastifyRequest) => {
+    const { tenantId } = req.session;
+    const defaultPreset = process.env.DEFAULT_THEME_PRESET || 'neutral';
+    const themeEditing = (process.env.THEME_EDITING || 'enabled').toLowerCase();
+
+    const tenantRes = await pool.query<{ theme_config?: any }>(
+      'SELECT theme_config FROM public.tenant WHERE id = $1',
+      [tenantId]
+    );
+
+    const rawConfig = tenantRes.rows[0]?.theme_config;
+    const themeConfig = {
+      presetId: rawConfig?.presetId || defaultPreset,
+      overrides: rawConfig?.overrides || {},
+    };
+
+    return {
+      themeConfig,
+      themeEditing,
+      defaultPreset,
+    };
+  });
+
+  // PATCH /workspace/theme - Update workspace theme configuration (builder+)
+  fastify.patch('/workspace/theme', {
+    preHandler: csrfCheckHook,
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { tenantId, userId, role, email } = req.session;
+
+    if (!hasMinRole(role, 'builder')) {
+      return reply.status(403).send({
+        statusCode: 403,
+        error: 'Forbidden',
+        message: 'Builder role or higher required to configure workspace theme',
+      });
+    }
+
+    const themeEditing = (process.env.THEME_EDITING || 'enabled').toLowerCase();
+    if (themeEditing === 'locked') {
+      return reply.status(403).send({
+        statusCode: 403,
+        error: 'Forbidden',
+        message: 'Workspace theme editing is locked by platform policy (THEME_EDITING=locked)',
+      });
+    }
+
+    const parseResult = WorkspaceThemeConfigSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: 'Invalid theme configuration',
+        issues: parseResult.error.issues,
+      });
+    }
+
+    const themeConfig = parseResult.data;
+
+    let contrastWarning: string | undefined;
+    if (themeConfig.overrides?.accent) {
+      const contrastCheck = validateAccentContrast(themeConfig.overrides.accent);
+      if (!contrastCheck.isCompliant) {
+        contrastWarning = contrastCheck.warning;
+      }
+    }
+
+    // Capture beforeState for audit log
+    const beforeRes = await pool.query<{ theme_config?: any }>(
+      'SELECT theme_config FROM public.tenant WHERE id = $1',
+      [tenantId]
+    );
+    const beforeState = beforeRes.rows[0]?.theme_config || {
+      presetId: process.env.DEFAULT_THEME_PRESET || 'neutral',
+      overrides: {},
+    };
+
+    // Update tenant theme configuration
+    await pool.query(
+      'UPDATE public.tenant SET theme_config = $1 WHERE id = $2',
+      [JSON.stringify(themeConfig), tenantId]
+    );
+
+    // Write audit log entry
+    await auditLogService.log({
+      tenantId,
+      userId,
+      userEmail: email,
+      action: 'tenant.theme_updated',
+      entityType: 'tenant',
+      entityId: tenantId,
+      beforeState: { themeConfig: beforeState },
+      afterState: { themeConfig },
+    });
+
+    return {
+      success: true,
+      themeConfig,
+      warning: contrastWarning,
+    };
+  });
+
   // GET /workspace/usage - Returns usage vs plan limits
   fastify.get('/workspace/usage', async (req: FastifyRequest) => {
     const { tenantId } = req.session;

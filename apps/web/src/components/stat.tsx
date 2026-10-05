@@ -42,23 +42,23 @@ export const StatComponent: React.FC<StatProps> = ({
       className="stat-card"
       data-testid="stat-card"
       style={{
-        padding: '1.25rem',
+        padding: 'var(--spacing-5)',
         backgroundColor: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: 'var(--radius, 8px)',
+        border: 'var(--border-width-sm) solid var(--border)',
+        borderRadius: 'var(--radius)',
         display: 'flex',
         flexDirection: 'column',
-        gap: '0.5rem',
-        boxShadow: 'var(--shadow-sm, 0 1px 2px 0 rgba(0, 0, 0, 0.05))',
+        gap: 'var(--spacing-2)',
+        boxShadow: 'var(--shadow-sm)',
       }}
     >
-      <div style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text-muted)' }}>
+      <div style={{ fontSize: 'var(--font-size-xs)', fontWeight: 500, color: 'var(--text-muted)' }}>
         {displayLabel}
       </div>
       <div
         data-testid="stat-value"
         style={{
-          fontSize: '1.875rem',
+          fontSize: 'var(--font-size-3xl)',
           fontWeight: 700,
           color: 'var(--text)',
           letterSpacing: '-0.025em',
@@ -68,7 +68,7 @@ export const StatComponent: React.FC<StatProps> = ({
         {isLoading ? '...' : `${prefix}${displayVal}${suffix}`}
       </div>
       {error && (
-        <div style={{ fontSize: '0.75rem', color: 'var(--danger, #ef4444)' }}>
+        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--danger)' }}>
           {(error as any)?.message || 'Failed to load stat'}
         </div>
       )}

@@ -27,6 +27,7 @@ export function hasMinRole(userRole: TenantRole, required: TenantRole): boolean 
 export interface AppUser {
   id: string;
   email: string;
+  themePreference?: 'system' | 'light' | 'dark';
   createdAt: string;
 }
 
@@ -43,6 +44,7 @@ export interface SessionPayload {
   tenantName?: string;
   role: TenantRole;
   email: string;
+  themePreference?: 'system' | 'light' | 'dark';
   expiresAt: Date;
 }
 

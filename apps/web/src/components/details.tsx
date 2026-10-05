@@ -50,13 +50,13 @@ export const DetailsComponent: React.FC<DetailsProps> = ({
         className="details-empty"
         data-testid="details-empty"
         style={{
-          padding: "24px",
+          padding: "var(--spacing-6)",
           textAlign: "center",
           color: "var(--text-muted)",
           background: "var(--surface)",
-          borderRadius: "var(--radius, 8px)",
-          border: "1px dashed var(--border)",
-          fontSize: 14,
+          borderRadius: "var(--radius)",
+          border: "var(--border-width-sm) dashed var(--border)",
+          fontSize: "var(--font-size-sm)",
         }}
       >
         Select a record to view details
@@ -76,25 +76,25 @@ export const DetailsComponent: React.FC<DetailsProps> = ({
       data-testid="details-card"
       style={{
         background: "var(--surface)",
-        borderRadius: "var(--radius, 8px)",
-        border: "1px solid var(--border)",
+        borderRadius: "var(--radius)",
+        border: "var(--border-width-sm) solid var(--border)",
         overflow: "hidden",
         width: "100%",
       }}
     >
       <div
         style={{
-          padding: "14px 20px",
-          borderBottom: "1px solid var(--border)",
+          padding: "var(--spacing-3) var(--spacing-5)",
+          borderBottom: "var(--border-width-sm) solid var(--border)",
           fontWeight: 600,
-          fontSize: 15,
-          background: "var(--surface-subtle)",
+          fontSize: "var(--font-size-md)",
+          background: "var(--surface-2)",
           color: "var(--text)",
         }}
       >
         Record Details
       </div>
-      <div style={{ padding: "8px 20px" }}>
+      <div style={{ padding: "var(--spacing-2) var(--spacing-5)" }}>
         {fieldList.map((f, idx) => {
           const fieldDef = resolveField(f.fieldId);
           const label = fieldDef?.label || f.fieldId;
@@ -108,10 +108,10 @@ export const DetailsComponent: React.FC<DetailsProps> = ({
                 key={idx}
                 style={{
                   display: "flex",
-                  padding: "10px 0",
+                  padding: "var(--spacing-2) 0",
                   borderBottom:
                     idx < fieldList.length - 1
-                      ? "1px solid var(--border-subtle)"
+                      ? "var(--border-width-sm) solid var(--border-subtle)"
                       : "none",
                 }}
               >
@@ -126,12 +126,12 @@ export const DetailsComponent: React.FC<DetailsProps> = ({
               style={{
                 display: "flex",
                 justifyContent: "space-between",
-                padding: "10px 0",
+                padding: "var(--spacing-2) 0",
                 borderBottom:
                   idx < fieldList.length - 1
-                    ? "1px solid var(--border-subtle)"
+                    ? "var(--border-width-sm) solid var(--border-subtle)"
                     : "none",
-                fontSize: 14,
+                fontSize: "var(--font-size-sm)",
               }}
             >
               <span style={{ color: "var(--text-muted)", fontWeight: 500 }}>

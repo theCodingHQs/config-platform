@@ -1,8 +1,10 @@
 import React, { useRef, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ChartProps } from "@config-platform/schema";
+import { neutralLightPalette, defaultSharedTokens } from "@config-platform/schema";
 import { useMetadata } from "../context/metadata-context";
 import { usePageRuntime } from "../context/page-runtime-context";
+import { useTheme } from "../context/theme-context";
 import { fetchRecords } from "../api/client";
 import { BrokenBinding } from "../renderer/broken-binding";
 
@@ -17,6 +19,17 @@ export const ChartComponent: React.FC<ChartProps> = ({
 }) => {
   const { tenantId, resolveEntity, resolveField } = useMetadata();
   const runtime = usePageRuntime();
+  const { resolvedTheme } = useTheme();
+  const [themeVersion, setThemeVersion] = useState(0);
+
+  useEffect(() => {
+    const handleThemeChange = () => {
+      setThemeVersion((v) => v + 1);
+    };
+    window.addEventListener("theme-changed", handleThemeChange);
+    return () => window.removeEventListener("theme-changed", handleThemeChange);
+  }, []);
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartInstanceRef = useRef<any>(null);
   const [chartReady, setChartReady] = useState(false);
@@ -111,10 +124,14 @@ export const ChartComponent: React.FC<ChartProps> = ({
     }
 
     return { labels, values };
-  }, [rawRecords, groupFieldDef, aggFieldDef, aggregateOp]);
+  }, [groupFieldDef, aggFieldDef, rawRecords, aggregateOp]);
 
-  // 3. Render with Chart.js if canvas 2D is available
+  // 3. Initialize or Re-render Chart.js reading token values from computed styles
   useEffect(() => {
+    if (!isCanvasSupported || chartData.labels.length === 0) {
+      return;
+    }
+
     let isCancelled = false;
 
     async function initChart() {
@@ -129,6 +146,17 @@ export const ChartComponent: React.FC<ChartProps> = ({
         setChartFailed(true);
         return;
       }
+
+      // Read design token values from computed styles
+      const computed = window.getComputedStyle(document.documentElement);
+      const accent = computed.getPropertyValue("--accent").trim() || neutralLightPalette.accent;
+      const accentSubtle =
+        computed.getPropertyValue("--accent-subtle").trim() || neutralLightPalette["accent-subtle"];
+      const textColor = computed.getPropertyValue("--text").trim() || neutralLightPalette.text;
+      const textMuted =
+        computed.getPropertyValue("--text-muted").trim() || neutralLightPalette.muted;
+      const borderColor =
+        computed.getPropertyValue("--border").trim() || neutralLightPalette.border;
 
       try {
         const { Chart, registerables } = await import("chart.js");
@@ -152,12 +180,10 @@ export const ChartComponent: React.FC<ChartProps> = ({
                 label: title || `${aggregateOp.toUpperCase()}`,
                 data: chartData.values,
                 backgroundColor:
-                  type === "line"
-                    ? "rgba(79, 70, 229, 0.2)"
-                    : "rgba(79, 70, 229, 0.65)",
-                borderColor: "#4f46e5",
-                borderWidth: 2,
-                borderRadius: 4,
+                  type === "line" ? accentSubtle : accent,
+                borderColor: accent,
+                borderWidth: parseInt(defaultSharedTokens.borderWidth.md, 10),
+                borderRadius: parseInt(defaultSharedTokens.radius.sm, 10),
                 tension: 0.2,
                 fill: type === "line",
               },
@@ -170,10 +196,33 @@ export const ChartComponent: React.FC<ChartProps> = ({
               legend: {
                 display: false,
               },
+              tooltip: {
+                backgroundColor: computed.getPropertyValue("--surface").trim() || neutralLightPalette.surface,
+                titleColor: textColor,
+                bodyColor: textColor,
+                borderColor: borderColor,
+                borderWidth: parseInt(defaultSharedTokens.borderWidth.sm, 10),
+              },
             },
             scales: {
+              x: {
+                ticks: {
+                  color: textMuted,
+                  font: { family: computed.getPropertyValue("--font-sans").trim() || defaultSharedTokens.fontStack.sans },
+                },
+                grid: {
+                  color: borderColor,
+                },
+              },
               y: {
                 beginAtZero: true,
+                ticks: {
+                  color: textMuted,
+                  font: { family: computed.getPropertyValue("--font-sans").trim() || "sans-serif" },
+                },
+                grid: {
+                  color: borderColor,
+                },
               },
             },
           },
@@ -203,7 +252,7 @@ export const ChartComponent: React.FC<ChartProps> = ({
       }
       setChartReady(false);
     };
-  }, [type, chartData, title, aggregateOp]);
+  }, [type, chartData, title, aggregateOp, resolvedTheme, themeVersion, isCanvasSupported]);
 
   if (!groupFieldDef && groupByFieldId) {
     return <BrokenBinding type="field" id={groupByFieldId} />;
@@ -219,13 +268,13 @@ export const ChartComponent: React.FC<ChartProps> = ({
       className="chart-container"
       data-testid="chart-container"
       style={{
-        padding: "1.25rem",
+        padding: "var(--spacing-5)",
         backgroundColor: "var(--surface)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius, 8px)",
+        border: "var(--border-width-sm) solid var(--border)",
+        borderRadius: "var(--radius)",
         display: "flex",
         flexDirection: "column",
-        gap: "0.75rem",
+        gap: "var(--spacing-3)",
         width: "100%",
         minHeight: "260px",
       }}
@@ -233,7 +282,7 @@ export const ChartComponent: React.FC<ChartProps> = ({
       {title && (
         <div
           style={{
-            fontSize: "0.9375rem",
+            fontSize: "var(--font-size-sm)",
             fontWeight: 600,
             color: "var(--text)",
           }}
@@ -246,8 +295,8 @@ export const ChartComponent: React.FC<ChartProps> = ({
         <div
           style={{
             margin: "auto",
-            color: "var(--text-muted, #6b7280)",
-            fontSize: "0.8125rem",
+            color: "var(--text-muted)",
+            fontSize: "var(--font-size-xs)",
           }}
         >
           No data available
@@ -285,16 +334,16 @@ export const ChartComponent: React.FC<ChartProps> = ({
                       y={y}
                       width={barWidth}
                       height={height}
-                      fill="#4f46e5"
+                      fill="var(--accent)"
                       rx="3"
-                      opacity="0.8"
+                      opacity="0.85"
                     />
                     <text
                       x={x + barWidth / 2}
                       y={y - 5}
                       textAnchor="middle"
                       fontSize="10"
-                      fill="#374151"
+                      fill="var(--text)"
                     >
                       {chartData.values[i]}
                     </text>
@@ -303,7 +352,7 @@ export const ChartComponent: React.FC<ChartProps> = ({
                       y={160}
                       textAnchor="middle"
                       fontSize="10"
-                      fill="#6b7280"
+                      fill="var(--text-muted)"
                     >
                       {lbl}
                     </text>

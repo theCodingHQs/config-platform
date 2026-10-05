@@ -11,7 +11,8 @@
     }
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "node --experimental-strip-types --test tests/theme.test.ts"
   },
   "dependencies": {
     "jsep": "^1.4.0",

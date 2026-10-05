@@ -12,10 +12,19 @@ import {
   isValidStableId,
 } from '../utils/id-gen.js';
 import { pagesService } from '../pages/pages-service.js';
+import { WorkspaceThemeConfigSchema } from '@config-platform/schema';
 
 export interface WorkspaceBundle {
   bundleVersion: number;
   exportedAt: string;
+  themeConfig?: {
+    presetId: string;
+    overrides?: {
+      accent?: string;
+      radius?: string;
+      density?: string;
+    };
+  };
   entities: Array<{
     id: string;
     name: string;
@@ -89,6 +98,16 @@ export function deepWalkRemap<T>(value: T, idMap: Map<string, string>): T {
 
 export class ExportImportService {
   async exportBundle(tenantId: string): Promise<WorkspaceBundle> {
+    // 0. Fetch theme configuration
+    const tenantRes = await pool.query<{ theme_config?: any }>(
+      `SELECT theme_config FROM public.tenant WHERE id = $1`,
+      [tenantId]
+    );
+    const themeConfig = tenantRes.rows[0]?.theme_config || {
+      presetId: process.env.DEFAULT_THEME_PRESET || 'neutral',
+      overrides: {},
+    };
+
     // 1. Fetch entities
     const entitiesRes = await pool.query<{
       id: string;
@@ -189,6 +208,7 @@ export class ExportImportService {
     return {
       bundleVersion: 1,
       exportedAt: new Date().toISOString(),
+      themeConfig,
       entities,
       relations,
       pages,
@@ -208,6 +228,21 @@ export class ExportImportService {
     // Check plan limits
     const { plan, limits } = await tenantLimitsService.getTenantPlan(tenantId);
     const conflicts: string[] = [];
+
+    // Validate theme configuration upfront if present in bundle
+    let validatedThemeConfig: any = null;
+    if (bundle.themeConfig !== undefined) {
+      const parsedTheme = WorkspaceThemeConfigSchema.safeParse(bundle.themeConfig);
+      if (!parsedTheme.success) {
+        conflicts.push(
+          `Invalid theme configuration in bundle: ${parsedTheme.error.issues
+            .map((i) => `${i.path.join('.') || 'root'}: ${i.message}`)
+            .join(', ')}`
+        );
+      } else {
+        validatedThemeConfig = parsedTheme.data;
+      }
+    }
 
     const existingEntities = await pool.query<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM public.entity_def WHERE tenant_id = $1`,
@@ -507,6 +542,14 @@ export class ExportImportService {
         };
       }
 
+      // 8. Import theme configuration if provided in bundle
+      if (validatedThemeConfig) {
+        await client.query(
+          `UPDATE public.tenant SET theme_config = $1 WHERE id = $2`,
+          [JSON.stringify(validatedThemeConfig), tenantId]
+        );
+      }
+
       await client.query('COMMIT');
 
       if (session) {
@@ -517,7 +560,11 @@ export class ExportImportService {
           action: 'workspace.import',
           entityType: 'workspace',
           entityId: tenantId,
-          afterState: { entitiesCount: bundle.entities.length, pagesCount: bundle.pages.length },
+          afterState: {
+            entitiesCount: bundle.entities.length,
+            pagesCount: bundle.pages.length,
+            themeConfig: bundle.themeConfig,
+          },
         });
       }
 
