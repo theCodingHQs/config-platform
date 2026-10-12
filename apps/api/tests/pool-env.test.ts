@@ -93,9 +93,21 @@ describe('Database Pool Environment Validation', () => {
   });
 
   describe('assertDestructiveTestDbResetAllowed safety validation', () => {
+    const origResetEnv = process.env.ALLOW_TEST_DB_RESET;
+    beforeEach(() => {
+      delete process.env.ALLOW_TEST_DB_RESET;
+    });
+    afterEach(() => {
+      if (origResetEnv !== undefined) {
+        process.env.ALLOW_TEST_DB_RESET = origResetEnv;
+      } else {
+        delete process.env.ALLOW_TEST_DB_RESET;
+      }
+    });
+
     it('refuses reset when database name does not end with _test on localhost', () => {
       const url = 'postgresql://postgres:postgres@localhost:5432/config_platform';
-      expect(() => assertDestructiveTestDbResetAllowed(url)).toThrow(
+      expect(() => assertDestructiveTestDbResetAllowed(url, false)).toThrow(
         /database name "config_platform" does not end with "_test"/
       );
     });
@@ -144,7 +156,7 @@ describe('Database Pool Environment Validation', () => {
       const testCode = `
         (async () => {
           process.env.NODE_ENV = 'test';
-          delete process.env.TEST_DATABASE_URL;
+          process.env.TEST_DATABASE_URL = '';
           delete process.env.TEST_DATABASE_URL_DIRECT;
           process.env.DATABASE_URL = 'postgres://postgres:postgres@localhost:5432/config_platform_dev';
           try {

@@ -10,6 +10,12 @@ export const DetailsComponent: React.FC<DetailsProps> = ({
   entityId,
   recordId,
   fields = [],
+  columns = 2,
+  flex,
+  width,
+  minWidth,
+  maxWidth,
+  alignSelf,
 }) => {
   const { resolveEntity, resolveField } = useMetadata();
   const runtime = usePageRuntime();
@@ -54,7 +60,7 @@ export const DetailsComponent: React.FC<DetailsProps> = ({
           textAlign: "center",
           color: "var(--text-muted)",
           background: "var(--surface)",
-          borderRadius: "var(--radius)",
+          borderRadius: "var(--radius-surface)",
           border: "var(--border-width-sm) dashed var(--border)",
           fontSize: "var(--font-size-sm)",
         }}
@@ -70,16 +76,25 @@ export const DetailsComponent: React.FC<DetailsProps> = ({
       ? fields
       : Object.keys(record).map((k) => ({ fieldId: k }));
 
+  const widthValue =
+    width !== undefined
+      ? (typeof width === 'number' ? `${width}px` : width)
+      : (flex !== undefined ? undefined : '100%');
+
   return (
     <div
       className="details-card"
       data-testid="details-card"
       style={{
         background: "var(--surface)",
-        borderRadius: "var(--radius)",
+        borderRadius: "var(--radius-surface)",
         border: "var(--border-width-sm) solid var(--border)",
         overflow: "hidden",
-        width: "100%",
+        flex: flex !== undefined ? flex : undefined,
+        width: widthValue,
+        minWidth: minWidth !== undefined ? (typeof minWidth === 'number' ? `${minWidth}px` : minWidth) : undefined,
+        maxWidth: maxWidth !== undefined ? (typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth) : undefined,
+        alignSelf,
       }}
     >
       <div
@@ -94,7 +109,15 @@ export const DetailsComponent: React.FC<DetailsProps> = ({
       >
         Record Details
       </div>
-      <div style={{ padding: "var(--spacing-2) var(--spacing-5)" }}>
+      <div
+        style={{
+          padding: "var(--spacing-3) var(--spacing-5)",
+          display: columns > 1 ? "grid" : "block",
+          gridTemplateColumns:
+            columns > 1 ? `repeat(${columns}, minmax(0, 1fr))` : undefined,
+          gap: columns > 1 ? "var(--spacing-4)" : undefined,
+        }}
+      >
         {fieldList.map((f, idx) => {
           const fieldDef = resolveField(f.fieldId);
           const label = fieldDef?.label || f.fieldId;

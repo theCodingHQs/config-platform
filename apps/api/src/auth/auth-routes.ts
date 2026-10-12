@@ -218,7 +218,14 @@ export async function authRoutes(fastify: FastifyInstance) {
 
   // ─── POST /auth/switch-workspace ─────────────────────────────
   fastify.post('/auth/switch-workspace', {
-    preHandler: csrfCheckHook,
+    preHandler: (req: FastifyRequest, reply: FastifyReply, done: (err?: Error) => void) => {
+      const sessionId = (req.cookies as Record<string, string>)?.[SESSION_COOKIE];
+      if (!sessionId) {
+        reply.status(401).send({ statusCode: 401, error: 'Unauthorized' });
+        return;
+      }
+      csrfCheckHook(req, reply, done);
+    },
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const sessionId = (req.cookies as Record<string, string>)?.[SESSION_COOKIE];
     if (!sessionId) return reply.status(401).send({ statusCode: 401, error: 'Unauthorized' });

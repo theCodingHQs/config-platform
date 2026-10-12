@@ -247,6 +247,8 @@ export function createTemplatePage(
               type: 'modal',
               props: {
                 title: `Create ${entity.label}`,
+                subtitle: `Fill in the details below to add a new ${entity.label.toLowerCase()}.`,
+                entityId: entity.id,
                 openStateKey: 'createModalOpen',
               },
               children: [
@@ -256,6 +258,16 @@ export function createTemplatePage(
                   props: {
                     mode: 'create',
                     entityId: entity.id,
+                    showHeader: false,
+                    showCancel: true,
+                    cancelLabel: 'Cancel',
+                    onCancel: [
+                      {
+                        type: 'closeModal',
+                        params: { modalKey: 'createModalOpen' },
+                      },
+                    ],
+                    submitLabel: 'Create',
                     fields: cols.map((c) => ({ fieldId: c.id })),
                     onSuccess: [
                       {
@@ -283,6 +295,8 @@ export function createTemplatePage(
               type: 'modal',
               props: {
                 title: `Edit ${entity.label}`,
+                subtitle: `Update the ${entity.label.toLowerCase()}'s information below.`,
+                entityId: entity.id,
                 openStateKey: 'editModalOpen',
               },
               children: [
@@ -292,34 +306,20 @@ export function createTemplatePage(
                   props: {
                     mode: 'edit',
                     entityId: entity.id,
+                    showHeader: false,
                     recordId: '{{ state.editRecordId }}',
-                    fields: cols.map((c) => ({ fieldId: c.id })),
-                    onSuccess: [
+                    showCancel: true,
+                    cancelLabel: 'Cancel',
+                    onCancel: [
                       {
                         type: 'closeModal',
                         params: { modalKey: 'editModalOpen' },
                       },
-                      {
-                        type: 'refetch',
-                        params: { source: dsId },
-                      },
-                      {
-                        type: 'showToast',
-                        params: {
-                          message: `${entity.label} updated successfully`,
-                          variant: 'success',
-                        },
-                      },
                     ],
-                  },
-                },
-                {
-                  id: 'delete_btn',
-                  type: 'button',
-                  props: {
-                    label: `Delete ${entity.label}`,
-                    variant: 'danger',
-                    onClick: [
+                    submitLabel: 'Update',
+                    showDelete: true,
+                    deleteLabel: `Delete ${entity.label}`,
+                    onDelete: [
                       {
                         type: 'confirm',
                         params: {
@@ -348,6 +348,24 @@ export function createTemplatePage(
                         type: 'showToast',
                         params: {
                           message: `${entity.label} deleted successfully`,
+                          variant: 'success',
+                        },
+                      },
+                    ],
+                    fields: cols.map((c) => ({ fieldId: c.id })),
+                    onSuccess: [
+                      {
+                        type: 'closeModal',
+                        params: { modalKey: 'editModalOpen' },
+                      },
+                      {
+                        type: 'refetch',
+                        params: { source: dsId },
+                      },
+                      {
+                        type: 'showToast',
+                        params: {
+                          message: `${entity.label} updated successfully`,
                           variant: 'success',
                         },
                       },

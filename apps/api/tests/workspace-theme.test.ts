@@ -5,6 +5,7 @@ import {
   ThemePresetIdSchema,
   validateAccentContrast,
   deriveAccentShades,
+  deriveSemanticRadius,
   generateTokensCss,
   THEME_PRESETS,
 } from '@config-platform/schema';
@@ -88,6 +89,42 @@ describe('Workspace Theme Configuration & Policy', () => {
       expect(THEME_PRESETS[p as keyof typeof THEME_PRESETS]).toBeDefined();
     }
     expect(ThemePresetIdSchema.safeParse('neon').success).toBe(false);
+  });
+
+  it('derives semantic radius scale and caps controls/surfaces so full does not turn modals/cards/inputs into pills', () => {
+    // 1. None: all roles 0px
+    const none = deriveSemanticRadius('none');
+    expect(none.base).toBe('0px');
+    expect(none.control).toBe('0px');
+    expect(none.surface).toBe('0px');
+    expect(none.pill).toBe('0px');
+    expect(none.button).toBe('0px');
+
+    // 2. Medium: balanced defaults
+    const md = deriveSemanticRadius('md');
+    expect(md.base).toBe('6px');
+    expect(md.control).toBe('6px');
+    expect(md.surface).toBe('10px');
+    expect(md.pill).toBe('9999px');
+    expect(md.button).toBe('6px');
+
+    // 3. Full: buttons/pills are round (9999px), but controls and surfaces are strictly capped!
+    const full = deriveSemanticRadius('full');
+    expect(full.base).toBe('16px'); // CAPPED at 16px: defense-in-depth so base fallback never pills containers
+    expect(full.control).toBe('8px'); // CAPPED at 8px: inputs never become pills
+    expect(full.surface).toBe('16px'); // CAPPED at 16px: modals, cards, tables never become pills
+    expect(full.pill).toBe('9999px');
+    expect(full.button).toBe('9999px');
+
+    // 4. CSS generator outputs all semantic tokens
+    const css = generateTokensCss({
+      presetId: 'neutral',
+      overrides: { radius: 'full' },
+    });
+    expect(css).toContain('--radius-control: 8px;');
+    expect(css).toContain('--radius-surface: 16px;');
+    expect(css).toContain('--radius-pill: 9999px;');
+    expect(css).toContain('--radius-button: 9999px;');
   });
 
   it('supports themeConfig in WorkspaceBundle export/import typing', () => {

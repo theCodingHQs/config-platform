@@ -16,6 +16,11 @@ export const ChartComponent: React.FC<ChartProps> = ({
   aggregateOp = "count",
   aggregateFieldId,
   title,
+  flex,
+  width,
+  minWidth,
+  maxWidth,
+  alignSelf,
 }) => {
   const { tenantId, resolveEntity, resolveField } = useMetadata();
   const runtime = usePageRuntime();
@@ -263,6 +268,11 @@ export const ChartComponent: React.FC<ChartProps> = ({
 
   const maxVal = Math.max(...chartData.values, 1);
 
+  const widthValue =
+    width !== undefined
+      ? (typeof width === 'number' ? `${width}px` : width)
+      : (flex !== undefined ? undefined : '100%');
+
   return (
     <div
       className="chart-container"
@@ -271,11 +281,15 @@ export const ChartComponent: React.FC<ChartProps> = ({
         padding: "var(--spacing-5)",
         backgroundColor: "var(--surface)",
         border: "var(--border-width-sm) solid var(--border)",
-        borderRadius: "var(--radius)",
+        borderRadius: "var(--radius-surface)",
         display: "flex",
         flexDirection: "column",
         gap: "var(--spacing-3)",
-        width: "100%",
+        flex: flex !== undefined ? flex : undefined,
+        width: widthValue,
+        minWidth: minWidth !== undefined ? (typeof minWidth === 'number' ? `${minWidth}px` : minWidth) : undefined,
+        maxWidth: maxWidth !== undefined ? (typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth) : undefined,
+        alignSelf,
         minHeight: "260px",
       }}
     >

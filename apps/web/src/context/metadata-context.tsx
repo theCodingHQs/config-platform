@@ -70,3 +70,7 @@ export function useMetadata(): MetadataContextValue {
   }
   return ctx;
 }
+
+export function useOptionalMetadata(): MetadataContextValue | null {
+  return useContext(MetadataContext);
+}

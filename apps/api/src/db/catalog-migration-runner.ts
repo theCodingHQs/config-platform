@@ -32,8 +32,11 @@ export const catalogMigrations: CatalogMigration[] = [
           id VARCHAR(64) PRIMARY KEY,
           name VARCHAR(255) NOT NULL,
           schema_version INT NOT NULL DEFAULT 1,
+          timezone VARCHAR(64) NOT NULL DEFAULT 'UTC',
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+
+        ALTER TABLE public.tenant ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) NOT NULL DEFAULT 'UTC';
 
         -- Entity definitions table
         CREATE TABLE IF NOT EXISTS public.entity_def (
@@ -313,6 +316,59 @@ export const catalogMigrations: CatalogMigration[] = [
       await client.query(`
         ALTER TABLE public.tenant
         ADD COLUMN IF NOT EXISTS theme_config JSONB NOT NULL DEFAULT '{"presetId":"neutral","overrides":{}}'::jsonb;
+      `);
+    },
+  },
+  {
+    version: 10,
+    name: '010_entity_def_icon',
+    up: async (client: PoolClient) => {
+      await client.query(`
+        ALTER TABLE public.entity_def
+        ADD COLUMN IF NOT EXISTS icon VARCHAR(64);
+      `);
+    },
+  },
+  {
+    version: 11,
+    name: '011_export_template_and_permissions',
+    up: async (client: PoolClient) => {
+      await client.query(`
+        ALTER TABLE public.entity_permission
+        ADD COLUMN IF NOT EXISTS can_export BOOLEAN NOT NULL DEFAULT FALSE;
+
+        UPDATE public.entity_permission
+        SET can_export = TRUE
+        WHERE role IN ('owner', 'admin', 'builder', 'editor');
+
+        UPDATE public.entity_permission
+        SET can_export = FALSE
+        WHERE role = 'viewer';
+
+        CREATE TABLE IF NOT EXISTS public.export_template (
+          id VARCHAR(64) PRIMARY KEY,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          entity_id VARCHAR(64) NOT NULL REFERENCES public.entity_def(id) ON DELETE CASCADE,
+          name VARCHAR(255) NOT NULL,
+          draft JSONB NOT NULL,
+          published JSONB,
+          version INT NOT NULL DEFAULT 1,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_export_template_tenant ON public.export_template(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_export_template_entity ON public.export_template(tenant_id, entity_id);
+      `);
+    },
+  },
+  {
+    version: 12,
+    name: '012_tenant_timezone',
+    up: async (client: PoolClient) => {
+      await client.query(`
+        ALTER TABLE public.tenant
+        ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) NOT NULL DEFAULT 'UTC';
       `);
     },
   },

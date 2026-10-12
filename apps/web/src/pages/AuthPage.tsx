@@ -57,7 +57,7 @@ export function AuthPage() {
           maxWidth: '440px',
           backgroundColor: 'var(--surface)',
           border: 'var(--border-width) solid var(--border)',
-          borderRadius: 'var(--radius-lg)',
+          borderRadius: 'var(--radius-surface)',
           boxShadow: 'var(--shadow-lg)',
           overflow: 'hidden',
         }}
@@ -78,7 +78,7 @@ export function AuthPage() {
               justifyContent: 'center',
               width: 'var(--control-height-md)',
               height: 'var(--control-height-md)',
-              borderRadius: 'var(--radius-md)',
+              borderRadius: 'var(--radius-control)',
               backgroundColor: 'var(--accent-subtle)',
               color: 'var(--accent)',
               marginBottom: 'var(--space-3)',
@@ -161,7 +161,7 @@ export function AuthPage() {
               style={{
                 backgroundColor: 'var(--danger-subtle)',
                 border: 'var(--border-width) solid var(--danger)',
-                borderRadius: 'var(--radius-md)',
+                borderRadius: 'var(--radius-surface)',
                 padding: 'var(--space-3) var(--space-4)',
                 marginBottom: 'var(--space-4)',
                 display: 'flex',

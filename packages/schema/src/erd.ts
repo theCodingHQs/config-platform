@@ -29,6 +29,7 @@ export const ErdTableSchema = z.object({
   physicalTableName: z.string(),
   version: z.number(),
   displayFieldId: z.string().nullable().optional(),
+  icon: z.string().nullable().optional(),
   columns: z.array(ErdColumnSchema),
   fields: z.array(ErdColumnSchema).optional(),
 });

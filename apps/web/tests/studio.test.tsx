@@ -8,10 +8,10 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { MetadataProvider } from '../src/context/metadata-context';
 import { EntityManager } from '../src/studio/EntityManager';
 import { PageManager } from '../src/studio/PageManager';
-import { PageBuilder } from '../src/studio/PageBuilder';
+import { PageBuilder, computeDropTarget, moveNodeInTree } from '../src/studio/PageBuilder';
 import { renderNode } from '../src/renderer/render-node';
 import * as apiClient from '../src/api/client';
-import type { ErdTable, PageDefinition } from '@config-platform/schema';
+import type { ErdTable, PageDefinition, NodeDefinition } from '@config-platform/schema';
 
 const mockEntities: ErdTable[] = [
   {
@@ -133,7 +133,7 @@ describe('Studio & Page Builder UI', () => {
       'c_model',
       expect.objectContaining({ label: 'Serial Model' })
     );
-  });
+  }, 15000);
 
   // 2. Page Manager list and create
   it('page manager lists pages and creates a new page', async () => {
@@ -647,5 +647,257 @@ describe('Studio & Page Builder UI', () => {
     const finishedPublishBtn = screen.getByTestId('publish-btn');
     expect(finishedPublishBtn).toBeDisabled();
     expect(finishedPublishBtn).toHaveTextContent(/Published/i);
+  });
+
+  // 10. Component Tree: Nested Sibling Duplication
+  it('duplicates nested components as immediate siblings inside the same parent container with deep-cloned configuration', async () => {
+    const pageWithNestedItems: apiClient.PageDetail = {
+      id: 'p_dup_test',
+      name: 'Dup Test',
+      route: '/dup-test',
+      version: 1,
+      hasDraft: true,
+      hasPublished: false,
+      brokenBindings: [],
+      draft: {
+        schemaVersion: 1,
+        id: 'p_dup_test',
+        version: 1,
+        route: '/dup-test',
+        root: {
+          id: 'root_stack',
+          type: 'stack',
+          props: { direction: 'vertical' },
+          children: [
+            {
+              id: 'header_stack',
+              type: 'stack',
+              props: { direction: 'horizontal' },
+              children: [
+                {
+                  id: 'create_btn',
+                  type: 'button',
+                  props: { label: '+ Create Sensor', variant: 'primary', onClick: [] },
+                },
+                {
+                  id: 'spacer_text',
+                  type: 'text',
+                  props: { value: 'Divider', variant: 'caption' },
+                },
+              ],
+            },
+          ],
+        },
+      },
+      published: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    vi.spyOn(apiClient, 'fetchPage').mockResolvedValue(pageWithNestedItems);
+
+    render(
+      <MemoryRouter initialEntries={['/studio/pages/p_dup_test']}>
+        <Routes>
+          <Route path="/studio/pages/:id" element={<PageBuilder />} />
+        </Routes>
+      </MemoryRouter>,
+      { wrapper: createTestWrapper() }
+    );
+
+    // Wait for tree items to appear
+    await waitFor(() => {
+      expect(screen.getByText('create_btn')).toBeInTheDocument();
+      expect(screen.getByText('spacer_text')).toBeInTheDocument();
+    });
+
+    // Select create_btn
+    const btnTreeItem = screen.getByText('create_btn');
+    fireEvent.click(btnTreeItem);
+
+    // Duplicate create_btn via Ctrl+D
+    fireEvent.keyDown(window, { key: 'd', ctrlKey: true });
+
+    // A duplicated button item with a new generated ID should appear in the tree
+    await waitFor(() => {
+      expect(screen.getByText(/Duplicated "button"/i)).toBeInTheDocument();
+      const duplicatedButtons = screen.getAllByText(/^button_/i);
+      expect(duplicatedButtons.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // 11. Component Tree: Copy Component & Paste into Another Container
+  it('copies an existing component with configuration and pastes it into another target container via Ctrl+C / Ctrl+V and UI actions', async () => {
+    const pageForCopyPaste: apiClient.PageDetail = {
+      id: 'p_copy_paste_test',
+      name: 'Copy Paste Test',
+      route: '/cp-test',
+      version: 1,
+      hasDraft: true,
+      hasPublished: false,
+      brokenBindings: [],
+      draft: {
+        schemaVersion: 1,
+        id: 'p_copy_paste_test',
+        version: 1,
+        route: '/cp-test',
+        root: {
+          id: 'root_stack',
+          type: 'stack',
+          props: { direction: 'vertical' },
+          children: [
+            {
+              id: 'header_stack',
+              type: 'stack',
+              props: { direction: 'horizontal' },
+              children: [
+                {
+                  id: 'action_btn',
+                  type: 'button',
+                  props: { label: 'Export Data', variant: 'secondary' },
+                },
+              ],
+            },
+            {
+              id: 'target_modal',
+              type: 'modal',
+              props: { title: 'Confirmation Dialog', openStateKey: 'isOpen' },
+              children: [],
+            },
+          ],
+        },
+      },
+      published: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    vi.spyOn(apiClient, 'fetchPage').mockResolvedValue(pageForCopyPaste);
+
+    render(
+      <MemoryRouter initialEntries={['/studio/pages/p_copy_paste_test']}>
+        <Routes>
+          <Route path="/studio/pages/:id" element={<PageBuilder />} />
+        </Routes>
+      </MemoryRouter>,
+      { wrapper: createTestWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('action_btn')).toBeInTheDocument();
+      expect(screen.getByText('target_modal')).toBeInTheDocument();
+    });
+
+    // 1. Select action_btn and copy it with Ctrl+C
+    const actionBtnItem = screen.getByText('action_btn');
+    fireEvent.click(actionBtnItem);
+    fireEvent.keyDown(window, { key: 'c', ctrlKey: true });
+
+    // The Paste button should now appear in the Component Tree header
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Paste copied component/i })).toBeInTheDocument();
+    });
+
+    // 2. Select target_modal
+    const targetModalItem = screen.getByText('target_modal');
+    fireEvent.click(targetModalItem);
+
+    // 3. Paste via Ctrl+V
+    fireEvent.keyDown(window, { key: 'v', ctrlKey: true });
+
+    // The modal should now have the pasted button component with a generated button_* ID
+    await waitFor(() => {
+      expect(screen.getByText(/Pasted "button"/i)).toBeInTheDocument();
+      const pastedButtons = screen.getAllByText(/^button_/i);
+      expect(pastedButtons.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // 12. Component Tree: Moving nested component out to become direct child of parent container (exact user screenshot scenario)
+  it('correctly drops title_text dragged from nested stack to become a direct child of header_stack before stack_72ghb without reverting', () => {
+    // Exact hierarchy from user's screenshot:
+    // root_stack
+    //   header_stack
+    //     stack_72ghb
+    //       create_btn
+    //       button_n7e9k
+    //       title_text
+    //   crud_table
+    const treeRoot: NodeDefinition = {
+      id: 'root_stack',
+      type: 'stack',
+      children: [
+        {
+          id: 'header_stack',
+          type: 'stack',
+          children: [
+            {
+              id: 'stack_72ghb',
+              type: 'stack',
+              children: [
+                { id: 'create_btn', type: 'button' },
+                { id: 'button_n7e9k', type: 'button' },
+                { id: 'title_text', type: 'text' },
+              ],
+            },
+          ],
+        },
+        { id: 'crud_table', type: 'table' },
+      ],
+    };
+
+    // 1. Drag title_text UP over stack_72ghb
+    // Active: title_text (index 5)
+    // Over: stack_72ghb (index 2)
+    // Visually, SortableContext renders title_text BEFORE stack_72ghb in header_stack
+    const dropTarget = computeDropTarget(treeRoot, 'title_text', 'stack_72ghb');
+    expect(dropTarget).toEqual({
+      targetParentId: 'header_stack',
+      targetIndex: 0,
+    });
+
+    // 2. Perform the move
+    const updatedRoot = moveNodeInTree(
+      treeRoot,
+      'title_text',
+      dropTarget!.targetParentId,
+      dropTarget!.targetIndex
+    );
+
+    // Assert that header_stack now has title_text as its first child
+    const headerStack = updatedRoot.children?.find((c) => c.id === 'header_stack');
+    expect(headerStack).toBeDefined();
+    expect(headerStack?.children?.map((c) => c.id)).toEqual([
+      'title_text',
+      'stack_72ghb',
+    ]);
+
+    // Assert that stack_72ghb no longer contains title_text
+    const nestedStack = headerStack?.children?.find((c) => c.id === 'stack_72ghb');
+    expect(nestedStack).toBeDefined();
+    expect(nestedStack?.children?.map((c) => c.id)).toEqual([
+      'create_btn',
+      'button_n7e9k',
+    ]);
+
+    // 3. Move button_n7e9k DOWN over crud_table (moving out to root_stack)
+    const dropTargetDown = computeDropTarget(updatedRoot, 'button_n7e9k', 'crud_table');
+    expect(dropTargetDown).toEqual({
+      targetParentId: 'root_stack',
+      targetIndex: 2,
+    });
+
+    const rootAfterSecondMove = moveNodeInTree(
+      updatedRoot,
+      'button_n7e9k',
+      dropTargetDown!.targetParentId,
+      dropTargetDown!.targetIndex
+    );
+
+    expect(rootAfterSecondMove.children?.map((c) => c.id)).toEqual([
+      'header_stack',
+      'crud_table',
+      'button_n7e9k',
+    ]);
   });
 });

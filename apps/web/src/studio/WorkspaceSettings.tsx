@@ -133,7 +133,7 @@ export function WorkspaceSettings() {
             backgroundColor: 'var(--danger-subtle)',
             color: 'var(--danger)',
             border: 'var(--border-width) solid var(--danger)',
-            borderRadius: 'var(--radius-md)',
+            borderRadius: 'var(--radius-surface)',
             marginBottom: 'var(--space-4)',
             fontSize: 'var(--font-size-sm)',
             display: 'flex',
@@ -151,7 +151,7 @@ export function WorkspaceSettings() {
             backgroundColor: 'var(--success-subtle)',
             color: 'var(--success)',
             border: 'var(--border-width) solid var(--success)',
-            borderRadius: 'var(--radius-md)',
+            borderRadius: 'var(--radius-surface)',
             marginBottom: 'var(--space-4)',
             fontSize: 'var(--font-size-sm)',
             display: 'flex',
@@ -240,7 +240,7 @@ export function WorkspaceSettings() {
                   padding: 'var(--space-4)',
                   backgroundColor: 'var(--surface)',
                   border: 'var(--border-width) solid var(--border)',
-                  borderRadius: 'var(--radius-md)',
+                  borderRadius: 'var(--radius-surface)',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
@@ -260,7 +260,7 @@ export function WorkspaceSettings() {
                   padding: 'var(--space-4)',
                   backgroundColor: 'var(--surface)',
                   border: 'var(--border-width) solid var(--border)',
-                  borderRadius: 'var(--radius-md)',
+                  borderRadius: 'var(--radius-surface)',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
@@ -280,7 +280,7 @@ export function WorkspaceSettings() {
                   padding: 'var(--space-4)',
                   backgroundColor: 'var(--surface)',
                   border: 'var(--border-width) solid var(--border)',
-                  borderRadius: 'var(--radius-md)',
+                  borderRadius: 'var(--radius-surface)',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}>
@@ -307,7 +307,7 @@ export function WorkspaceSettings() {
               padding: 'var(--space-5)',
               backgroundColor: 'var(--surface)',
               border: 'var(--border-width) solid var(--border)',
-              borderRadius: 'var(--radius-md)',
+              borderRadius: 'var(--radius-surface)',
             }}
           >
             <h3 style={{ margin: '0 0 var(--space-2) 0', fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>Export Workspace</h3>
@@ -330,7 +330,7 @@ export function WorkspaceSettings() {
               padding: 'var(--space-5)',
               backgroundColor: 'var(--surface)',
               border: 'var(--border-width) solid var(--border)',
-              borderRadius: 'var(--radius-md)',
+              borderRadius: 'var(--radius-surface)',
             }}
           >
             <h3 style={{ margin: '0 0 var(--space-2) 0', fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>Import Workspace</h3>
@@ -380,7 +380,7 @@ export function WorkspaceSettings() {
                   padding: 'var(--space-4)',
                   backgroundColor: importResult.success ? 'var(--surface-2)' : 'var(--danger-subtle)',
                   border: 'var(--border-width) solid var(--border)',
-                  borderRadius: 'var(--radius-md)',
+                  borderRadius: 'var(--radius-surface)',
                   fontSize: 'var(--font-size-sm)',
                 }}
               >
@@ -423,7 +423,7 @@ export function WorkspaceSettings() {
           ) : logs.length === 0 ? (
             <p style={{ color: 'var(--muted)' }}>No audit events recorded yet.</p>
           ) : (
-            <div style={{ overflowX: 'auto', border: 'var(--border-width) solid var(--border)', borderRadius: 'var(--radius-md)' }}>
+            <div style={{ overflowX: 'auto', border: 'var(--border-width) solid var(--border)', borderRadius: 'var(--radius-surface)' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--font-size-xs)' }}>
                 <thead>
                   <tr style={{ borderBottom: 'var(--border-width) solid var(--border)', backgroundColor: 'var(--surface-2)', textAlign: 'left' }}>
@@ -482,7 +482,7 @@ export function WorkspaceSettings() {
                 style={{
                   backgroundColor: 'var(--surface)',
                   border: 'var(--border-width) solid var(--border)',
-                  borderRadius: 'var(--radius-lg)',
+                  borderRadius: 'var(--radius-surface)',
                   boxShadow: 'var(--shadow-xl)',
                   width: '100%',
                   maxWidth: '650px',
@@ -507,7 +507,7 @@ export function WorkspaceSettings() {
                       padding: 'var(--space-3)',
                       backgroundColor: 'var(--surface-2)',
                       border: 'var(--border-width) solid var(--border)',
-                      borderRadius: 'var(--radius-sm)',
+                      borderRadius: 'var(--radius-control)',
                       fontSize: 'var(--font-size-xs)',
                       fontFamily: 'var(--font-mono)',
                       maxHeight: '150px',
@@ -525,7 +525,7 @@ export function WorkspaceSettings() {
                       padding: 'var(--space-3)',
                       backgroundColor: 'var(--surface-2)',
                       border: 'var(--border-width) solid var(--border)',
-                      borderRadius: 'var(--radius-sm)',
+                      borderRadius: 'var(--radius-control)',
                       fontSize: 'var(--font-size-xs)',
                       fontFamily: 'var(--font-mono)',
                       maxHeight: '150px',

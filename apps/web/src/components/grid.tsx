@@ -5,9 +5,27 @@ export const GridComponent: React.FC<Partial<GridProps> & { children?: React.Rea
   columns = 2,
   gap = 16,
   responsiveCollapse = true,
+  align,
+  minColWidth,
+  flex,
+  width,
+  minWidth,
+  maxWidth,
+  alignSelf,
   children,
 }) => {
   const gapValue = typeof gap === 'number' ? `${gap}px` : gap;
+  const minColWidthValue =
+    typeof minColWidth === 'number' ? `${minColWidth}px` : minColWidth;
+
+  const templateColumns = minColWidthValue
+    ? `repeat(auto-fit, minmax(${minColWidthValue}, 1fr))`
+    : `repeat(${columns}, minmax(0, 1fr))`;
+
+  const widthValue =
+    width !== undefined
+      ? (typeof width === 'number' ? `${width}px` : width)
+      : (flex !== undefined ? undefined : '100%');
 
   return (
     <div
@@ -15,9 +33,15 @@ export const GridComponent: React.FC<Partial<GridProps> & { children?: React.Rea
       data-testid="layout-grid"
       style={{
         display: 'grid',
-        gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
+        gridTemplateColumns: templateColumns,
         gap: gapValue,
-        width: '100%',
+        alignItems: align,
+        flex: flex !== undefined ? flex : undefined,
+        width: widthValue,
+        minWidth: minWidth !== undefined ? (typeof minWidth === 'number' ? `${minWidth}px` : minWidth) : undefined,
+        maxWidth: maxWidth !== undefined ? (typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth) : undefined,
+        alignSelf,
+        boxSizing: 'border-box',
       }}
     >
       {children}

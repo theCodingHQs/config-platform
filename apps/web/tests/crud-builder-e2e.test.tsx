@@ -238,11 +238,10 @@ describe('End-to-End: CRUD Page via Builder UI Operations', () => {
     expect(editForm?.props?.mode).toBe('edit');
     expect(editForm?.props?.recordId).toBe('{{ state.editRecordId }}');
 
-    // Delete Button with Confirm Action
-    const deleteBtn = editModal?.children?.find((c) => c.type === 'button');
-    expect(deleteBtn?.props?.label).toContain('Delete Product');
-    expect(deleteBtn?.props?.variant).toBe('danger');
-    const deleteActions = deleteBtn?.props?.onClick || [];
+    // Delete Button with Confirm Action integrated in Edit Form footer
+    expect(editForm?.props?.showDelete).toBe(true);
+    expect(editForm?.props?.deleteLabel).toContain('Delete Product');
+    const deleteActions = editForm?.props?.onDelete || [];
     expect(deleteActions[0].type).toBe('confirm');
     expect(deleteActions[0].params.title).toBe('Delete Confirmation');
     expect(deleteActions[0].params.message).toContain('Are you sure you want to delete this Product?');

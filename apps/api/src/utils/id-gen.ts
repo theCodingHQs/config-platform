@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
  * Pages: p_<hex> (e.g. p_0f3b8a1c)
  */
 
-export function generateStableId(prefix: 't' | 'c' | 'r' | 'p'): string {
+export function generateStableId(prefix: 't' | 'c' | 'r' | 'p' | 'et'): string {
   const hex = crypto.randomBytes(4).toString('hex');
   return `${prefix}_${hex}`;
 }
@@ -29,10 +29,14 @@ export function generatePageId(): string {
   return generateStableId('p');
 }
 
-export function isValidStableId(id: string, prefix?: 't' | 'c' | 'r' | 'p'): boolean {
+export function generateExportTemplateId(): string {
+  return generateStableId('et');
+}
+
+export function isValidStableId(id: string, prefix?: 't' | 'c' | 'r' | 'p' | 'et'): boolean {
   if (prefix) {
     const re = new RegExp(`^${prefix}_[a-f0-9]{8}$`);
     return re.test(id);
   }
-  return /^[tcrp]_[a-f0-9]{8}$/.test(id);
+  return /^(?:[tcrp]|et)_[a-f0-9]{8}$/.test(id);
 }

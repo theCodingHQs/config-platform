@@ -77,7 +77,7 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
         style={{
           background: 'var(--surface)',
           color: 'var(--text)',
-          borderRadius: 'var(--radius-lg)',
+          borderRadius: 'var(--radius-surface)',
           boxShadow: 'var(--shadow-xl)',
           width: '100%',
           maxWidth: '680px',
@@ -129,7 +129,7 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
                     data-testid={`data-source-card-${idx}`}
                     style={{
                       border: 'var(--border-width) solid var(--border)',
-                      borderRadius: 'var(--radius-md)',
+                      borderRadius: 'var(--radius-surface)',
                       padding: 'var(--space-3)',
                       background: 'var(--surface-2)',
                       display: 'flex',

@@ -151,6 +151,15 @@ The `DELETE /api/workspace/tenant` endpoint allows workspace owners to delete th
 
 ---
 
+### Records API Behavior Notes
+
+- **System Keys Ignored on Write**: On `POST /api/entities/:entityId/records` (create) and `PATCH /api/entities/:entityId/records/:id` (update), system keys (`id`, `created_at`, `updated_at`) are silently ignored if present in the request payload. They are never written to or updated in the database.
+- **Strict Unknown Field Validation**: Every other unknown/unrecognized field that does not belong to the entity schema returns HTTP 400 Bad Request (`Unknown field(s): <field_names>`).
+- **Immutable System Timestamps & IDs**: `id` is always generated server-side upon record creation. `created_at` is permanently set on creation (`NOW()`). On update (`PATCH`), `updated_at` is automatically updated to `NOW()`, and cannot be overridden by the client payload.
+- **Role-Based Field Restrictions**: If the request contains fields configured as read-only or hidden for the caller's role, the API rejects the write with HTTP 403 Forbidden. Callers should exclude read-only/hidden fields from write payloads.
+
+---
+
 ### Local Database & Testing (Docker Compose)
 
 The repository provides separated Docker configurations for development and customer-facing deployments:
@@ -224,3 +233,33 @@ SMOKE_MODE=readonly ./scripts/smoke.sh https://production.yourdomain.com
 ```
 
 - When `SIGNUP_MODE=invite_only` blocks registration on a target deployment, `smoke.sh` exits with an actionable message directing operators to use `SMOKE_MODE=readonly` for production or run against staging where registration is enabled.
+
+---
+
+## Export Engine Architecture: Concurrency Slots & Memory Sizing
+
+### 1. Per-Process Export Concurrency Slots
+To protect Node.js application memory and database connection pools from exhaustion under concurrent bulk exports:
+- **Tenant Concurrency Semaphore**: Every export invocation (streaming tabular CSV/XLSX or repeating grid hydration) acquires a tenant concurrency slot via `tenantLimitsService.acquireExportSlot(tenantId)`.
+- **Guaranteed Release**: Slot acquisition is strictly wrapped in `try ... finally { releaseSlot(); }` across all HTTP routes and internal service methods. Concurrency slots are unconditionally released even if an export terminates unexpectedly, times out, or errors mid-stream.
+- **Plan Concurrency Limits**:
+  - `Free Plan`: 2 concurrent export slots
+  - `Pro Plan`: 5 concurrent export slots
+  - `Enterprise Plan`: 10 concurrent export slots
+- **Rate Rejection**: When all tenant slots are occupied, subsequent export requests are rejected immediately with HTTP 429 (`Too Many Requests`) before any database queries execute.
+
+### 2. Memory Sizing & Slicing Architecture
+The platform enforces a two-tier cap split between stored template definitions and rendered workbooks:
+
+| Metric | Stored Template Cap | Rendered Workbook Cap | Enforcement Mechanism |
+| :--- | :--- | :--- | :--- |
+| **Max Non-Empty Cells** | 20,000 cells | 200,000 cells | Zod schema & pre-flight count query |
+| **Max Data Rows** | 0 sample rows | 10,000 records | Pre-flight `SELECT COUNT(*)` query |
+| **JSON Size** | 2 MB | N/A | UTF-8 byte length calculation |
+| **Max Sheets** | 10 sheets | 10 sheets | Grid limit validator |
+
+- **Streaming Tabular Exports (`kind: simple`)**: Streamed row-by-row using keyset cursor pagination in 2,000-row chunks. Peak heap memory remains completely flat across 50,000+ rows ($< 6\text{ MB}$ total heap growth).
+- **Repeating Grid Hydration (`kind: grid`)**: Evaluated in-memory to perform band expansion ($\Delta = N - \text{minRows}$), formula coordinate rewriting (`SUM(D10:D15)` $\to$ `SUM(D10:D49)`), and cached formula evaluations.
+- **Pre-Flight Count Check**: Before loading record rows into process memory, `GridHydrator` executes an index-accelerated `COUNT(*)` query. If the target entity exceeds 10,000 rows (or the plan's `maxExportRows` cap), the request is rejected immediately with zero record rows ever loaded into heap.
+- **Production Sizing Recommendation**: Configure Node.js worker containers with `--max-old-space-size=2048` (2 GB RAM) and 1–2 CPU cores. A 10,000-row grid export consumes $< 15\text{ MB}$ of transient heap and renders in $< 600\text{ ms}$.
+

@@ -25,6 +25,10 @@ const shadowRegex = /(?:boxShadow|box-shadow)\s*:\s*['"]?(?:none|\d+px[^;'"]+)['
 const fontSizeRegex = /(?:fontSize|font-size)\s*:\s*(?:['"]?(?:\d+px|\d+rem|\d+em|\d+)['"]?)/;
 const spacingRegex = /(?:margin|padding|gap|top|bottom|left|right)(?:Top|Bottom|Left|Right)?\s*:\s*['"]?\d+px['"]?/;
 
+// Rule: Direct use of base radius token (var(--radius)) is forbidden in components.
+// Components must use semantic roles: var(--radius-control), var(--radius-surface), var(--radius-pill), or var(--radius-button).
+const baseRadiusTokenRegex = /var\(--radius\)(?!-)/;
+
 let hasError = false;
 let totalViolations = 0;
 
@@ -74,6 +78,15 @@ files.forEach((file) => {
     }
     if (spacingMatch) {
       console.error(`[THEME LINT ERROR] ${relPath}:${index + 1} - Hardcoded spacing found: "${spacingMatch[0]}"`);
+      hasError = true;
+      totalViolations++;
+    }
+
+    const baseRadiusMatch = line.match(baseRadiusTokenRegex);
+    if (baseRadiusMatch) {
+      console.error(
+        `[THEME LINT ERROR] ${relPath}:${index + 1} - Direct use of base radius token forbidden. Use semantic roles (var(--radius-control), var(--radius-surface), var(--radius-pill), var(--radius-button)): "${line.trim()}"`
+      );
       hasError = true;
       totalViolations++;
     }

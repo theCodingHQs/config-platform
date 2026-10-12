@@ -4,6 +4,7 @@ import {
   StackPropsSchema,
   TextPropsSchema,
   ButtonPropsSchema,
+  ExportButtonPropsSchema,
   TablePropsSchema,
   FormPropsSchema,
   ModalPropsSchema,
@@ -19,6 +20,7 @@ import {
 import { StackComponent } from '../components/stack';
 import { TextComponent } from '../components/text';
 import { ButtonComponent } from '../components/button';
+import { ExportButtonComponent } from '../components/export-button';
 import { TableComponent } from '../components/table';
 import { FormComponent } from '../components/form';
 import { ModalComponent } from '../components/modal';
@@ -69,6 +71,11 @@ defaultRegistry.register('text', {
 defaultRegistry.register('button', {
   component: ButtonComponent,
   propsSchema: ButtonPropsSchema,
+});
+
+defaultRegistry.register('exportButton', {
+  component: ExportButtonComponent,
+  propsSchema: ExportButtonPropsSchema,
 });
 
 defaultRegistry.register('table', {

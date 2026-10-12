@@ -74,7 +74,7 @@ export const StateEditorModal: React.FC<StateEditorModalProps> = ({
         style={{
           background: 'var(--surface)',
           color: 'var(--text)',
-          borderRadius: 'var(--radius-lg)',
+          borderRadius: 'var(--radius-surface)',
           boxShadow: 'var(--shadow-xl)',
           width: '100%',
           maxWidth: '500px',

@@ -28,6 +28,12 @@
   --radius-full: 9999px;
   --radius: 6px;
 
+  /* Semantic Radius Tokens */
+  --radius-control: 6px;
+  --radius-surface: 10px;
+  --radius-pill: 9999px;
+  --radius-button: 6px;
+
   /* Border Widths */
   --border-width-none: 0px;
   --border-width-sm: 1px;

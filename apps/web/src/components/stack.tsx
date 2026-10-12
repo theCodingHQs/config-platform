@@ -11,9 +11,30 @@ export const StackComponent: React.FC<StackComponentProps> = ({
   align,
   justify,
   wrap = false,
+  padding,
+  background,
+  border,
+  borderRadius,
+  flex,
+  width,
+  minWidth,
+  maxWidth,
+  alignSelf,
   children,
 }) => {
   const gapValue = typeof gap === "number" ? `${gap}px` : gap;
+  const paddingValue =
+    typeof padding === "number" ? `${padding}px` : padding;
+  const radiusValue =
+    typeof borderRadius === "number" ? `${borderRadius}px` : borderRadius;
+  const widthValue =
+    width !== undefined
+      ? (typeof width === "number" ? `${width}px` : width)
+      : (flex !== undefined ? undefined : "100%");
+  const minWidthValue =
+    typeof minWidth === "number" ? `${minWidth}px` : minWidth;
+  const maxWidthValue =
+    typeof maxWidth === "number" ? `${maxWidth}px` : maxWidth;
 
   return (
     <div
@@ -26,7 +47,19 @@ export const StackComponent: React.FC<StackComponentProps> = ({
         gap: gapValue,
         alignItems: align,
         justifyContent: justify,
-        width: "100%",
+        padding: paddingValue,
+        backgroundColor:
+          background && background !== "transparent"
+            ? `var(--${background})`
+            : undefined,
+        border: border ? "1px solid var(--border)" : undefined,
+        borderRadius: radiusValue,
+        flex: flex !== undefined ? flex : undefined,
+        width: widthValue,
+        minWidth: minWidthValue,
+        maxWidth: maxWidthValue,
+        alignSelf,
+        boxSizing: "border-box",
       }}
     >
       {children}

@@ -96,7 +96,7 @@ export const ExpressionInput: React.FC<ExpressionInputProps> = ({
             zIndex: 100,
             backgroundColor: 'var(--surface)',
             border: 'var(--border-width-sm) solid var(--border)',
-            borderRadius: 'var(--radius)',
+            borderRadius: 'var(--radius-control)',
             padding: 'var(--spacing-2)',
             boxShadow: 'var(--shadow-md)',
             maxHeight: '180px',

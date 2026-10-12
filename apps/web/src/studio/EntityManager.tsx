@@ -14,8 +14,11 @@ import {
   fetchLiveDdl,
   ApiError,
 } from '../api/client';
-import { Plus, X, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, X, AlertTriangle, ChevronUp, ChevronDown, Edit2, Upload } from 'lucide-react';
 import type { ErdTable, ErdColumn, FieldType } from '@config-platform/schema';
+import { DynamicIcon } from '../components/dynamic-icon';
+import { IconPicker } from '../components/icon-picker';
+import { ImportDataModal } from './ImportDataModal';
 
 export const EntityManager: React.FC = () => {
   const { tenantId } = useMetadata();
@@ -23,7 +26,9 @@ export const EntityManager: React.FC = () => {
 
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditEntityModal, setShowEditEntityModal] = useState(false);
   const [showAddFieldModal, setShowAddFieldModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [editingField, setEditingField] = useState<ErdColumn | null>(null);
   const [activeSideTab, setActiveSideTab] = useState<'none' | 'erd' | 'ddl'>('none');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -31,6 +36,10 @@ export const EntityManager: React.FC = () => {
   // Form states
   const [newEntityLabel, setNewEntityLabel] = useState('');
   const [newEntityName, setNewEntityName] = useState('');
+  const [newEntityIcon, setNewEntityIcon] = useState('User');
+
+  const [editEntityLabel, setEditEntityLabel] = useState('');
+  const [editEntityIcon, setEditEntityIcon] = useState('Database');
 
   const [fieldName, setFieldName] = useState('');
   const [fieldLabel, setFieldLabel] = useState('');
@@ -59,10 +68,29 @@ export const EntityManager: React.FC = () => {
 
   const selectedEntity = entities.find((e) => e.id === selectedEntityId) || entities[0];
 
-  // Helper to slugify
+  // Helper to slugify & suggest icon
   const handleLabelChange = (lbl: string) => {
     setNewEntityLabel(lbl);
     setNewEntityName(lbl.toLowerCase().replace(/[^a-z0-9_]/g, '_'));
+
+    const lower = lbl.toLowerCase();
+    if (lower.includes('user') || lower.includes('customer') || lower.includes('member') || lower.includes('person') || lower.includes('author')) {
+      setNewEntityIcon('User');
+    } else if (lower.includes('dept') || lower.includes('department') || lower.includes('company') || lower.includes('org') || lower.includes('office')) {
+      setNewEntityIcon('Building2');
+    } else if (lower.includes('prod') || lower.includes('item') || lower.includes('inventory') || lower.includes('box')) {
+      setNewEntityIcon('Package');
+    } else if (lower.includes('order') || lower.includes('cart') || lower.includes('purchase')) {
+      setNewEntityIcon('ShoppingCart');
+    } else if (lower.includes('pay') || lower.includes('invoice') || lower.includes('billing')) {
+      setNewEntityIcon('CreditCard');
+    } else if (lower.includes('event') || lower.includes('schedule') || lower.includes('calendar')) {
+      setNewEntityIcon('Calendar');
+    } else if (lower.includes('task') || lower.includes('todo') || lower.includes('ticket')) {
+      setNewEntityIcon('CheckSquare');
+    } else if (lower.includes('doc') || lower.includes('post') || lower.includes('article')) {
+      setNewEntityIcon('FileText');
+    }
   };
 
   const handleFieldLabelChange = (lbl: string) => {
@@ -78,11 +106,13 @@ export const EntityManager: React.FC = () => {
       createEntity(tenantId, {
         label: newEntityLabel,
         name: newEntityName || newEntityLabel.toLowerCase().replace(/[^a-z0-9_]/g, '_'),
+        icon: newEntityIcon,
       }),
     onSuccess: (res) => {
       setShowCreateModal(false);
       setNewEntityLabel('');
       setNewEntityName('');
+      setNewEntityIcon('User');
       setErrorMessage(null);
       queryClient.invalidateQueries({ queryKey: ['schema-entities', tenantId] });
       setSelectedEntityId(res.entityId || res.id);
@@ -124,6 +154,35 @@ export const EntityManager: React.FC = () => {
       setErrorMessage(err.message);
     },
   });
+
+  const updateEntityMut = useMutation({
+    mutationFn: () => {
+      if (!selectedEntity) throw new Error('No entity selected');
+      return updateEntity(tenantId, selectedEntity.id, {
+        label: editEntityLabel,
+        icon: editEntityIcon,
+        expectedVersion: selectedEntity.version,
+      });
+    },
+    onSuccess: () => {
+      setShowEditEntityModal(false);
+      queryClient.invalidateQueries({ queryKey: ['schema-entities', tenantId] });
+      setErrorMessage(null);
+    },
+    onError: (err: any) => {
+      if (err instanceof ApiError && err.statusCode === 409) {
+        refetch();
+      }
+      setErrorMessage(err.message);
+    },
+  });
+
+  const openEditEntityModal = () => {
+    if (!selectedEntity) return;
+    setEditEntityLabel(selectedEntity.label);
+    setEditEntityIcon(selectedEntity.icon || 'Database');
+    setShowEditEntityModal(true);
+  };
 
   const addFieldMut = useMutation({
     mutationFn: () => {
@@ -322,7 +381,7 @@ export const EntityManager: React.FC = () => {
           style={{
             backgroundColor: 'var(--surface)',
             border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
+            borderRadius: 'var(--radius-surface)',
             padding: '0.75rem',
             display: 'flex',
             flexDirection: 'column',
@@ -348,7 +407,7 @@ export const EntityManager: React.FC = () => {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: '0.5rem 0.75rem',
-                  borderRadius: 'var(--radius-sm)',
+                  borderRadius: 'var(--radius-control)',
                   backgroundColor: isSelected ? 'var(--surface-subtle)' : 'transparent',
                   border: isSelected ? '1px solid var(--border)' : '1px solid transparent',
                   cursor: 'pointer',
@@ -356,12 +415,29 @@ export const EntityManager: React.FC = () => {
                   width: '100%',
                 }}
               >
-                <div>
-                  <div style={{ fontWeight: isSelected ? 600 : 500, fontSize: "var(--font-size-sm)", color: 'var(--text)' }}>
-                    {e.label}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                  <div
+                    style={{
+                      width: 'var(--control-height-sm)',
+                      height: 'var(--control-height-sm)',
+                      borderRadius: 'var(--radius-control)',
+                      backgroundColor: 'var(--primary-subtle)',
+                      color: 'var(--primary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <DynamicIcon name={e.icon || 'Database'} size={15} />
                   </div>
-                  <div style={{ fontSize: "var(--font-size-xs)", color: 'var(--text-muted)', fontFamily: 'monospace' }}>
-                    {e.id}
+                  <div>
+                    <div style={{ fontWeight: isSelected ? 600 : 500, fontSize: "var(--font-size-sm)", color: 'var(--text)' }}>
+                      {e.label}
+                    </div>
+                    <div style={{ fontSize: "var(--font-size-xs)", color: 'var(--text-muted)', fontFamily: 'monospace' }}>
+                      {e.id}
+                    </div>
                   </div>
                 </div>
                 <span className="badge" style={{ fontSize: "var(--font-size-xs)" }}>v{e.version}</span>
@@ -376,7 +452,7 @@ export const EntityManager: React.FC = () => {
             style={{
               backgroundColor: 'var(--surface)',
               border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
+              borderRadius: 'var(--radius-surface)',
               padding: '1.25rem',
               display: 'flex',
               flexDirection: 'column',
@@ -386,7 +462,25 @@ export const EntityManager: React.FC = () => {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <h2 style={{ fontSize: "var(--font-size-xl)" }}>{selectedEntity.label}</h2>
+                  <div
+                    onClick={openEditEntityModal}
+                    title="Click to edit entity icon & label"
+                    style={{
+                      width: 'var(--control-height-md)',
+                      height: 'var(--control-height-md)',
+                      borderRadius: 'var(--radius-full)',
+                      backgroundColor: 'var(--primary-subtle)',
+                      color: 'var(--primary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <DynamicIcon name={selectedEntity.icon || 'Database'} size={20} />
+                  </div>
+                  <h2 style={{ fontSize: "var(--font-size-xl)", margin: 0 }}>{selectedEntity.label}</h2>
                   <span className="badge">v{selectedEntity.version}</span>
                 </div>
                 <div style={{ fontSize: "var(--font-size-sm)", color: 'var(--text-muted)', marginTop: '0.25rem' }}>
@@ -419,6 +513,24 @@ export const EntityManager: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={openEditEntityModal}
+                  aria-label="Edit Entity"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                >
+                  <Edit2 size={14} /> Edit Entity
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowImportModal(true)}
+                  aria-label="Import Data"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
+                >
+                  <Upload size={14} /> Import
+                </button>
                 <button
                   type="button"
                   className="btn btn-secondary"
@@ -535,7 +647,7 @@ export const EntityManager: React.FC = () => {
             style={{
               backgroundColor: 'var(--surface)',
               border: '1px dashed var(--border)',
-              borderRadius: 'var(--radius)',
+              borderRadius: 'var(--radius-surface)',
               padding: '3rem 2rem',
               textAlign: 'center',
               display: 'flex',
@@ -550,7 +662,7 @@ export const EntityManager: React.FC = () => {
               style={{
                 width: '48px',
                 height: '48px',
-                borderRadius: 'var(--radius-xl)',
+                borderRadius: 'var(--radius-control)',
                 backgroundColor: 'var(--accent-subtle)',
                 color: 'var(--accent)',
                 display: 'flex',
@@ -591,7 +703,7 @@ export const EntityManager: React.FC = () => {
             style={{
               backgroundColor: 'var(--surface)',
               border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
+              borderRadius: 'var(--radius-surface)',
               padding: '1rem',
               display: 'flex',
               flexDirection: 'column',
@@ -618,7 +730,7 @@ export const EntityManager: React.FC = () => {
             {activeSideTab === 'erd' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 {liveErd?.tables?.map((table: any) => (
-                  <div key={table.id} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0.75rem' }}>
+                  <div key={table.id} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-surface)', padding: '0.75rem' }}>
                     <div style={{ fontWeight: 600, fontSize: "var(--font-size-sm)" }}>{table.label} ({table.physicalTableName})</div>
                     <ul style={{ paddingLeft: '1rem', fontSize: "var(--font-size-xs)", marginTop: '0.5rem', color: 'var(--text-muted)' }}>
                       {table.columns.map((c: any) => (
@@ -639,7 +751,7 @@ export const EntityManager: React.FC = () => {
                   fontFamily: 'monospace',
                   backgroundColor: 'var(--surface-subtle)',
                   padding: '0.75rem',
-                  borderRadius: 'var(--radius-sm)',
+                  borderRadius: 'var(--radius-control)',
                   whiteSpace: 'pre-wrap',
                   overflowX: 'auto',
                 }}
@@ -654,7 +766,7 @@ export const EntityManager: React.FC = () => {
       {/* Modal: Create Entity */}
       {showCreateModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--overlay-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ backgroundColor: 'var(--surface)', padding: 'var(--space-6)', borderRadius: 'var(--radius-lg)', width: '420px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', border: 'var(--border-width) solid var(--border)', boxShadow: 'var(--shadow-xl)' }}>
+          <div style={{ backgroundColor: 'var(--surface)', padding: 'var(--space-6)', borderRadius: 'var(--radius-surface)', width: '420px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', border: 'var(--border-width) solid var(--border)', boxShadow: 'var(--shadow-xl)' }}>
             <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>Create Entity</h3>
             <div>
               <label className="form-label" htmlFor="new-entity-label" style={{ fontSize: 'var(--font-size-xs)' }}>Display Label</label>
@@ -662,6 +774,7 @@ export const EntityManager: React.FC = () => {
                 id="new-entity-label"
                 type="text"
                 className="form-input"
+                placeholder="e.g. Customer, Order, Department"
                 value={newEntityLabel}
                 onChange={(e) => handleLabelChange(e.target.value)}
                 autoFocus
@@ -673,8 +786,16 @@ export const EntityManager: React.FC = () => {
                 id="new-entity-name"
                 type="text"
                 className="form-input"
+                placeholder="e.g. customer, order, department"
                 value={newEntityName}
                 onChange={(e) => setNewEntityName(e.target.value)}
+              />
+            </div>
+            <div>
+              <IconPicker
+                value={newEntityIcon}
+                onChange={setNewEntityIcon}
+                label="Entity Icon"
               />
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
@@ -685,10 +806,48 @@ export const EntityManager: React.FC = () => {
         </div>
       )}
 
+      {/* Modal: Edit Entity */}
+      {showEditEntityModal && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--overlay-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ backgroundColor: 'var(--surface)', padding: 'var(--space-6)', borderRadius: 'var(--radius-surface)', width: '420px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', border: 'var(--border-width) solid var(--border)', boxShadow: 'var(--shadow-xl)' }}>
+            <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>Edit Entity</h3>
+            <div>
+              <label className="form-label" htmlFor="edit-entity-label" style={{ fontSize: 'var(--font-size-xs)' }}>Display Label</label>
+              <input
+                id="edit-entity-label"
+                type="text"
+                className="form-input"
+                value={editEntityLabel}
+                onChange={(e) => setEditEntityLabel(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div>
+              <IconPicker
+                value={editEntityIcon}
+                onChange={setEditEntityIcon}
+                label="Entity Icon"
+              />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowEditEntityModal(false)}>Cancel</button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!editEntityLabel || updateEntityMut.isPending}
+                onClick={() => updateEntityMut.mutate()}
+              >
+                {updateEntityMut.isPending ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal: Add Field */}
       {showAddFieldModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--overlay-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ backgroundColor: 'var(--surface)', padding: 'var(--space-6)', borderRadius: 'var(--radius-lg)', width: '450px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', border: 'var(--border-width) solid var(--border)', boxShadow: 'var(--shadow-xl)' }}>
+          <div style={{ backgroundColor: 'var(--surface)', padding: 'var(--space-6)', borderRadius: 'var(--radius-surface)', width: '450px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', border: 'var(--border-width) solid var(--border)', boxShadow: 'var(--shadow-xl)' }}>
             <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>Add Field to {selectedEntity?.label}</h3>
             <div>
               <label className="form-label" htmlFor="add-field-label" style={{ fontSize: 'var(--font-size-xs)' }}>Field Label</label>
@@ -765,7 +924,7 @@ export const EntityManager: React.FC = () => {
 
       {editingField && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--overlay-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ backgroundColor: 'var(--surface)', padding: 'var(--space-6)', borderRadius: 'var(--radius-lg)', width: '420px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', border: 'var(--border-width) solid var(--border)', boxShadow: 'var(--shadow-xl)' }}>
+          <div style={{ backgroundColor: 'var(--surface)', padding: 'var(--space-6)', borderRadius: 'var(--radius-surface)', width: '420px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', border: 'var(--border-width) solid var(--border)', boxShadow: 'var(--shadow-xl)' }}>
             <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>Rename Field ({editingField.id})</h3>
             <div>
               <label className="form-label" htmlFor="edit-field-label" style={{ fontSize: 'var(--font-size-xs)' }}>Field Label</label>
@@ -806,6 +965,17 @@ export const EntityManager: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+      {/* Import Data Modal */}
+      {selectedEntity && (
+        <ImportDataModal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          entity={selectedEntity}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['schema-entities', tenantId] });
+          }}
+        />
       )}
     </div>
   );

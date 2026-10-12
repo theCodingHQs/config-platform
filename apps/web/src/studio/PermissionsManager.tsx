@@ -106,20 +106,58 @@ export function PermissionsManager() {
       canCreate?: boolean;
       canUpdate?: boolean;
       canDelete?: boolean;
+      canExport?: boolean;
     }) => {
       await setEntityPermission(selectedEntityId, vars.role, {
         canRead: vars.canRead,
         canCreate: vars.canCreate,
         canUpdate: vars.canUpdate,
         canDelete: vars.canDelete,
+        canExport: vars.canExport,
       });
+    },
+    onMutate: (vars) => {
+      const queryKey = ["entity-permissions", selectedEntityId];
+      const previous = queryClient.getQueryData<EntityPermissionRecord[]>(queryKey);
+      queryClient.setQueryData<EntityPermissionRecord[]>(queryKey, (old = []) => {
+        const existing = old.find((p) => p.role === vars.role);
+        if (existing) {
+          return old.map((p) =>
+            p.role === vars.role
+              ? {
+                  ...p,
+                  canRead: vars.canRead ?? p.canRead,
+                  canCreate: vars.canCreate ?? p.canCreate,
+                  canUpdate: vars.canUpdate ?? p.canUpdate,
+                  canDelete: vars.canDelete ?? p.canDelete,
+                  canExport: vars.canExport ?? (p.canExport ?? (p.role !== 'viewer')),
+                }
+              : p,
+          );
+        }
+        return [
+          ...old,
+          {
+            role: vars.role,
+            canRead: vars.canRead ?? false,
+            canCreate: vars.canCreate ?? false,
+            canUpdate: vars.canUpdate ?? false,
+            canDelete: vars.canDelete ?? false,
+            canExport: vars.canExport ?? (vars.role !== 'viewer'),
+          },
+        ];
+      });
+      return { previous };
     },
     onSuccess: () => {
       refetchEntityPerms();
       setActionSuccess("Entity permission updated");
       setTimeout(() => setActionSuccess(null), 3000);
     },
-    onError: (err: any) => {
+    onError: (err: any, _vars, ctx: any) => {
+      if (ctx?.previous) {
+        queryClient.setQueryData(["entity-permissions", selectedEntityId], ctx.previous);
+      }
       setActionError(err.message || "Failed to update entity permission");
     },
   });
@@ -137,12 +175,41 @@ export function PermissionsManager() {
         readOnly: vars.readOnly,
       });
     },
+    onMutate: (vars) => {
+      const queryKey = ["field-permissions", selectedEntityId];
+      const previous = queryClient.getQueryData<FieldPermissionRecord[]>(queryKey);
+      queryClient.setQueryData<FieldPermissionRecord[]>(queryKey, (old = []) => {
+        const existing = old.find(
+          (p) => p.fieldId === vars.fieldId && p.role === vars.role,
+        );
+        if (existing) {
+          return old.map((p) =>
+            p.fieldId === vars.fieldId && p.role === vars.role
+              ? { ...p, hidden: vars.hidden ?? p.hidden, readOnly: vars.readOnly ?? p.readOnly }
+              : p,
+          );
+        }
+        return [
+          ...old,
+          {
+            fieldId: vars.fieldId,
+            role: vars.role,
+            hidden: vars.hidden ?? false,
+            readOnly: vars.readOnly ?? false,
+          },
+        ];
+      });
+      return { previous };
+    },
     onSuccess: () => {
       refetchFieldPerms();
       setActionSuccess("Field permission updated");
       setTimeout(() => setActionSuccess(null), 3000);
     },
-    onError: (err: any) => {
+    onError: (err: any, _vars, ctx: any) => {
+      if (ctx?.previous) {
+        queryClient.setQueryData(["field-permissions", selectedEntityId], ctx.previous);
+      }
       setActionError(err.message || "Failed to update field permission");
     },
   });
@@ -198,7 +265,12 @@ export function PermissionsManager() {
   // Helper to get effective entity perm for role
   const getEntityPerm = (role: Role) => {
     const found = entityPerms.find((p) => p.role === role);
-    if (found) return found;
+    if (found) {
+      return {
+        ...found,
+        canExport: found.canExport ?? (role !== "viewer"),
+      };
+    }
     // Defaults based on role hierarchy
     if (
       role === "owner" ||
@@ -212,6 +284,7 @@ export function PermissionsManager() {
         canCreate: true,
         canUpdate: true,
         canDelete: true,
+        canExport: true,
       };
     }
     return {
@@ -220,6 +293,7 @@ export function PermissionsManager() {
       canCreate: false,
       canUpdate: false,
       canDelete: false,
+      canExport: false,
     };
   };
 
@@ -276,7 +350,7 @@ export function PermissionsManager() {
             gap: "0.5rem",
             backgroundColor: "var(--surface-subtle)",
             padding: "0.25rem",
-            borderRadius: "var(--radius-md)",
+            borderRadius: "var(--radius-control)",
           }}
         >
           <button
@@ -316,7 +390,7 @@ export function PermissionsManager() {
           style={{
             backgroundColor: "var(--danger-subtle)",
             border: "var(--border-width) solid var(--danger)",
-            borderRadius: "var(--radius-md)",
+            borderRadius: "var(--radius-surface)",
             padding: "var(--space-3) var(--space-4)",
             marginBottom: "var(--space-4)",
             display: "flex",
@@ -347,7 +421,7 @@ export function PermissionsManager() {
           style={{
             backgroundColor: "var(--success-subtle)",
             border: "var(--border-width) solid var(--success)",
-            borderRadius: "var(--radius-md)",
+            borderRadius: "var(--radius-surface)",
             padding: "var(--space-3) var(--space-4)",
             marginBottom: "var(--space-4)",
             display: "flex",
@@ -371,7 +445,7 @@ export function PermissionsManager() {
             style={{
               backgroundColor: "var(--surface)",
               border: "1px solid var(--border)",
-              borderRadius: "var(--radius-md)",
+              borderRadius: "var(--radius-surface)",
               padding: "1.25rem",
               marginBottom: "1.5rem",
               display: "flex",
@@ -422,7 +496,7 @@ export function PermissionsManager() {
                 style={{
                   backgroundColor: "var(--surface)",
                   border: "1px solid var(--border)",
-                  borderRadius: "var(--radius-md)",
+                  borderRadius: "var(--radius-surface)",
                   padding: "1.5rem",
                 }}
               >
@@ -474,6 +548,9 @@ export function PermissionsManager() {
                         </th>
                         <th style={{ padding: "0.75rem 1rem" }}>
                           Can Delete (DELETE)
+                        </th>
+                        <th style={{ padding: "0.75rem 1rem" }}>
+                          Can Export
                         </th>
                       </tr>
                     </thead>
@@ -577,6 +654,25 @@ export function PermissionsManager() {
                                     canCreate: perm.canCreate,
                                     canUpdate: perm.canUpdate,
                                     canDelete: e.target.checked,
+                                    canExport: perm.canExport,
+                                  });
+                                }}
+                              />
+                            </td>
+                            {/* Can Export */}
+                            <td style={{ padding: "0.875rem 1rem" }}>
+                              <input
+                                type="checkbox"
+                                checked={Boolean(perm.canExport)}
+                                disabled={isImmutableRole}
+                                onChange={(e) => {
+                                  entityPermMutation.mutate({
+                                    role,
+                                    canRead: perm.canRead,
+                                    canCreate: perm.canCreate,
+                                    canUpdate: perm.canUpdate,
+                                    canDelete: perm.canDelete,
+                                    canExport: e.target.checked,
                                   });
                                 }}
                               />
@@ -594,7 +690,7 @@ export function PermissionsManager() {
                 style={{
                   backgroundColor: "var(--surface)",
                   border: "1px solid var(--border)",
-                  borderRadius: "var(--radius-md)",
+                  borderRadius: "var(--radius-surface)",
                   padding: "1.5rem",
                 }}
               >
@@ -655,7 +751,10 @@ export function PermissionsManager() {
                       </tr>
                     </thead>
                     <tbody>
-                      {selectedEntity.columns.map((col: any) => {
+                      {selectedEntity.columns
+                        .filter((col: any) => !['id', 'created_at', 'updated_at'].includes(col.id))
+                        .map((col: any) => {
+
                         const viewerPerm = getFieldPerm(col.id, "viewer");
                         const editorPerm = getFieldPerm(col.id, "editor");
                         const builderPerm = getFieldPerm(col.id, "builder");
@@ -883,7 +982,7 @@ export function PermissionsManager() {
             style={{
               backgroundColor: "var(--surface)",
               border: "1px solid var(--border)",
-              borderRadius: "var(--radius-md)",
+              borderRadius: "var(--radius-surface)",
               padding: "1.5rem",
             }}
           >
@@ -963,7 +1062,7 @@ export function PermissionsManager() {
                   marginTop: "1rem",
                   padding: "1rem",
                   backgroundColor: "var(--surface-subtle)",
-                  borderRadius: "var(--radius-sm)",
+                  borderRadius: "var(--radius-control)",
                   border: "1px solid var(--border)",
                 }}
               >
@@ -997,7 +1096,7 @@ export function PermissionsManager() {
             style={{
               backgroundColor: "var(--surface)",
               border: "1px solid var(--border)",
-              borderRadius: "var(--radius-md)",
+              borderRadius: "var(--radius-surface)",
               padding: "1.5rem",
             }}
           >

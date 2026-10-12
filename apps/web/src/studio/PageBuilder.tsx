@@ -4,11 +4,16 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   closestCenter,
+  pointerWithin,
+  DragOverlay,
   KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
+  type DragStartEvent,
+  type DragOverEvent,
   type DragEndEvent,
+  type CollisionDetection,
 } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -20,6 +25,8 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   GripVertical,
   Copy,
+  CopyPlus,
+  ClipboardPaste,
   X,
   Undo2,
   Redo2,
@@ -48,6 +55,7 @@ import {
   fetchPage,
   updatePage,
   publishPage,
+  listExportTemplates,
   type PageDetail,
 } from "../api/client";
 import type {
@@ -67,6 +75,12 @@ function stableStringify(obj: any): string {
 }
 
 // Helper tree functions
+const CONTAINER_TYPES: NodeType[] = ["stack", "modal", "grid", "card", "tabs"];
+
+function isContainerNode(node: NodeDefinition): boolean {
+  return CONTAINER_TYPES.includes(node.type) || Boolean(node.children);
+}
+
 function findNode(root: NodeDefinition, id: string): NodeDefinition | null {
   if (root.id === id) return root;
   if (root.children) {
@@ -76,6 +90,47 @@ function findNode(root: NodeDefinition, id: string): NodeDefinition | null {
     }
   }
   return null;
+}
+
+function findParentNode(
+  root: NodeDefinition,
+  targetId: string,
+): { parent: NodeDefinition; index: number } | null {
+  if (root.id === targetId || !root.children) return null;
+  const index = root.children.findIndex((c) => c.id === targetId);
+  if (index !== -1) {
+    return { parent: root, index };
+  }
+  for (const child of root.children) {
+    const res = findParentNode(child, targetId);
+    if (res) return res;
+  }
+  return null;
+}
+
+function isDescendant(
+  root: NodeDefinition,
+  ancestorId: string,
+  checkId: string,
+): boolean {
+  if (ancestorId === checkId) return true;
+  const ancestor = findNode(root, ancestorId);
+  if (!ancestor) return false;
+  return Boolean(findNode(ancestor, checkId));
+}
+
+function getAllNodeIds(root: NodeDefinition): string[] {
+  const ids: string[] = [root.id];
+  function collect(node: NodeDefinition) {
+    if (node.children) {
+      for (const child of node.children) {
+        ids.push(child.id);
+        collect(child);
+      }
+    }
+  }
+  collect(root);
+  return ids;
 }
 
 function updateNodeInTree(
@@ -113,11 +168,22 @@ function insertNodeIntoTree(
   root: NodeDefinition,
   targetParentId: string,
   newNode: NodeDefinition,
+  targetIndex?: number,
 ): NodeDefinition {
   if (root.id === targetParentId) {
+    const existing = [...(root.children || [])];
+    if (
+      targetIndex !== undefined &&
+      targetIndex >= 0 &&
+      targetIndex <= existing.length
+    ) {
+      existing.splice(targetIndex, 0, newNode);
+    } else {
+      existing.push(newNode);
+    }
     return {
       ...root,
-      children: [...(root.children || []), newNode],
+      children: existing,
     };
   }
   if (!root.children) return root;
@@ -125,8 +191,137 @@ function insertNodeIntoTree(
   return {
     ...root,
     children: root.children.map((child) =>
-      insertNodeIntoTree(child, targetParentId, newNode),
+      insertNodeIntoTree(child, targetParentId, newNode, targetIndex),
     ),
+  };
+}
+
+function insertNodeSibling(
+  root: NodeDefinition,
+  targetId: string,
+  newNode: NodeDefinition,
+  position: "before" | "after" = "after",
+): NodeDefinition {
+  const parentInfo = findParentNode(root, targetId);
+  if (!parentInfo) {
+    return insertNodeIntoTree(root, root.id, newNode);
+  }
+  const targetIndex =
+    position === "before" ? parentInfo.index : parentInfo.index + 1;
+  return insertNodeIntoTree(root, parentInfo.parent.id, newNode, targetIndex);
+}
+
+export function moveNodeInTree(
+  root: NodeDefinition,
+  activeId: string,
+  targetParentId: string,
+  targetIndex?: number,
+): NodeDefinition {
+  if (activeId === targetParentId) return root;
+  if (isDescendant(root, activeId, targetParentId)) return root;
+
+  const nodeToMove = findNode(root, activeId);
+  if (!nodeToMove) return root;
+
+  const parentInfo = findParentNode(root, activeId);
+
+  // Moving within the same parent
+  if (
+    parentInfo &&
+    parentInfo.parent.id === targetParentId &&
+    targetIndex !== undefined
+  ) {
+    const oldIndex = parentInfo.index;
+    if (oldIndex === targetIndex) return root;
+    let adjustedIndex = targetIndex;
+    if (oldIndex < targetIndex) {
+      adjustedIndex = targetIndex - 1;
+    }
+    const rootWithoutActive = removeNodeFromTree(root, activeId);
+    return insertNodeIntoTree(
+      rootWithoutActive,
+      targetParentId,
+      nodeToMove,
+      adjustedIndex,
+    );
+  }
+
+  // Moving to a different parent
+  const rootWithoutActive = removeNodeFromTree(root, activeId);
+  return insertNodeIntoTree(
+    rootWithoutActive,
+    targetParentId,
+    nodeToMove,
+    targetIndex,
+  );
+}
+
+export function computeDropTarget(
+  root: NodeDefinition,
+  activeId: string,
+  overId: string,
+): { targetParentId: string; targetIndex: number | undefined } | null {
+  const activeNode = findNode(root, activeId);
+  const overNode = findNode(root, overId);
+  if (!activeNode || !overNode) return null;
+
+  const allNodeIds = getAllNodeIds(root);
+  const activeIndex = allNodeIds.indexOf(activeId);
+  const overIndex = allNodeIds.indexOf(overId);
+  const isDraggingUp =
+    activeIndex !== -1 && overIndex !== -1 ? activeIndex > overIndex : false;
+
+  if (overNode.id === root.id) {
+    return {
+      targetParentId: root.id,
+      targetIndex: isDraggingUp
+        ? 0
+        : root.children
+          ? root.children.length
+          : 0,
+    };
+  }
+
+  const isContainer = isContainerNode(overNode);
+  const isEmptyContainer =
+    isContainer && (!overNode.children || overNode.children.length === 0);
+
+  if (isEmptyContainer) {
+    // Drop inside the empty container
+    return {
+      targetParentId: overNode.id,
+      targetIndex: 0,
+    };
+  }
+
+  if (isContainer) {
+    if (isDraggingUp) {
+      // Dragging UP over container: place BEFORE container in its parent (matching SortableContext visual preview)
+      const parentInfo = findParentNode(root, overNode.id);
+      return {
+        targetParentId: parentInfo ? parentInfo.parent.id : root.id,
+        targetIndex: parentInfo ? parentInfo.index : 0,
+      };
+    } else {
+      // Dragging DOWN over container: place as FIRST child inside container
+      return {
+        targetParentId: overNode.id,
+        targetIndex: 0,
+      };
+    }
+  }
+
+  // Over a leaf node: place before if dragging up, after if dragging down
+  const parentInfo = findParentNode(root, overNode.id);
+  if (!parentInfo) {
+    return {
+      targetParentId: root.id,
+      targetIndex: 0,
+    };
+  }
+  return {
+    targetParentId: parentInfo.parent.id,
+    targetIndex: isDraggingUp ? parentInfo.index : parentInfo.index + 1,
   };
 }
 
@@ -135,6 +330,7 @@ function cloneNodeWithNewIds(node: NodeDefinition): NodeDefinition {
   return {
     ...node,
     id: newId,
+    props: node.props ? JSON.parse(JSON.stringify(node.props)) : {},
     children: node.children
       ? node.children.map(cloneNodeWithNewIds)
       : undefined,
@@ -147,37 +343,78 @@ const SortableTreeItem: React.FC<{
   depth?: number;
   selectedId: string | null;
   hoveredId: string | null;
+  activeDragId: string | null;
+  overDragId: string | null;
+  copiedNode: NodeDefinition | null;
   onSelect: (id: string | null) => void;
   onHover: (id: string | null) => void;
   onDelete: (id: string) => void;
   onDuplicate: (id: string) => void;
+  onCopy: (node: NodeDefinition) => void;
+  onPaste: (targetId: string) => void;
 }> = ({
   node,
   depth = 0,
   selectedId,
   hoveredId,
+  activeDragId,
+  overDragId,
+  copiedNode,
   onSelect,
   onHover,
   onDelete,
   onDuplicate,
+  onCopy,
+  onPaste,
 }) => {
-  const { attributes, listeners, setNodeRef, transform, transition } =
+  const isRoot = depth === 0;
+  const isContainer = isContainerNode(node);
+
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({
       id: node.id,
+      disabled: isRoot,
     });
-
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    marginLeft: `${depth * 14}px`,
-  };
 
   const isSelected = selectedId === node.id;
   const isHovered = hoveredId === node.id;
+  const isOver = overDragId === node.id && activeDragId !== node.id;
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition: transition || "all 0.12s ease",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "0.375rem 0.5rem",
+    borderRadius: "var(--radius-control)",
+    backgroundColor: isDragging
+      ? "var(--surface-2)"
+      : isOver
+        ? "var(--accent-subtle)"
+        : isSelected
+          ? "var(--accent-subtle)"
+          : isHovered
+            ? "var(--surface-2)"
+            : "transparent",
+    border: isOver
+      ? "1px dashed var(--accent)"
+      : isSelected
+        ? "1px solid var(--accent)"
+        : isHovered
+          ? "1px dashed var(--accent)"
+          : "1px solid transparent",
+    cursor: "pointer",
+    fontSize: "var(--font-size-xs)",
+    marginBottom: "var(--spacing-1)",
+    opacity: isDragging ? 0.35 : 1,
+  };
 
   return (
-    <div style={style} ref={setNodeRef}>
+    <div style={{ marginLeft: `${depth * 14}px` }}>
       <div
+        ref={setNodeRef}
+        style={style}
         onClick={() => onSelect(isSelected ? null : node.id)}
         onMouseEnter={(e) => {
           e.stopPropagation();
@@ -187,41 +424,36 @@ const SortableTreeItem: React.FC<{
           e.stopPropagation();
           onHover(null);
         }}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "0.375rem 0.5rem",
-          borderRadius: "var(--radius-sm)",
-          backgroundColor: isSelected
-            ? "var(--accent-subtle)"
-            : isHovered
-              ? "var(--surface-2)"
-              : "transparent",
-          border: isSelected
-            ? "1px solid var(--accent)"
-            : isHovered
-              ? "1px dashed var(--accent)"
-              : "1px solid transparent",
-          cursor: "pointer",
-          fontSize: "var(--font-size-xs)",
-          marginBottom: "var(--spacing-1)",
-          transition: "all 0.12s ease",
-        }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-          <span
-            {...attributes}
-            {...listeners}
-            style={{
-              cursor: "grab",
-              color: "var(--muted)",
-              display: "inline-flex",
-              alignItems: "center",
-            }}
-          >
-            <GripVertical size={13} />
-          </span>
+          {!isRoot ? (
+            <span
+              {...attributes}
+              {...listeners}
+              style={{
+                cursor: isDragging ? "grabbing" : "grab",
+                color: isDragging ? "var(--accent)" : "var(--muted)",
+                display: "inline-flex",
+                alignItems: "center",
+                touchAction: "none",
+              }}
+              title="Drag to reorder or move anywhere"
+            >
+              <GripVertical size={13} />
+            </span>
+          ) : (
+            <span
+              style={{
+                color: "var(--muted)",
+                opacity: 0.5,
+                display: "inline-flex",
+                alignItems: "center",
+              }}
+              title="Root container"
+            >
+              <GripVertical size={13} />
+            </span>
+          )}
           <span
             style={{
               fontWeight: 600,
@@ -246,6 +478,27 @@ const SortableTreeItem: React.FC<{
         </div>
 
         <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
+          {/* Copy configuration button */}
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{
+              padding: "0.125rem 0.25rem",
+              display: "inline-flex",
+              alignItems: "center",
+              color: copiedNode?.id === node.id ? "var(--accent)" : undefined,
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onCopy(node);
+            }}
+            title={`Copy "${node.id}" configuration`}
+            aria-label="Copy"
+          >
+            <Copy size={12} />
+          </button>
+
+          {/* Duplicate button */}
           <button
             type="button"
             className="btn btn-ghost"
@@ -261,9 +514,37 @@ const SortableTreeItem: React.FC<{
             title="Duplicate"
             aria-label="Duplicate"
           >
-            <Copy size={12} />
+            <CopyPlus size={12} />
           </button>
-          {depth > 0 && (
+
+          {/* Paste button if node is copied */}
+          {copiedNode && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{
+                padding: "0.125rem 0.25rem",
+                color: "var(--accent)",
+                display: "inline-flex",
+                alignItems: "center",
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onPaste(node.id);
+              }}
+              title={
+                isContainer
+                  ? `Paste "${copiedNode.type}" inside this container`
+                  : `Paste "${copiedNode.type}" after this component`
+              }
+              aria-label="Paste"
+            >
+              <ClipboardPaste size={12} />
+            </button>
+          )}
+
+          {/* Delete button (not for root) */}
+          {!isRoot && (
             <button
               type="button"
               className="btn btn-ghost"
@@ -286,6 +567,7 @@ const SortableTreeItem: React.FC<{
         </div>
       </div>
 
+      {/* Children */}
       {node.children && node.children.length > 0 && (
         <div>
           {node.children.map((child) => (
@@ -295,12 +577,59 @@ const SortableTreeItem: React.FC<{
               depth={depth + 1}
               selectedId={selectedId}
               hoveredId={hoveredId}
+              activeDragId={activeDragId}
+              overDragId={overDragId}
+              copiedNode={copiedNode}
               onSelect={onSelect}
               onHover={onHover}
               onDelete={onDelete}
               onDuplicate={onDuplicate}
+              onCopy={onCopy}
+              onPaste={onPaste}
             />
           ))}
+        </div>
+      )}
+
+      {/* Empty container indicator */}
+      {isContainer && (!node.children || node.children.length === 0) && (
+        <div
+          style={{
+            marginLeft: "var(--space-3)",
+            padding: "var(--space-1) var(--space-2)",
+            fontSize: "var(--font-size-xs)",
+            color: "var(--muted)",
+            fontStyle: "italic",
+            border: "1px dashed var(--border)",
+            borderRadius: "var(--radius-control)",
+            marginBottom: "var(--spacing-1)",
+            backgroundColor: isOver ? "var(--accent-subtle)" : "transparent",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <span>Empty {node.type}</span>
+          {copiedNode && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{
+                padding: "0.1rem var(--space-1)",
+                fontSize: "var(--font-size-xs)",
+                color: "var(--accent)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "var(--space-1)",
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onPaste(node.id);
+              }}
+            >
+              <ClipboardPaste size={10} /> Paste inside
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -317,6 +646,9 @@ export const PageBuilder: React.FC = () => {
   const [draft, setDraft] = useState<PageDefinition | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [copiedNode, setCopiedNode] = useState<NodeDefinition | null>(null);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [overDragId, setOverDragId] = useState<string | null>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const [isPreviewPublished, setIsPreviewPublished] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -337,6 +669,11 @@ export const PageBuilder: React.FC = () => {
     queryKey: ["page", tenantId, id],
     queryFn: () => fetchPage(tenantId, id!),
     enabled: Boolean(id),
+  });
+
+  const { data: exportTemplates = [] } = useQuery({
+    queryKey: ["export-templates", tenantId],
+    queryFn: () => listExportTemplates(),
   });
 
   useEffect(() => {
@@ -465,7 +802,7 @@ export const PageBuilder: React.FC = () => {
     publishMut.mutate();
   };
 
-  // DnD Sensors
+  // DnD Sensors & collision detection
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, {
@@ -473,25 +810,53 @@ export const PageBuilder: React.FC = () => {
     }),
   );
 
+  const treeCollisionDetection: CollisionDetection = useCallback((args) => {
+    const pointerCollisions = pointerWithin(args);
+    if (pointerCollisions && pointerCollisions.length > 0) {
+      return pointerCollisions;
+    }
+    return closestCenter(args);
+  }, []);
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragId(String(event.active.id));
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    setOverDragId(event.over ? String(event.over.id) : null);
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    setActiveDragId(null);
+    setOverDragId(null);
+
     if (!over || active.id === over.id || !draft) return;
 
-    if (draft.root.children) {
-      const oldIndex = draft.root.children.findIndex((c) => c.id === active.id);
-      const newIndex = draft.root.children.findIndex((c) => c.id === over.id);
+    const activeId = String(active.id);
+    const overId = String(over.id);
 
-      if (oldIndex !== -1 && newIndex !== -1) {
-        const newChildren = [...draft.root.children];
-        const [moved] = newChildren.splice(oldIndex, 1);
-        newChildren.splice(newIndex, 0, moved);
+    // Root cannot be moved
+    if (activeId === draft.root.id) return;
 
-        pushDraftUpdate({
-          ...draft,
-          root: { ...draft.root, children: newChildren },
-        });
-      }
-    }
+    // Cannot move into own descendant
+    if (isDescendant(draft.root, activeId, overId)) return;
+
+    const dropTarget = computeDropTarget(draft.root, activeId, overId);
+    if (!dropTarget) return;
+
+    const updatedRoot = moveNodeInTree(
+      draft.root,
+      activeId,
+      dropTarget.targetParentId,
+      dropTarget.targetIndex,
+    );
+
+    pushDraftUpdate({
+      ...draft,
+      root: updatedRoot,
+    });
+    setSelectedNodeId(activeId);
   };
 
   // Add component from palette
@@ -512,6 +877,16 @@ export const PageBuilder: React.FC = () => {
         break;
       case "button":
         newProps = { label: "Click Me", variant: "primary", onClick: [] };
+        break;
+      case "exportButton":
+        newProps = {
+          label: "Export",
+          template: exportTemplates[0]?.id || "",
+          format: "xlsx",
+          variant: "secondary",
+          size: "md",
+          icon: "Download",
+        };
         break;
       case "table":
         newProps = firstDs
@@ -656,15 +1031,53 @@ export const PageBuilder: React.FC = () => {
     const target = findNode(draft.root, nodeId);
     if (!target) return;
     const clone = cloneNodeWithNewIds(target);
-    const updatedRoot = insertNodeIntoTree(draft.root, draft.root.id, clone);
+    const updatedRoot = insertNodeSibling(draft.root, nodeId, clone, "after");
     pushDraftUpdate({
       ...draft,
       root: updatedRoot,
     });
     setSelectedNodeId(clone.id);
+    setSaveStatus(`Duplicated "${target.type}" (${clone.id})`);
+    setTimeout(() => {
+      try {
+        if (typeof window !== 'undefined') setSaveStatus(null);
+      } catch {}
+    }, 2500);
   };
 
-  // Keyboard shortcuts: Delete removes selected node, Cmd/Ctrl+Z/Shift+Z undo/redo, Cmd/Ctrl+D duplicates
+  const handleCopyNode = (node: NodeDefinition) => {
+    setCopiedNode(node);
+    setSaveStatus(`Copied "${node.type}" (${node.id})`);
+    setTimeout(() => {
+      try {
+        if (typeof window !== 'undefined') setSaveStatus(null);
+      } catch {}
+    }, 2500);
+  };
+
+  const handlePasteNode = (targetNodeId?: string) => {
+    if (!draft || !copiedNode) return;
+    const targetId = targetNodeId || selectedNodeId || draft.root.id;
+    const targetNode = findNode(draft.root, targetId) || draft.root;
+    const clone = cloneNodeWithNewIds(copiedNode);
+
+    let updatedRoot: NodeDefinition;
+    if (isContainerNode(targetNode)) {
+      updatedRoot = insertNodeIntoTree(draft.root, targetNode.id, clone);
+    } else {
+      updatedRoot = insertNodeSibling(draft.root, targetNode.id, clone, "after");
+    }
+
+    pushDraftUpdate({
+      ...draft,
+      root: updatedRoot,
+    });
+    setSelectedNodeId(clone.id);
+    setSaveStatus(`Pasted "${clone.type}" (${clone.id})`);
+    setTimeout(() => setSaveStatus(null), 2500);
+  };
+
+  // Keyboard shortcuts: Delete removes selected node, Cmd/Ctrl+Z/Shift+Z undo/redo, Cmd/Ctrl+D duplicates, Cmd/Ctrl+C copies, Cmd/Ctrl+V pastes
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -705,6 +1118,25 @@ export const PageBuilder: React.FC = () => {
         return;
       }
 
+      if (isCmdOrCtrl && e.key.toLowerCase() === "c") {
+        if (selectedNodeId && draft) {
+          const nodeToCopy = findNode(draft.root, selectedNodeId);
+          if (nodeToCopy) {
+            e.preventDefault();
+            handleCopyNode(nodeToCopy);
+          }
+        }
+        return;
+      }
+
+      if (isCmdOrCtrl && e.key.toLowerCase() === "v") {
+        if (copiedNode && draft) {
+          e.preventDefault();
+          handlePasteNode();
+        }
+        return;
+      }
+
       if (e.key === "Delete" || e.key === "Backspace") {
         if (selectedNodeId && selectedNodeId !== draft?.root.id) {
           e.preventDefault();
@@ -724,7 +1156,7 @@ export const PageBuilder: React.FC = () => {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [draft, selectedNodeId, historyIndex, history]);
+  }, [draft, selectedNodeId, historyIndex, history, copiedNode]);
 
   const handleUpdateProps = (newProps: Record<string, any>) => {
     if (!draft || !selectedNodeId) return;
@@ -777,6 +1209,9 @@ export const PageBuilder: React.FC = () => {
 
   const selectedNode = selectedNodeId
     ? findNode(draft.root, selectedNodeId)
+    : null;
+  const activeDragNode = activeDragId
+    ? findNode(draft.root, activeDragId)
     : null;
   const brokenBindings = pageDetail.brokenBindings || [];
 
@@ -992,7 +1427,7 @@ export const PageBuilder: React.FC = () => {
                 alignItems: "center",
                 gap: "0.25rem",
                 padding: "0.25rem 0.5rem",
-                borderRadius: "var(--radius-sm)",
+                borderRadius: "var(--radius-control)",
                 fontSize: "var(--font-size-xs)",
                 cursor: "pointer",
                 backgroundColor:
@@ -1027,7 +1462,7 @@ export const PageBuilder: React.FC = () => {
                   width: "320px",
                   backgroundColor: "var(--surface)",
                   border: "1px solid var(--border)",
-                  borderRadius: "var(--radius)",
+                  borderRadius: "var(--radius-surface)",
                   padding: "0.75rem",
                   boxShadow: "var(--shadow-md)",
                   zIndex: 50,
@@ -1080,6 +1515,8 @@ export const PageBuilder: React.FC = () => {
           {/* Save Draft Button */}
           <button
             type="button"
+            aria-label="Save Draft"
+            data-testid="save-draft-btn"
             className="btn btn-secondary"
             onClick={handleSaveDraft}
             disabled={isSaving || !isDraftDirty}
@@ -1223,6 +1660,7 @@ export const PageBuilder: React.FC = () => {
                   "tabs",
                   "text",
                   "button",
+                  "exportButton",
                   "table",
                   "form",
                   "stat",
@@ -1249,7 +1687,7 @@ export const PageBuilder: React.FC = () => {
                     justifyContent: "center",
                   }}
                 >
-                  <Plus size={12} /> {type}
+                  <Plus size={12} /> {type === "exportButton" ? "Export" : type}
                 </button>
               ))}
             </div>
@@ -1259,34 +1697,98 @@ export const PageBuilder: React.FC = () => {
           <div style={{ padding: "0.875rem", flex: 1 }}>
             <div
               style={{
-                fontSize: "var(--font-size-xs)",
-                fontWeight: 600,
-                color: "var(--text-muted)",
-                textTransform: "uppercase",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
                 marginBottom: "0.5rem",
               }}
             >
-              Component Tree
+              <div
+                style={{
+                  fontSize: "var(--font-size-xs)",
+                  fontWeight: 600,
+                  color: "var(--text-muted)",
+                  textTransform: "uppercase",
+                }}
+              >
+                Component Tree
+              </div>
+              {copiedNode && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => handlePasteNode()}
+                  style={{
+                    padding: "0.2rem var(--space-2)",
+                    fontSize: "var(--font-size-xs)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "var(--space-1)",
+                  }}
+                  title={`Paste ${copiedNode.type} into selected container or root`}
+                  aria-label="Paste copied component"
+                >
+                  <ClipboardPaste size={12} /> Paste {copiedNode.type}
+                </button>
+              )}
             </div>
             <DndContext
               sensors={sensors}
-              collisionDetection={closestCenter}
+              collisionDetection={treeCollisionDetection}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
               onDragEnd={handleDragEnd}
             >
               <SortableContext
-                items={(draft.root.children || []).map((c) => c.id)}
+                items={getAllNodeIds(draft.root)}
                 strategy={verticalListSortingStrategy}
               >
                 <SortableTreeItem
                   node={draft.root}
                   selectedId={selectedNodeId}
                   hoveredId={hoveredNodeId}
+                  activeDragId={activeDragId}
+                  overDragId={overDragId}
+                  copiedNode={copiedNode}
                   onSelect={setSelectedNodeId}
                   onHover={setHoveredNodeId}
                   onDelete={handleDeleteNode}
                   onDuplicate={handleDuplicateNode}
+                  onCopy={handleCopyNode}
+                  onPaste={handlePasteNode}
                 />
               </SortableContext>
+              <DragOverlay>
+                {activeDragNode ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "var(--space-2)",
+                      padding: "0.375rem 0.5rem",
+                      borderRadius: "var(--radius-control)",
+                      backgroundColor: "var(--surface)",
+                      border: "1px solid var(--accent)",
+                      boxShadow: "var(--shadow-md)",
+                      fontSize: "var(--font-size-xs)",
+                      cursor: "grabbing",
+                    }}
+                  >
+                    <GripVertical size={13} style={{ color: "var(--accent)" }} />
+                    <span style={{ fontWeight: 600, color: "var(--accent)" }}>
+                      {activeDragNode.type}
+                    </span>
+                    <span
+                      style={{
+                        color: "var(--muted)",
+                        fontFamily: "var(--font-mono)",
+                      }}
+                    >
+                      {activeDragNode.id}
+                    </span>
+                  </div>
+                ) : null}
+              </DragOverlay>
             </DndContext>
           </div>
         </div>
@@ -1319,9 +1821,6 @@ export const PageBuilder: React.FC = () => {
               width: "100%",
               overflow: "auto",
               position: "relative",
-              // backgroundColor: "var(--surface)",
-              // border: "1px solid var(--border)",
-              // borderRadius: "var(--radius)",
               padding: "var(--spacing-8)",
               boxShadow: "var(--shadow-sm)",
             }}
@@ -1338,7 +1837,7 @@ export const PageBuilder: React.FC = () => {
                         style={{
                           backgroundColor: "var(--warning-subtle)",
                           border: "1px solid var(--warning)",
-                          borderRadius: "var(--radius-sm)",
+                          borderRadius: "var(--radius-surface)",
                           padding: "var(--spacing-2) var(--spacing-3)",
                           marginBottom: "var(--spacing-5)",
                           display: "flex",
@@ -1726,6 +2225,98 @@ export const PageBuilder: React.FC = () => {
                     </span>
                   </div>
 
+                  <div>
+                    <label className="form-label" htmlFor="prop-table-empty">
+                      Empty Message
+                    </label>
+                    <input
+                      id="prop-table-empty"
+                      type="text"
+                      className="form-input"
+                      placeholder="No records found"
+                      value={selectedNode.props?.emptyMessage || ""}
+                      onChange={(e) =>
+                        handleUpdateProps({
+                          ...selectedNode.props,
+                          emptyMessage: e.target.value || undefined,
+                        })
+                      }
+                    />
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "0.75rem",
+                      paddingTop: "0.25rem",
+                    }}
+                  >
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        fontSize: "var(--font-size-sm)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedNode.props?.striped)}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            striped: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Striped</span>
+                    </label>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        fontSize: "var(--font-size-sm)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedNode.props?.compact)}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            compact: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Compact</span>
+                    </label>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        fontSize: "var(--font-size-sm)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedNode.props?.bordered !== false}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            bordered: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Bordered</span>
+                    </label>
+                  </div>
+
                   <ActionEditor
                     label="On Row Click Actions"
                     actions={selectedNode.props?.onRowClick || []}
@@ -1834,6 +2425,28 @@ export const PageBuilder: React.FC = () => {
                       })
                     }
                   />
+
+                  <div>
+                    <label className="form-label" htmlFor="prop-details-cols">
+                      Columns Layout
+                    </label>
+                    <select
+                      id="prop-details-cols"
+                      className="form-select"
+                      value={selectedNode.props?.columns || 1}
+                      onChange={(e) =>
+                        handleUpdateProps({
+                          ...selectedNode.props,
+                          columns: Number(e.target.value) || 1,
+                        })
+                      }
+                    >
+                      <option value={1}>1 Column (Stacked)</option>
+                      <option value={2}>2 Columns</option>
+                      <option value={3}>3 Columns</option>
+                      <option value={4}>4 Columns</option>
+                    </select>
+                  </div>
 
                   <div>
                     <label className="form-label">Fields to Display</label>
@@ -2016,6 +2629,7 @@ export const PageBuilder: React.FC = () => {
                         helpText?: string;
                         readOnly?: boolean;
                         hidden?: boolean;
+                        icon?: string;
                       }>;
                       const selectedFieldMap = new Map(
                         selectedFields.map((f) => [f.fieldId, f]),
@@ -2045,7 +2659,7 @@ export const PageBuilder: React.FC = () => {
                                   key={col.id}
                                   style={{
                                     border: "1px solid var(--border)",
-                                    borderRadius: "var(--radius-sm)",
+                                    borderRadius: "var(--radius-control)",
                                     padding: "0.5rem",
                                     backgroundColor: isChecked
                                       ? "var(--surface)"
@@ -2183,6 +2797,44 @@ export const PageBuilder: React.FC = () => {
                                           }}
                                         />
                                       </div>
+                                      <div>
+                                        <label
+                                          style={{
+                                            color: "var(--text-muted)",
+                                            display: "block",
+                                            marginBottom: 2,
+                                          }}
+                                        >
+                                          Custom Icon (Optional)
+                                        </label>
+                                        <input
+                                          type="text"
+                                          className="form-input"
+                                          placeholder="e.g. User, Mail, DollarSign..."
+                                          value={fieldConfig.icon || ""}
+                                          onChange={(e) => {
+                                            const newFields =
+                                              selectedFields.map((f) =>
+                                                f.fieldId === col.id
+                                                  ? {
+                                                      ...f,
+                                                      icon:
+                                                        e.target.value.trim() ||
+                                                        undefined,
+                                                    }
+                                                  : f,
+                                              );
+                                            handleUpdateProps({
+                                              ...selectedNode.props,
+                                              fields: newFields,
+                                            });
+                                          }}
+                                          style={{
+                                            fontSize: "var(--font-size-xs)",
+                                            padding: "0.25rem 0.5rem",
+                                          }}
+                                        />
+                                      </div>
                                       <div
                                         style={{
                                           display: "flex",
@@ -2267,6 +2919,106 @@ export const PageBuilder: React.FC = () => {
                     })()}
                   </div>
 
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "var(--space-2)",
+                      padding: "var(--space-3)",
+                      backgroundColor: "var(--surface-subtle)",
+                      borderRadius: "var(--radius-control)",
+                    }}
+                  >
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "var(--space-2)",
+                        cursor: "pointer",
+                        fontSize: "var(--font-size-xs)",
+                        fontWeight: 600,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedNode.props?.showFooter !== false}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            showFooter: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Show Footer Actions</span>
+                    </label>
+
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "var(--space-2)",
+                        cursor: "pointer",
+                        fontSize: "var(--font-size-xs)",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedNode.props?.showCancel)}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            showCancel: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Show Cancel Button</span>
+                    </label>
+
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "var(--space-2)",
+                        cursor: "pointer",
+                        fontSize: "var(--font-size-xs)",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedNode.props?.showDelete)}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            showDelete: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Show Delete Button</span>
+                    </label>
+                  </div>
+
+                  <ActionEditor
+                    label="On Cancel Actions"
+                    actions={selectedNode.props?.onCancel || []}
+                    onChange={(actions) =>
+                      handleUpdateProps({
+                        ...selectedNode.props,
+                        onCancel: actions,
+                      })
+                    }
+                  />
+
+                  <ActionEditor
+                    label="On Delete Actions"
+                    actions={selectedNode.props?.onDelete || []}
+                    onChange={(actions) =>
+                      handleUpdateProps({
+                        ...selectedNode.props,
+                        onDelete: actions,
+                      })
+                    }
+                  />
+
                   <ActionEditor
                     label="On Success Actions"
                     actions={selectedNode.props?.onSuccess || []}
@@ -2314,28 +3066,182 @@ export const PageBuilder: React.FC = () => {
                       handleUpdateProps({ ...selectedNode.props, value: val })
                     }
                   />
-                  <div>
-                    <label className="form-label" htmlFor="prop-text-variant">
-                      Variant
-                    </label>
-                    <select
-                      id="prop-text-variant"
-                      className="form-select"
-                      value={selectedNode.props?.variant || "body"}
-                      onChange={(e) =>
-                        handleUpdateProps({
-                          ...selectedNode.props,
-                          variant: e.target.value,
-                        })
-                      }
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <div>
+                      <label className="form-label" htmlFor="prop-text-variant">
+                        Variant
+                      </label>
+                      <select
+                        id="prop-text-variant"
+                        className="form-select"
+                        value={selectedNode.props?.variant || "body"}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            variant: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="h1">Heading 1 (h1)</option>
+                        <option value="h2">Heading 2 (h2)</option>
+                        <option value="h3">Heading 3 (h3)</option>
+                        <option value="body">Body</option>
+                        <option value="muted">Muted</option>
+                        <option value="caption">Caption</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label" htmlFor="prop-text-align">
+                        Alignment
+                      </label>
+                      <select
+                        id="prop-text-align"
+                        className="form-select"
+                        value={selectedNode.props?.align || "left"}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            align: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="left">Left</option>
+                        <option value="center">Center</option>
+                        <option value="right">Right</option>
+                        <option value="justify">Justify</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <div>
+                      <label className="form-label" htmlFor="prop-text-weight">
+                        Font Weight
+                      </label>
+                      <select
+                        id="prop-text-weight"
+                        className="form-select"
+                        value={selectedNode.props?.weight || ""}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            weight: e.target.value || undefined,
+                          })
+                        }
+                      >
+                        <option value="">Default</option>
+                        <option value="normal">Normal</option>
+                        <option value="medium">Medium</option>
+                        <option value="semibold">Semibold</option>
+                        <option value="bold">Bold</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label" htmlFor="prop-text-color">
+                        Color Token
+                      </label>
+                      <select
+                        id="prop-text-color"
+                        className="form-select"
+                        value={selectedNode.props?.color || "default"}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            color: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="default">Default</option>
+                        <option value="muted">Muted</option>
+                        <option value="primary">Primary / Accent</option>
+                        <option value="success">Success</option>
+                        <option value="danger">Danger</option>
+                        <option value="warning">Warning</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.5rem",
+                      paddingTop: "0.25rem",
+                    }}
+                  >
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        fontSize: "var(--font-size-sm)",
+                        cursor: "pointer",
+                      }}
                     >
-                      <option value="h1">Heading 1 (h1)</option>
-                      <option value="h2">Heading 2 (h2)</option>
-                      <option value="h3">Heading 3 (h3)</option>
-                      <option value="body">Body</option>
-                      <option value="muted">Muted</option>
-                      <option value="caption">Caption</option>
-                    </select>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedNode.props?.noWrap)}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            noWrap: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Single line (prevent text wrap)</span>
+                    </label>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        fontSize: "var(--font-size-sm)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedNode.props?.truncate)}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            truncate: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Truncate text with ellipsis (...)</span>
+                    </label>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        fontSize: "var(--font-size-sm)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedNode.props?.flex === 1 || selectedNode.props?.flex === "1"}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            flex: e.target.checked ? 1 : undefined,
+                          })
+                        }
+                      />
+                      <span>Fill remaining flex space (flex: 1)</span>
+                    </label>
                   </div>
                 </>
               )}
@@ -2352,26 +3258,150 @@ export const PageBuilder: React.FC = () => {
                       handleUpdateProps({ ...selectedNode.props, label: val })
                     }
                   />
-                  <div>
-                    <label className="form-label" htmlFor="prop-button-variant">
-                      Variant
-                    </label>
-                    <select
-                      id="prop-button-variant"
-                      className="form-select"
-                      value={selectedNode.props?.variant || "primary"}
-                      onChange={(e) =>
-                        handleUpdateProps({
-                          ...selectedNode.props,
-                          variant: e.target.value,
-                        })
-                      }
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <div>
+                      <label className="form-label" htmlFor="prop-button-variant">
+                        Variant
+                      </label>
+                      <select
+                        id="prop-button-variant"
+                        className="form-select"
+                        value={selectedNode.props?.variant || "primary"}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            variant: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="primary">Primary</option>
+                        <option value="secondary">Secondary</option>
+                        <option value="danger">Danger</option>
+                        <option value="ghost">Ghost</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label" htmlFor="prop-button-size">
+                        Size
+                      </label>
+                      <select
+                        id="prop-button-size"
+                        className="form-select"
+                        value={selectedNode.props?.size || "md"}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            size: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="sm">Small</option>
+                        <option value="md">Medium</option>
+                        <option value="lg">Large</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "2fr 1fr",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <div>
+                      <label className="form-label" htmlFor="prop-button-icon">
+                        Button Icon (optional)
+                      </label>
+                      <input
+                        id="prop-button-icon"
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. Plus, Download, Trash2..."
+                        value={selectedNode.props?.icon || ""}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            icon: e.target.value.trim() || undefined,
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label" htmlFor="prop-button-icon-pos">
+                        Icon Position
+                      </label>
+                      <select
+                        id="prop-button-icon-pos"
+                        className="form-select"
+                        value={selectedNode.props?.iconPosition || "left"}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            iconPosition: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="left">Left</option>
+                        <option value="right">Right</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "1rem",
+                      paddingTop: "0.25rem",
+                    }}
+                  >
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        fontSize: "var(--font-size-sm)",
+                        cursor: "pointer",
+                      }}
                     >
-                      <option value="primary">Primary</option>
-                      <option value="secondary">Secondary</option>
-                      <option value="danger">Danger</option>
-                      <option value="ghost">Ghost</option>
-                    </select>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedNode.props?.fullWidth)}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            fullWidth: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Full Width</span>
+                    </label>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        fontSize: "var(--font-size-sm)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedNode.props?.disabled)}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            disabled: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Disabled</span>
+                    </label>
                   </div>
                   <ActionEditor
                     label="On Click Actions"
@@ -2380,6 +3410,182 @@ export const PageBuilder: React.FC = () => {
                       handleUpdateProps({
                         ...selectedNode.props,
                         onClick: actions,
+                      })
+                    }
+                  />
+                </>
+              )}
+
+              {/* Export Button Component Properties */}
+              {selectedNode.type === "exportButton" && (
+                <>
+                  <ExpressionInput
+                    id="prop-export-button-label"
+                    label="Button Label"
+                    value={selectedNode.props?.label || "Export"}
+                    placeholder="e.g. Export Records"
+                    onChange={(val) =>
+                      handleUpdateProps({ ...selectedNode.props, label: val })
+                    }
+                  />
+
+                  <div>
+                    <label className="form-label" htmlFor="prop-export-button-template">
+                      Export Template
+                    </label>
+                    <select
+                      id="prop-export-button-template"
+                      className="form-select"
+                      value={selectedNode.props?.template || ""}
+                      onChange={(e) =>
+                        handleUpdateProps({
+                          ...selectedNode.props,
+                          template: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="">Select a template...</option>
+                      {exportTemplates.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} (v{t.version || 1})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <div>
+                      <label className="form-label" htmlFor="prop-export-button-format">
+                        Format
+                      </label>
+                      <select
+                        id="prop-export-button-format"
+                        className="form-select"
+                        value={selectedNode.props?.format || "xlsx"}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            format: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="xlsx">XLSX (Excel)</option>
+                        <option value="csv">CSV</option>
+                        <option value="pdf">PDF</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="form-label" htmlFor="prop-export-button-variant">
+                        Variant
+                      </label>
+                      <select
+                        id="prop-export-button-variant"
+                        className="form-select"
+                        value={selectedNode.props?.variant || "secondary"}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            variant: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="primary">Primary</option>
+                        <option value="secondary">Secondary</option>
+                        <option value="danger">Danger</option>
+                        <option value="ghost">Ghost</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <div>
+                      <label className="form-label" htmlFor="prop-export-button-size">
+                        Size
+                      </label>
+                      <select
+                        id="prop-export-button-size"
+                        className="form-select"
+                        value={selectedNode.props?.size || "md"}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            size: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="sm">Small</option>
+                        <option value="md">Medium</option>
+                        <option value="lg">Large</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="form-label" htmlFor="prop-export-button-icon">
+                        Icon (optional)
+                      </label>
+                      <input
+                        id="prop-export-button-icon"
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. Download, FileSpreadsheet"
+                        value={selectedNode.props?.icon || ""}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            icon: e.target.value.trim() || undefined,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+
+                  <ExpressionInput
+                    id="prop-export-button-parameters"
+                    label="Parameters Expression (optional)"
+                    value={
+                      typeof selectedNode.props?.parameters === "string"
+                        ? selectedNode.props.parameters
+                        : selectedNode.props?.parameters
+                        ? JSON.stringify(selectedNode.props.parameters)
+                        : ""
+                    }
+                    placeholder="e.g. {{ state.exportParams }}"
+                    onChange={(val) =>
+                      handleUpdateProps({
+                        ...selectedNode.props,
+                        parameters: val || undefined,
+                      })
+                    }
+                  />
+
+                  <ExpressionInput
+                    id="prop-export-button-filters"
+                    label="Filters Expression (optional)"
+                    value={
+                      typeof selectedNode.props?.filters === "string"
+                        ? selectedNode.props.filters
+                        : selectedNode.props?.filters
+                        ? JSON.stringify(selectedNode.props.filters)
+                        : ""
+                    }
+                    placeholder="e.g. {{ state.exportFilters }}"
+                    onChange={(val) =>
+                      handleUpdateProps({
+                        ...selectedNode.props,
+                        filters: val || undefined,
                       })
                     }
                   />
@@ -2418,6 +3624,50 @@ export const PageBuilder: React.FC = () => {
                       }
                     />
                   </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <div>
+                      <label className="form-label">Input Type</label>
+                      <select
+                        className="form-select"
+                        value={selectedNode.props?.type || "text"}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            type: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="text">Text</option>
+                        <option value="number">Number</option>
+                        <option value="email">Email</option>
+                        <option value="password">Password</option>
+                        <option value="search">Search</option>
+                        <option value="url">URL</option>
+                        <option value="date">Date</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label">Prefix Icon</label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. Search, Mail..."
+                        value={selectedNode.props?.prefixIcon || ""}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            prefixIcon: e.target.value.trim() || undefined,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
                   <div>
                     <label className="form-label">Placeholder</label>
                     <input
@@ -2433,20 +3683,70 @@ export const PageBuilder: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="form-label">Input Type</label>
-                    <select
-                      className="form-select"
-                      value={selectedNode.props?.type || "text"}
+                    <label className="form-label">Help Text</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Optional helper text below input"
+                      value={selectedNode.props?.helpText || ""}
                       onChange={(e) =>
                         handleUpdateProps({
                           ...selectedNode.props,
-                          type: e.target.value,
+                          helpText: e.target.value || undefined,
                         })
                       }
+                    />
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "1rem",
+                      paddingTop: "0.25rem",
+                    }}
+                  >
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        fontSize: "var(--font-size-sm)",
+                        cursor: "pointer",
+                      }}
                     >
-                      <option value="text">Text</option>
-                      <option value="number">Number</option>
-                    </select>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedNode.props?.required)}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            required: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Required</span>
+                    </label>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        fontSize: "var(--font-size-sm)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedNode.props?.disabled)}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            disabled: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Disabled</span>
+                    </label>
                   </div>
                   <ActionEditor
                     label="On Change Actions"
@@ -2494,6 +3794,36 @@ export const PageBuilder: React.FC = () => {
                     />
                   </div>
                   <div>
+                    <label className="form-label">Placeholder</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Select an option..."
+                      value={selectedNode.props?.placeholder || ""}
+                      onChange={(e) =>
+                        handleUpdateProps({
+                          ...selectedNode.props,
+                          placeholder: e.target.value || undefined,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="form-label">Help Text</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Optional helper text below select"
+                      value={selectedNode.props?.helpText || ""}
+                      onChange={(e) =>
+                        handleUpdateProps({
+                          ...selectedNode.props,
+                          helpText: e.target.value || undefined,
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
                     <label className="form-label">
                       Options (JSON array of label/value)
                     </label>
@@ -2524,6 +3854,57 @@ export const PageBuilder: React.FC = () => {
                         }
                       }}
                     />
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "1rem",
+                      paddingTop: "0.25rem",
+                    }}
+                  >
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        fontSize: "var(--font-size-sm)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedNode.props?.clearable)}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            clearable: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Clearable</span>
+                    </label>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        fontSize: "var(--font-size-sm)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedNode.props?.disabled)}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            disabled: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Disabled</span>
+                    </label>
                   </div>
                   <ActionEditor
                     label="On Change Actions"
@@ -2570,6 +3951,48 @@ export const PageBuilder: React.FC = () => {
                       }
                     />
                   </div>
+                  <div>
+                    <label className="form-label">Modal Size</label>
+                    <select
+                      className="form-select"
+                      value={selectedNode.props?.size || "md"}
+                      onChange={(e) =>
+                        handleUpdateProps({
+                          ...selectedNode.props,
+                          size: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="sm">Small (400px)</option>
+                      <option value="md">Medium (540px)</option>
+                      <option value="lg">Large (720px)</option>
+                      <option value="xl">Extra Large (960px)</option>
+                      <option value="full">Full Width</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        fontSize: "var(--font-size-sm)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedNode.props?.showCloseButton !== false}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            showCloseButton: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Show Close Button (X)</span>
+                    </label>
+                  </div>
                 </>
               )}
 
@@ -2594,28 +4017,140 @@ export const PageBuilder: React.FC = () => {
                         })
                       }
                     >
-                      <option value="vertical">Vertical</option>
-                      <option value="horizontal">Horizontal</option>
+                      <option value="vertical">Vertical (Column)</option>
+                      <option value="horizontal">Horizontal (Row)</option>
                     </select>
                   </div>
                   <div>
-                    <label className="form-label" htmlFor="prop-stack-gap">
-                      Gap (px)
+                    <label
+                      className="form-label"
+                      htmlFor="prop-stack-justify"
+                    >
+                      Justify Content
                     </label>
-                    <input
-                      id="prop-stack-gap"
-                      type="number"
-                      className="form-input"
-                      value={selectedNode.props?.gap ?? 16}
+                    <select
+                      id="prop-stack-justify"
+                      className="form-select"
+                      value={selectedNode.props?.justify || ""}
                       onChange={(e) =>
                         handleUpdateProps({
                           ...selectedNode.props,
-                          gap: Number(e.target.value),
+                          justify: e.target.value || undefined,
                         })
                       }
-                    />
+                    >
+                      <option value="">Default (Start)</option>
+                      <option value="flex-start">Start</option>
+                      <option value="center">Center</option>
+                      <option value="flex-end">End</option>
+                      <option value="space-between">Space Between</option>
+                      <option value="space-around">Space Around</option>
+                      <option value="space-evenly">Space Evenly</option>
+                    </select>
                   </div>
                   <div>
+                    <label
+                      className="form-label"
+                      htmlFor="prop-stack-align"
+                    >
+                      Align Items
+                    </label>
+                    <select
+                      id="prop-stack-align"
+                      className="form-select"
+                      value={selectedNode.props?.align || ""}
+                      onChange={(e) =>
+                        handleUpdateProps({
+                          ...selectedNode.props,
+                          align: e.target.value || undefined,
+                        })
+                      }
+                    >
+                      <option value="">Default (Stretch)</option>
+                      <option value="stretch">Stretch</option>
+                      <option value="flex-start">Start</option>
+                      <option value="center">Center</option>
+                      <option value="flex-end">End</option>
+                      <option value="baseline">Baseline</option>
+                    </select>
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <div>
+                      <label className="form-label" htmlFor="prop-stack-gap">
+                        Gap (px)
+                      </label>
+                      <input
+                        id="prop-stack-gap"
+                        type="number"
+                        min={0}
+                        className="form-input"
+                        value={selectedNode.props?.gap ?? 16}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            gap: Number(e.target.value) || 0,
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label" htmlFor="prop-stack-padding">
+                        Padding (px)
+                      </label>
+                      <input
+                        id="prop-stack-padding"
+                        type="number"
+                        min={0}
+                        placeholder="0"
+                        className="form-input"
+                        value={selectedNode.props?.padding ?? ""}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            padding: e.target.value === "" ? undefined : Number(e.target.value),
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="form-label" htmlFor="prop-stack-bg">
+                      Background Style
+                    </label>
+                    <select
+                      id="prop-stack-bg"
+                      className="form-select"
+                      value={selectedNode.props?.background || "transparent"}
+                      onChange={(e) =>
+                        handleUpdateProps({
+                          ...selectedNode.props,
+                          background:
+                            e.target.value === "transparent"
+                              ? undefined
+                              : e.target.value,
+                        })
+                      }
+                    >
+                      <option value="transparent">Transparent (None)</option>
+                      <option value="surface">Surface</option>
+                      <option value="surface-subtle">Subtle Surface</option>
+                      <option value="surface-2">Elevated Surface (Card)</option>
+                    </select>
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "1rem",
+                      paddingTop: "0.25rem",
+                    }}
+                  >
                     <label
                       style={{
                         display: "flex",
@@ -2635,7 +4170,28 @@ export const PageBuilder: React.FC = () => {
                           })
                         }
                       />
-                      <span>Wrap items (flex-wrap)</span>
+                      <span>Wrap items</span>
+                    </label>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.5rem",
+                        fontSize: "var(--font-size-sm)",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selectedNode.props?.border)}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            border: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Show Border</span>
                     </label>
                   </div>
                 </>
@@ -2644,45 +4200,97 @@ export const PageBuilder: React.FC = () => {
               {/* Grid Properties */}
               {selectedNode.type === "grid" && (
                 <>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <div>
+                      <label className="form-label" htmlFor="prop-grid-columns">
+                        Columns (1 - 12)
+                      </label>
+                      <input
+                        id="prop-grid-columns"
+                        type="number"
+                        min={1}
+                        max={12}
+                        className="form-input"
+                        value={selectedNode.props?.columns ?? 2}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            columns: Math.max(
+                              1,
+                              Math.min(12, Number(e.target.value) || 1),
+                            ),
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label" htmlFor="prop-grid-gap">
+                        Gap (px)
+                      </label>
+                      <input
+                        id="prop-grid-gap"
+                        type="number"
+                        min={0}
+                        className="form-input"
+                        value={selectedNode.props?.gap ?? 16}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            gap: Number(e.target.value) || 0,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
                   <div>
-                    <label className="form-label" htmlFor="prop-grid-columns">
-                      Columns (1 - 12)
+                    <label className="form-label" htmlFor="prop-grid-min-width">
+                      Min Column Width (px, optional)
                     </label>
                     <input
-                      id="prop-grid-columns"
+                      id="prop-grid-min-width"
                       type="number"
-                      min={1}
-                      max={12}
+                      min={0}
+                      placeholder="e.g. 240 (auto-fit mode)"
                       className="form-input"
-                      value={selectedNode.props?.columns ?? 2}
+                      value={selectedNode.props?.minColWidth ?? ""}
                       onChange={(e) =>
                         handleUpdateProps({
                           ...selectedNode.props,
-                          columns: Math.max(
-                            1,
-                            Math.min(12, Number(e.target.value) || 1),
-                          ),
+                          minColWidth:
+                            e.target.value === ""
+                              ? undefined
+                              : Number(e.target.value),
                         })
                       }
                     />
                   </div>
                   <div>
-                    <label className="form-label" htmlFor="prop-grid-gap">
-                      Gap (px)
+                    <label className="form-label" htmlFor="prop-grid-align">
+                      Align Items
                     </label>
-                    <input
-                      id="prop-grid-gap"
-                      type="number"
-                      min={0}
-                      className="form-input"
-                      value={selectedNode.props?.gap ?? 16}
+                    <select
+                      id="prop-grid-align"
+                      className="form-select"
+                      value={selectedNode.props?.align || ""}
                       onChange={(e) =>
                         handleUpdateProps({
                           ...selectedNode.props,
-                          gap: Number(e.target.value) || 0,
+                          align: e.target.value || undefined,
                         })
                       }
-                    />
+                    >
+                      <option value="">Default (Stretch)</option>
+                      <option value="stretch">Stretch</option>
+                      <option value="start">Start (Top)</option>
+                      <option value="center">Center</option>
+                      <option value="end">End (Bottom)</option>
+                    </select>
                   </div>
                   <div>
                     <label
@@ -2746,6 +4354,74 @@ export const PageBuilder: React.FC = () => {
                         })
                       }
                     />
+                  </div>
+                  <div>
+                    <label className="form-label" htmlFor="prop-card-icon">
+                      Header Icon (optional)
+                    </label>
+                    <input
+                      id="prop-card-icon"
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Folder, Layers, Shield..."
+                      value={selectedNode.props?.headerIcon || ""}
+                      onChange={(e) =>
+                        handleUpdateProps({
+                          ...selectedNode.props,
+                          headerIcon: e.target.value.trim() || undefined,
+                        })
+                      }
+                    />
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <div>
+                      <label className="form-label" htmlFor="prop-card-variant">
+                        Style Variant
+                      </label>
+                      <select
+                        id="prop-card-variant"
+                        className="form-select"
+                        value={selectedNode.props?.variant || "default"}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            variant: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="default">Default (Shadow)</option>
+                        <option value="bordered">Bordered</option>
+                        <option value="flat">Flat (Subtle)</option>
+                        <option value="elevated">Elevated</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label" htmlFor="prop-card-padding">
+                        Padding
+                      </label>
+                      <select
+                        id="prop-card-padding"
+                        className="form-select"
+                        value={selectedNode.props?.padding || "md"}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            padding: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="none">None (0)</option>
+                        <option value="sm">Small</option>
+                        <option value="md">Medium</option>
+                        <option value="lg">Large</option>
+                      </select>
+                    </div>
                   </div>
                 </>
               )}
@@ -2899,6 +4575,54 @@ export const PageBuilder: React.FC = () => {
                       }
                     />
                   </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <div>
+                      <label className="form-label" htmlFor="prop-tabs-variant">
+                        Tab Style
+                      </label>
+                      <select
+                        id="prop-tabs-variant"
+                        className="form-select"
+                        value={selectedNode.props?.variant || "line"}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            variant: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="line">Underline (Default)</option>
+                        <option value="pills">Pills</option>
+                        <option value="enclosed">Enclosed</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label" htmlFor="prop-tabs-size">
+                        Size
+                      </label>
+                      <select
+                        id="prop-tabs-size"
+                        className="form-select"
+                        value={selectedNode.props?.size || "md"}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            size: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="sm">Small</option>
+                        <option value="md">Medium</option>
+                        <option value="lg">Large</option>
+                      </select>
+                    </div>
+                  </div>
                 </>
               )}
 
@@ -3006,6 +4730,54 @@ export const PageBuilder: React.FC = () => {
                     }}
                   >
                     <div>
+                      <label className="form-label" htmlFor="prop-stat-icon">
+                        Stat Icon (optional)
+                      </label>
+                      <input
+                        id="prop-stat-icon"
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. DollarSign, Users..."
+                        value={selectedNode.props?.icon || ""}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            icon: e.target.value.trim() || undefined,
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label" htmlFor="prop-stat-color">
+                        Accent Color
+                      </label>
+                      <select
+                        id="prop-stat-color"
+                        className="form-select"
+                        value={selectedNode.props?.color || "default"}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            color: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="default">Default</option>
+                        <option value="primary">Primary</option>
+                        <option value="success">Success</option>
+                        <option value="danger">Danger</option>
+                        <option value="warning">Warning</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <div>
                       <label className="form-label" htmlFor="prop-stat-prefix">
                         Prefix
                       </label>
@@ -3037,6 +4809,53 @@ export const PageBuilder: React.FC = () => {
                           handleUpdateProps({
                             ...selectedNode.props,
                             suffix: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <div>
+                      <label className="form-label" htmlFor="prop-stat-trend">
+                        Trend Direction
+                      </label>
+                      <select
+                        id="prop-stat-trend"
+                        className="form-select"
+                        value={selectedNode.props?.trend || ""}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            trend: e.target.value || undefined,
+                          })
+                        }
+                      >
+                        <option value="">None</option>
+                        <option value="up">Trending Up</option>
+                        <option value="down">Trending Down</option>
+                        <option value="neutral">Neutral</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label" htmlFor="prop-stat-trendval">
+                        Trend Value
+                      </label>
+                      <input
+                        id="prop-stat-trendval"
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. +12.5%"
+                        value={selectedNode.props?.trendValue || ""}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            trendValue: e.target.value || undefined,
                           })
                         }
                       />
@@ -3258,6 +5077,236 @@ export const PageBuilder: React.FC = () => {
                   )}
                 </>
               )}
+
+              {/* Universal Sizing & Flex Layout Properties */}
+              {selectedNode.type !== "modal" && (
+                <div
+                  style={{
+                    borderTop: "1px solid var(--border)",
+                    paddingTop: "0.875rem",
+                    marginTop: "0.5rem",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "0.75rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "var(--font-size-xs)",
+                      fontWeight: 600,
+                      color: "var(--text-muted)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.05em",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.375rem",
+                    }}
+                  >
+                    <Sliders size={13} /> Sizing & Flex Layout
+                  </div>
+
+                  <div>
+                    <label className="form-label" htmlFor="prop-layout-flex">
+                      Flex Child (Grow / Sizing)
+                    </label>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "0.375rem",
+                        marginBottom: "0.375rem",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        className={`btn ${
+                          selectedNode.props?.flex === 1 ||
+                          selectedNode.props?.flex === "1"
+                            ? "btn-primary"
+                            : "btn-secondary"
+                        }`}
+                        style={{
+                          fontSize: "var(--font-size-xs)",
+                          padding: "0.2rem 0.5rem",
+                          flex: 1,
+                        }}
+                        onClick={() =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            flex: 1,
+                          })
+                        }
+                      >
+                        Fill (flex: 1)
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn ${
+                          selectedNode.props?.flex === "0 0 auto" ||
+                          selectedNode.props?.flex === "none"
+                            ? "btn-primary"
+                            : "btn-secondary"
+                        }`}
+                        style={{
+                          fontSize: "var(--font-size-xs)",
+                          padding: "0.2rem 0.5rem",
+                          flex: 1,
+                        }}
+                        onClick={() =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            flex: "0 0 auto",
+                          })
+                        }
+                      >
+                        Fit (auto)
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn ${
+                          selectedNode.props?.flex === undefined
+                            ? "btn-primary"
+                            : "btn-secondary"
+                        }`}
+                        style={{
+                          fontSize: "var(--font-size-xs)",
+                          padding: "0.2rem 0.5rem",
+                        }}
+                        onClick={() =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            flex: undefined,
+                          })
+                        }
+                      >
+                        Reset
+                      </button>
+                    </div>
+                    <input
+                      id="prop-layout-flex"
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. 1, 0 0 auto, auto"
+                      value={selectedNode.props?.flex ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value.trim();
+                        handleUpdateProps({
+                          ...selectedNode.props,
+                          flex:
+                            val === ""
+                              ? undefined
+                              : isNaN(Number(val))
+                                ? val
+                                : Number(val),
+                        });
+                      }}
+                    />
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <div>
+                      <label className="form-label" htmlFor="prop-layout-width">
+                        Width
+                      </label>
+                      <input
+                        id="prop-layout-width"
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. 100%, 240px, auto"
+                        value={selectedNode.props?.width ?? ""}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            width: e.target.value.trim() || undefined,
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label
+                        className="form-label"
+                        htmlFor="prop-layout-alignself"
+                      >
+                        Align Self
+                      </label>
+                      <select
+                        id="prop-layout-alignself"
+                        className="form-select"
+                        value={selectedNode.props?.alignSelf || ""}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            alignSelf: e.target.value || undefined,
+                          })
+                        }
+                      >
+                        <option value="">Default (Auto)</option>
+                        <option value="flex-start">Start</option>
+                        <option value="center">Center</option>
+                        <option value="flex-end">End</option>
+                        <option value="stretch">Stretch</option>
+                        <option value="baseline">Baseline</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 1fr",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <div>
+                      <label
+                        className="form-label"
+                        htmlFor="prop-layout-minwidth"
+                      >
+                        Min Width
+                      </label>
+                      <input
+                        id="prop-layout-minwidth"
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. 0, 200px"
+                        value={selectedNode.props?.minWidth ?? ""}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            minWidth: e.target.value.trim() || undefined,
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label
+                        className="form-label"
+                        htmlFor="prop-layout-maxwidth"
+                      >
+                        Max Width
+                      </label>
+                      <input
+                        id="prop-layout-maxwidth"
+                        type="text"
+                        className="form-input"
+                        placeholder="e.g. 600px"
+                        value={selectedNode.props?.maxWidth ?? ""}
+                        onChange={(e) =>
+                          handleUpdateProps({
+                            ...selectedNode.props,
+                            maxWidth: e.target.value.trim() || undefined,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div
@@ -3374,7 +5423,7 @@ export const PageBuilder: React.FC = () => {
               maxWidth: "480px",
               backgroundColor: "var(--surface)",
               border: "1px solid var(--border)",
-              borderRadius: "var(--radius-lg)",
+              borderRadius: "var(--radius-surface)",
               padding: "var(--spacing-6)",
               boxShadow: "var(--shadow-xl)",
             }}
@@ -3435,7 +5484,7 @@ export const PageBuilder: React.FC = () => {
                         alignItems: "center",
                         gap: "0.75rem",
                         padding: "0.5rem 0.75rem",
-                        borderRadius: "var(--radius-md, 8px)",
+                        borderRadius: "var(--radius-control)",
                         backgroundColor: isChecked
                           ? "var(--accent-subtle)"
                           : "var(--surface-subtle)",

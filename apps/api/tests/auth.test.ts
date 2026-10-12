@@ -117,6 +117,10 @@ describe('Authentication, Tenancy & Permissions', () => {
     { method: 'PATCH', url: '/api/entities/item/records/rec_test_1' },
     { method: 'DELETE', url: '/api/entities/item/records/rec_test_1' },
     { method: 'GET', url: '/api/entities/item/aggregate' },
+    // Import
+    { method: 'POST', url: '/api/entities/item/import/preview' },
+    { method: 'POST', url: '/api/entities/item/import/dry-run' },
+    { method: 'POST', url: '/api/entities/item/import/commit' },
     // Schema & ERD & DDL
     { method: 'GET', url: '/api/schema/entities' },
     { method: 'POST', url: '/api/schema/entities' },
@@ -154,6 +158,8 @@ describe('Authentication, Tenancy & Permissions', () => {
     { method: 'DELETE', url: '/api/workspace/tenant' },
     // Audit logs
     { method: 'GET', url: '/api/audit-logs' },
+    // Export Templates
+    { method: 'POST', url: '/api/export-templates/tpl_test_1/render-preview' },
     // Workspace switching
     { method: 'GET', url: '/api/auth/workspaces' },
     { method: 'POST', url: '/api/auth/switch-workspace' },
@@ -321,6 +327,42 @@ describe('Authentication, Tenancy & Permissions', () => {
     // Both should be isolated counts
     expect(typeof countA).toBe('number');
     expect(typeof countB).toBe('number');
+  });
+
+  it('cross-tenant export-templates render-preview: builderA/ownerA cannot render preview of tenantB export template', async () => {
+    // Builder B creates an export template in Tenant B
+    const createResB = await server.inject({
+      method: 'POST',
+      url: '/api/export-templates',
+      headers: ownerB.headers,
+      payload: {
+        name: 'Tenant B Template',
+        entityId: itemEntityIdB,
+        draft: {
+          kind: 'grid',
+          sheets: [
+            {
+              id: 'sheet_b',
+              name: 'Sheet 1',
+              order: 0,
+              cells: {
+                '0:0': { value: 'Secret B' },
+              },
+            },
+          ],
+        },
+      },
+    });
+    expect(createResB.statusCode).toBe(201);
+    const tplBId = JSON.parse(createResB.payload).id;
+
+    // ownerA or builderA tries to render preview of tenantB template
+    const previewResA = await server.inject({
+      method: 'POST',
+      url: `/api/export-templates/${tplBId}/render-preview`,
+      headers: ownerA.headers,
+    });
+    expect(previewResA.statusCode).toBe(404);
   });
 
   // ─── 3. Hidden Fields Protection ──────────────────────────────────────────

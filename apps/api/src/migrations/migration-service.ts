@@ -52,14 +52,29 @@ export class MigrationService {
     const client = await (this.storage as any).dbPool.connect();
     try {
       await client.query(
-        `INSERT INTO public.tenant (id, name, schema_version)
-         VALUES ($1, $2, 1)
+        `INSERT INTO public.tenant (id, name, schema_version, timezone)
+         VALUES ($1, $2, 1, 'UTC')
          ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name`,
         [tenantId, name]
       );
     } finally {
       client.release();
     }
+  }
+
+  async getTenantTimezone(tenantId: string): Promise<string> {
+    const res = await pool.query<{ timezone?: string }>(
+      `SELECT timezone FROM public.tenant WHERE id = $1`,
+      [tenantId]
+    );
+    return res.rows[0]?.timezone || 'UTC';
+  }
+
+  async setTenantTimezone(tenantId: string, timezone: string): Promise<void> {
+    await pool.query(
+      `UPDATE public.tenant SET timezone = $1 WHERE id = $2`,
+      [timezone, tenantId]
+    );
   }
 
   /**
@@ -120,10 +135,10 @@ export class MigrationService {
 
         // Insert entity definition in catalog
         const entityRes = await tx.client.query<EntityDef>(
-          `INSERT INTO public.entity_def (id, tenant_id, name, label, physical_table_name, version, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, 1, NOW(), NOW())
-           RETURNING id, tenant_id AS "tenantId", name, label, physical_table_name AS "physicalTableName", version, created_at AS "createdAt", updated_at AS "updatedAt"`,
-          [tableId, tenantId, input.name, input.label, tableId]
+          `INSERT INTO public.entity_def (id, tenant_id, name, label, physical_table_name, version, display_field_id, icon, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, 1, $6, $7, NOW(), NOW())
+           RETURNING id, tenant_id AS "tenantId", name, label, physical_table_name AS "physicalTableName", version, display_field_id AS "displayFieldId", icon, created_at AS "createdAt", updated_at AS "updatedAt"`,
+          [tableId, tenantId, input.name, input.label, tableId, input.displayFieldId || null, input.icon || null]
         );
         const entity = entityRes.rows[0];
 
@@ -201,8 +216,10 @@ export class MigrationService {
           name: string;
           label: string;
           physical_table_name: string;
+          display_field_id?: string | null;
+          icon?: string | null;
         }>(
-          `SELECT id, version, name, label, physical_table_name, display_field_id FROM public.entity_def WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+          `SELECT id, version, name, label, physical_table_name, display_field_id, icon FROM public.entity_def WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
           [input.entityId, tenantId]
         );
 
@@ -222,14 +239,15 @@ export class MigrationService {
         const newName = input.name || current.name;
         const newLabel = input.label || current.label;
         const newDisplayFieldId = input.displayFieldId !== undefined ? input.displayFieldId : (current as any).display_field_id;
+        const newIcon = input.icon !== undefined ? input.icon : (current as any).icon;
 
         // Update metadata catalog (physical table name remains stable!)
         const updateRes = await tx.client.query<EntityDef>(
           `UPDATE public.entity_def
-           SET name = $1, label = $2, display_field_id = $3, version = version + 1, updated_at = NOW()
-           WHERE id = $4
-           RETURNING id, tenant_id AS "tenantId", name, label, physical_table_name AS "physicalTableName", version, display_field_id AS "displayFieldId", created_at AS "createdAt", updated_at AS "updatedAt"`,
-          [newName, newLabel, newDisplayFieldId, input.entityId]
+           SET name = $1, label = $2, display_field_id = $3, icon = $4, version = version + 1, updated_at = NOW()
+           WHERE id = $5
+           RETURNING id, tenant_id AS "tenantId", name, label, physical_table_name AS "physicalTableName", version, display_field_id AS "displayFieldId", icon, created_at AS "createdAt", updated_at AS "updatedAt"`,
+          [newName, newLabel, newDisplayFieldId, newIcon, input.entityId]
         );
 
         const ddl = `-- Metadata only rename: Entity ${input.entityId} ('${current.label}' -> '${newLabel}', slug='${newName}')`;

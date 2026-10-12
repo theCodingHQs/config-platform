@@ -28,12 +28,13 @@ export async function permissionRoutes(fastify: FastifyInstance) {
     if (!isValidRole(role)) {
       return reply.status(400).send({ error: 'Invalid role' });
     }
-    const { canRead, canCreate, canUpdate, canDelete } = (req.body as any) || {};
+    const { canRead, canCreate, canUpdate, canDelete, canExport } = (req.body as any) || {};
     const perm = {
       canRead: Boolean(canRead),
       canCreate: Boolean(canCreate),
       canUpdate: Boolean(canUpdate),
       canDelete: Boolean(canDelete),
+      canExport: canExport !== undefined ? Boolean(canExport) : (role === 'viewer' ? false : true),
     };
     await permissionService.setEntityPermission(tenantId, entityId, role as TenantRole, perm);
 

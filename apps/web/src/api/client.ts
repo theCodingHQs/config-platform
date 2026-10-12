@@ -1,5 +1,12 @@
 import { API_BASE_URL } from "../config";
-import type { ErdTable, WorkspaceThemeConfig } from "@config-platform/schema";
+import type {
+  ErdTable,
+  WorkspaceThemeConfig,
+  ImportOptions,
+  ImportPreviewResult,
+  ImportDryRunResult,
+  ImportCommitResult,
+} from "@config-platform/schema";
 
 export class ApiError extends Error {
   public statusCode: number;
@@ -326,6 +333,7 @@ export interface EntityPermissionRecord {
   canCreate: boolean;
   canUpdate: boolean;
   canDelete: boolean;
+  canExport?: boolean;
 }
 
 export interface FieldPermissionRecord {
@@ -352,6 +360,7 @@ export async function setEntityPermission(
     canCreate?: boolean;
     canUpdate?: boolean;
     canDelete?: boolean;
+    canExport?: boolean;
   },
 ): Promise<{ success: boolean }> {
   const res = await apiFetch(
@@ -411,6 +420,7 @@ export interface FetchRecordsParams {
   cursor?: string | null;
   sort?: string;
   filter?: Record<string, any>;
+  count?: boolean;
 }
 
 export interface RecordsResponse {
@@ -428,6 +438,7 @@ export async function fetchRecords(
   if (params.limit) search.set("limit", String(params.limit));
   if (params.cursor) search.set("cursor", params.cursor);
   if (params.sort) search.set("sort", params.sort);
+  if (params.count !== false) search.set("count", "true");
 
   if (params.filter) {
     for (const [field, ops] of Object.entries(params.filter)) {
@@ -459,12 +470,18 @@ export async function createRecord(
   entityId: string,
   data: Record<string, any>,
 ): Promise<Record<string, any>> {
+  const sanitized: Record<string, any> = {};
+  for (const [k, v] of Object.entries(data || {})) {
+    if (k !== 'id' && k !== 'created_at' && k !== 'updated_at') {
+      sanitized[k] = v;
+    }
+  }
   const res = await apiFetch(`${API_BASE_URL}/entities/${entityId}/records`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(data),
+    body: JSON.stringify(sanitized),
   });
   return handleResponse<Record<string, any>>(res);
 }
@@ -475,6 +492,12 @@ export async function updateRecord(
   id: string,
   data: Record<string, any>,
 ): Promise<Record<string, any>> {
+  const sanitized: Record<string, any> = {};
+  for (const [k, v] of Object.entries(data || {})) {
+    if (k !== 'id' && k !== 'created_at' && k !== 'updated_at') {
+      sanitized[k] = v;
+    }
+  }
   const res = await apiFetch(
     `${API_BASE_URL}/entities/${entityId}/records/${id}`,
     {
@@ -482,7 +505,7 @@ export async function updateRecord(
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(sanitized),
     },
   );
   return handleResponse<Record<string, any>>(res);
@@ -516,6 +539,23 @@ export async function fetchRecord(
     },
   );
   return handleResponse<Record<string, any>>(res);
+}
+
+export interface EntityPermissionsResponse {
+  entityId: string;
+  role: string;
+  canRead: boolean;
+  canCreate: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
+  fields: Record<string, { hidden: boolean; readOnly: boolean }>;
+}
+
+export async function fetchMyEntityPermissions(
+  entityId: string,
+): Promise<EntityPermissionsResponse> {
+  const res = await apiFetch(`${API_BASE_URL}/entities/${entityId}/permissions`);
+  return handleResponse<EntityPermissionsResponse>(res);
 }
 
 export async function fetchAggregate(
@@ -560,6 +600,7 @@ export async function createEntity(
   data: {
     name: string;
     label: string;
+    icon?: string | null;
     fields?: any[];
     displayFieldId?: string | null;
   },
@@ -578,6 +619,7 @@ export async function updateEntity(
   data: {
     label?: string;
     name?: string;
+    icon?: string | null;
     displayFieldId?: string | null;
     expectedVersion: number;
   },
@@ -804,5 +846,216 @@ export async function updateWorkspaceTheme(
     body: JSON.stringify(themeConfig),
   });
   return handleResponse<{ success: boolean; themeConfig: WorkspaceThemeConfig; warning?: string }>(res);
+}
+
+export async function previewEntityImport(
+  entityIdOrName: string,
+  file: File,
+  sheetName?: string
+): Promise<ImportPreviewResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (sheetName) {
+    formData.append("sheetName", sheetName);
+  }
+
+  const res = await apiFetch(`${API_BASE_URL}/entities/${entityIdOrName}/import/preview`, {
+    method: "POST",
+    body: formData,
+  });
+  return handleResponse<ImportPreviewResult>(res);
+}
+
+export async function dryRunEntityImport(
+  entityIdOrName: string,
+  file: File,
+  mapping: Record<string, string | null>,
+  options?: ImportOptions,
+  sheetName?: string
+): Promise<ImportDryRunResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("mapping", JSON.stringify(mapping));
+  if (options) {
+    formData.append("options", JSON.stringify(options));
+  }
+  if (sheetName) {
+    formData.append("sheetName", sheetName);
+  }
+
+  const res = await apiFetch(`${API_BASE_URL}/entities/${entityIdOrName}/import/dry-run`, {
+    method: "POST",
+    body: formData,
+  });
+  return handleResponse<ImportDryRunResult>(res);
+}
+
+export async function commitEntityImport(
+  entityIdOrName: string,
+  file: File,
+  mapping: Record<string, string | null>,
+  options?: ImportOptions,
+  sheetName?: string
+): Promise<ImportCommitResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("mapping", JSON.stringify(mapping));
+  if (options) {
+    formData.append("options", JSON.stringify(options));
+  }
+  if (sheetName) {
+    formData.append("sheetName", sheetName);
+  }
+
+  const res = await apiFetch(`${API_BASE_URL}/entities/${entityIdOrName}/import/commit`, {
+    method: "POST",
+    body: formData,
+  });
+  return handleResponse<ImportCommitResult>(res);
+}
+
+// ─── Export Templates & Downloads ──────────────────────────────────────────
+
+export interface ExportTemplateItem {
+  id: string;
+  tenantId?: string;
+  name: string;
+  entityId: string;
+  draft: any;
+  published?: any;
+  version: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export async function listExportTemplates(entityId?: string): Promise<ExportTemplateItem[]> {
+  const url = entityId
+    ? `${API_BASE_URL}/export-templates?entityId=${encodeURIComponent(entityId)}`
+    : `${API_BASE_URL}/export-templates`;
+  const res = await apiFetch(url);
+  return handleResponse<ExportTemplateItem[]>(res);
+}
+
+export async function getExportTemplate(id: string): Promise<ExportTemplateItem> {
+  const res = await apiFetch(`${API_BASE_URL}/export-templates/${id}`);
+  return handleResponse<ExportTemplateItem>(res);
+}
+
+export async function createExportTemplate(data: {
+  name: string;
+  entityId: string;
+  draft?: any;
+}): Promise<ExportTemplateItem> {
+  const res = await apiFetch(`${API_BASE_URL}/export-templates`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<ExportTemplateItem>(res);
+}
+
+export async function updateExportTemplate(
+  id: string,
+  data: { name?: string; draft?: any },
+): Promise<ExportTemplateItem> {
+  const res = await apiFetch(`${API_BASE_URL}/export-templates/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<ExportTemplateItem>(res);
+}
+
+export async function deleteExportTemplate(id: string): Promise<{ success: boolean }> {
+  const res = await apiFetch(`${API_BASE_URL}/export-templates/${id}`, {
+    method: "DELETE",
+  });
+  return handleResponse<{ success: boolean }>(res);
+}
+
+export async function publishExportTemplate(id: string): Promise<ExportTemplateItem> {
+  const res = await apiFetch(`${API_BASE_URL}/export-templates/${id}/publish`, {
+    method: "POST",
+  });
+  return handleResponse<ExportTemplateItem>(res);
+}
+
+export async function duplicateExportTemplate(id: string): Promise<ExportTemplateItem> {
+  const res = await apiFetch(`${API_BASE_URL}/export-templates/${id}/duplicate`, {
+    method: "POST",
+  });
+  return handleResponse<ExportTemplateItem>(res);
+}
+
+export async function previewExportTemplate(
+  id: string,
+  draft?: any,
+): Promise<{ columns: Array<{ fieldId: string; header: string; format: string }>; rows: Array<Record<string, any>> }> {
+  const res = await apiFetch(`${API_BASE_URL}/export-templates/${id}/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ draft }),
+  });
+  return handleResponse(res);
+}
+
+export async function previewExportTemplateDraft(
+  entityId: string,
+  draft: any,
+): Promise<{ columns: Array<{ fieldId: string; header: string; format: string }>; rows: Array<Record<string, any>> }> {
+  const res = await apiFetch(`${API_BASE_URL}/export-templates/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ entityId, draft }),
+  });
+  return handleResponse(res);
+}
+
+export async function createExportDownloadToken(params: {
+  templateId?: string;
+  entityId?: string;
+  format: "xlsx" | "csv" | "pdf";
+  filters?: any;
+  parameters?: any;
+}): Promise<{ token: string; expiresIn: number; downloadUrl: string }> {
+  const res = await apiFetch(`${API_BASE_URL}/exports`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  return handleResponse(res);
+}
+
+export async function fetchExportTemplatePreviewData(id: string): Promise<{ draft: any }> {
+  const res = await apiFetch(`${API_BASE_URL}/export-templates/${id}/preview-data`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  return handleResponse<{ draft: any }>(res);
+}
+
+export async function downloadExportTemplateRenderPreview(id: string, withData: boolean = false): Promise<Blob> {
+  const url = `${API_BASE_URL}/export-templates/${id}/render-preview${withData ? '?withData=true' : ''}`;
+  const res = await apiFetch(url, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, errorData.message || "Failed to render preview", errorData.errors);
+  }
+  return res.blob();
+}
+
+export async function fetchDatasetPreview(
+  id: string,
+  dataset: any,
+  parameters?: any
+): Promise<{ rows: any[]; totalCount: number; isGrouped: boolean }> {
+  const res = await apiFetch(`${API_BASE_URL}/export-templates/${id}/dataset-preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dataset, parameters }),
+  });
+  return handleResponse(res);
 }
 

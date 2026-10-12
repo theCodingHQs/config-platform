@@ -24,6 +24,7 @@ vi.mock('../src/api/client', async () => {
     updateRecord: vi.fn(),
     fetchRecords: vi.fn(),
     fetchAggregate: vi.fn(),
+    fetchMyEntityPermissions: vi.fn(),
   };
 });
 
@@ -125,6 +126,14 @@ describe('Forms, Layout, Confirm, Reference Display & Templates', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearReferenceCache();
+    (apiClient.fetchMyEntityPermissions as any)?.mockResolvedValue?.({
+      role: 'admin',
+      canRead: true,
+      canCreate: true,
+      canUpdate: true,
+      canDelete: true,
+      fields: {},
+    });
   });
 
   // 1. Form Edit Mode: prefill from record and submit via PATCH
@@ -191,6 +200,173 @@ describe('Forms, Layout, Confirm, Reference Display & Templates', () => {
         })
       );
     });
+  });
+
+  // Edit-form save sends no system keys
+  it('edit-form save sends no system keys', async () => {
+    const user = userEvent.setup();
+
+    (apiClient.fetchRecord as any).mockResolvedValue({
+      id: 'emp_123',
+      name: 'Alice Cooper',
+      email: 'alice@example.com',
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-02T00:00:00.000Z',
+      department_id: null,
+    });
+    (apiClient.updateRecord as any).mockResolvedValue({
+      id: 'emp_123',
+      name: 'Alice Updated',
+      email: 'alice@example.com',
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-03T00:00:00.000Z',
+    });
+
+    render(
+      <FormComponent
+        entityId="t_employee"
+        mode="edit"
+        recordId="emp_123"
+        fields={[
+          { fieldId: 'c_emp_name' },
+          { fieldId: 'c_emp_email' },
+        ]}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const nameInput = await screen.findByDisplayValue('Alice Cooper');
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Alice Updated');
+
+    const submitBtn = screen.getByRole('button', { name: /Update/i });
+    await user.click(submitBtn);
+
+    await waitFor(() => {
+      expect(apiClient.updateRecord).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (apiClient.updateRecord as any).mock.calls[0];
+    const payload = callArgs[3];
+    expect(payload).toEqual({
+      name: 'Alice Updated',
+      email: 'alice@example.com',
+    });
+    expect(payload).not.toHaveProperty('id');
+    expect(payload).not.toHaveProperty('created_at');
+    expect(payload).not.toHaveProperty('updated_at');
+  });
+
+  // A viewer or editor with a read-only field does not send it and the save succeeds
+  it('a viewer or editor with a read-only field does not send it and the save succeeds', async () => {
+    const user = userEvent.setup();
+
+    (apiClient.fetchRecord as any).mockResolvedValue({
+      id: 'emp_123',
+      name: 'Bob Smith',
+      email: 'bob@example.com',
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-02T00:00:00.000Z',
+    });
+    (apiClient.fetchMyEntityPermissions as any).mockResolvedValue({
+      role: 'editor',
+      canRead: true,
+      canCreate: true,
+      canUpdate: true,
+      canDelete: true,
+      fields: {
+        c_emp_email: { readOnly: true, hidden: false },
+      },
+    });
+    (apiClient.updateRecord as any).mockResolvedValue({
+      id: 'emp_123',
+      name: 'Bob Updated',
+      email: 'bob@example.com',
+    });
+
+    render(
+      <FormComponent
+        entityId="t_employee"
+        mode="edit"
+        recordId="emp_123"
+        fields={[
+          { fieldId: 'c_emp_name' },
+          { fieldId: 'c_emp_email' },
+        ]}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const nameInput = await screen.findByDisplayValue('Bob Smith');
+    const emailInput = await screen.findByDisplayValue('bob@example.com');
+    expect(emailInput).toBeDisabled();
+
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Bob Updated');
+
+    const submitBtn = screen.getByRole('button', { name: /Update/i });
+    await user.click(submitBtn);
+
+    await waitFor(() => {
+      expect(apiClient.updateRecord).toHaveBeenCalledTimes(1);
+    });
+
+    const callArgs = (apiClient.updateRecord as any).mock.calls[0];
+    const payload = callArgs[3];
+    expect(payload).toEqual({
+      name: 'Bob Updated',
+    });
+    expect(payload).not.toHaveProperty('email');
+    expect(payload).not.toHaveProperty('c_emp_email');
+    expect(payload).not.toHaveProperty('id');
+    expect(payload).not.toHaveProperty('created_at');
+    expect(payload).not.toHaveProperty('updated_at');
+  });
+
+  // updateRecord with a full row object succeeds and strips system keys
+  it('updateRecord with a full row object succeeds and strips system keys', async () => {
+    const actualClient = await vi.importActual<typeof apiClient>('../src/api/client');
+    actualClient.setCsrfToken('mock-csrf-token');
+    const originalFetch = global.fetch;
+    const fetchMock = vi.fn().mockImplementation(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        id: 'emp_123',
+        name: 'Full Row Name',
+        email: 'full@example.com',
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-03T00:00:00.000Z',
+      }),
+    }));
+    global.fetch = fetchMock;
+
+    try {
+      const fullRow = {
+        id: 'emp_123',
+        name: 'Full Row Name',
+        email: 'full@example.com',
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: '2026-01-02T00:00:00.000Z',
+      };
+
+      const result = await actualClient.updateRecord('test-tenant', 't_employee', 'emp_123', fullRow);
+      expect(result).toBeDefined();
+      expect(result.id).toBe('emp_123');
+
+      const patchCall = fetchMock.mock.calls.find((call: any[]) => call[1]?.method === 'PATCH');
+      expect(patchCall).toBeDefined();
+      const requestBody = JSON.parse(patchCall![1].body);
+      expect(requestBody).toEqual({
+        name: 'Full Row Name',
+        email: 'full@example.com',
+      });
+      expect(requestBody.id).toBeUndefined();
+      expect(requestBody.created_at).toBeUndefined();
+      expect(requestBody.updated_at).toBeUndefined();
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 
   // 2. Per-field overrides: label, helpText, readOnly, hidden
@@ -417,5 +593,197 @@ describe('Forms, Layout, Confirm, Reference Display & Templates', () => {
 
       unmount();
     }
+  });
+
+  // 7. Modal + Form Footer & Permissions
+  it('hides Delete button when user role lacks delete permission', async () => {
+    (apiClient.fetchRecord as any).mockResolvedValue({
+      id: 'emp_123',
+      name: 'Bob',
+      email: 'bob@example.com',
+    });
+    (apiClient.fetchMyEntityPermissions as any).mockResolvedValue({
+      canRead: true,
+      canCreate: true,
+      canUpdate: true,
+      canDelete: false,
+    });
+
+    render(
+      <FormComponent
+        entityId="t_employee"
+        mode="edit"
+        recordId="emp_123"
+        fields={[{ fieldId: 'c_emp_name' }]}
+        showDelete={true}
+        deleteLabel="Delete Employee"
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Delete Employee/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows Delete button when user role has delete permission', async () => {
+    (apiClient.fetchRecord as any).mockResolvedValue({
+      id: 'emp_123',
+      name: 'Bob',
+      email: 'bob@example.com',
+    });
+    (apiClient.fetchMyEntityPermissions as any).mockResolvedValue({
+      canRead: true,
+      canCreate: true,
+      canUpdate: true,
+      canDelete: true,
+    });
+
+    render(
+      <FormComponent
+        entityId="t_employee"
+        mode="edit"
+        recordId="emp_123"
+        fields={[{ fieldId: 'c_emp_name' }]}
+        showDelete={true}
+        deleteLabel="Delete Employee"
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Delete Employee/i })).toBeInTheDocument();
+    });
+  });
+
+  it('hides footer entirely when showFooter is false in the page definition', async () => {
+    render(
+      <FormComponent
+        entityId="t_employee"
+        mode="create"
+        showFooter={false}
+        fields={[{ fieldId: 'c_emp_name' }]}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.queryByRole('button', { name: /Submit/i })).not.toBeInTheDocument();
+  });
+
+  it('executes onSubmit and onSuccess action chains on form submit', async () => {
+    const user = userEvent.setup();
+    (apiClient.createRecord as any).mockResolvedValue({ id: 'emp_999', name: 'New Employee' });
+
+    const pageWithChains: PageDefinition = {
+      schemaVersion: 2,
+      id: 'p_chains',
+      version: 1,
+      route: '/chains',
+      state: { submitRun: false, successRun: false },
+      dataSources: [],
+      root: {
+        id: 'f_test',
+        type: 'form',
+        props: {
+          entityId: 't_employee',
+          mode: 'create',
+          fields: [{ fieldId: 'c_emp_name' }],
+          onSubmit: [
+            { type: 'setState', params: { key: 'submitRun', value: true } },
+          ],
+          onSuccess: [
+            { type: 'setState', params: { key: 'successRun', value: true } },
+          ],
+        },
+      },
+    };
+
+    render(
+      <PageRuntimeProvider initialState={pageWithChains.state}>
+        {renderNode(pageWithChains.root)}
+      </PageRuntimeProvider>,
+      { wrapper: createWrapper() }
+    );
+
+    const nameInput = screen.getByRole('textbox');
+    await user.type(nameInput, 'New Employee');
+
+    const submitBtn = screen.getByRole('button', { name: /Submit/i });
+    await user.click(submitBtn);
+
+    await waitFor(() => {
+      expect(apiClient.createRecord).toHaveBeenCalled();
+    });
+  });
+
+  it('form field with unknown icon name falls back to the type icon at render', () => {
+    const { container } = render(
+      <FormComponent
+        entityId="t_employee"
+        mode="create"
+        fields={[
+          {
+            fieldId: 'c_emp_dept',
+            icon: 'UnknownCrazyIcon999' as any,
+          },
+        ]}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    // The unknown icon falls back to 'Link' (the type icon for reference), rendering lucide-link
+    const linkIcon = container.querySelector('.lucide-link');
+    expect(linkIcon).toBeInTheDocument();
+  });
+
+  it('loads a stored page containing an unknown form field icon and renders it without throwing', () => {
+    const storedPage: PageDefinition = {
+      schemaVersion: 2,
+      id: 'p_stored_unknown_icon',
+      version: 1,
+      route: '/stored-page',
+      state: {},
+      dataSources: [],
+      root: {
+        id: 'root_form_stored',
+        type: 'form',
+        props: {
+          entityId: 't_employee',
+          fields: [
+            {
+              fieldId: 'c_emp_dept',
+              label: 'Department',
+              icon: 'UnknownCrazyIcon999',
+            },
+            {
+              fieldId: 'c_emp_name',
+              label: 'Employee Name',
+              icon: 'SomeOldUnknownIconXYZ',
+            },
+          ],
+        },
+      },
+    };
+
+    let rendered: any = null;
+    expect(() => {
+      rendered = render(
+        <PageRuntimeProvider initialState={storedPage.state}>
+          {renderNode(storedPage.root)}
+        </PageRuntimeProvider>,
+        { wrapper: createWrapper() }
+      );
+    }).not.toThrow();
+
+    expect(screen.getByText('Department')).toBeInTheDocument();
+    expect(screen.getByText('Employee Name')).toBeInTheDocument();
+    expect(screen.queryByText(/Component Error/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Invalid enum value/i)).not.toBeInTheDocument();
+
+    const linkIcon = rendered!.container.querySelector('.lucide-link');
+    expect(linkIcon).toBeInTheDocument();
+
+    const typeIcon = rendered!.container.querySelector('.lucide-type');
+    expect(typeIcon).toBeInTheDocument();
   });
 });

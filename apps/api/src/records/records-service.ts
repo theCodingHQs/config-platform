@@ -51,7 +51,8 @@ export class RecordsService {
     const resolved = await entityCache.resolveEntity(tenantId, entityIdOrName);
     const { mappedPhysicalData } = await recordValidator.validate(tenantId, resolved, body, false);
 
-    const recordId = body.id || crypto.randomUUID();
+    // Silently ignore client-provided system id key; always generate a new UUID
+    const recordId = crypto.randomUUID();
     const schemaName = this.storage.getTenantSchemaName(tenantId);
     const tableName = resolved.entity.physicalTableName;
 

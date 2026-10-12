@@ -8,6 +8,8 @@ import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { createTestSession, cleanupTestUser } from './test-session-helper.js';
 import type { TestSession } from './test-session-helper.js';
+import { recordsService } from '../src/records/records-service.js';
+import { permissionService } from '../src/permissions/permission-service.js';
 
 describe('Generic Records API', () => {
   let server: FastifyInstance;
@@ -18,6 +20,7 @@ describe('Generic Records API', () => {
 
   let departmentEntityId: string;
   let employeeEntityId: string;
+  let ageFieldId: string;
 
   // Session for all Tenant A requests (owner – full CRUD)
   let authA: TestSession;
@@ -74,6 +77,7 @@ describe('Generic Records API', () => {
       ],
     });
     employeeEntityId = empRes.entity.id;
+    ageFieldId = empRes.fields.find((f) => f.name === 'age')!.id;
 
     // 3. Add FK relation between Employee and Department
     const deptRefField = empRes.fields.find((f) => f.name === 'department_id')!;
@@ -291,6 +295,143 @@ describe('Generic Records API', () => {
     expect(res.statusCode).toBe(400);
     const body = JSON.parse(res.payload);
     expect(body.message).toContain('Unknown field(s): unrecognized_field');
+  });
+
+  // 3a. System fields (id, created_at, updated_at) silently ignored on write & left unchanged
+  it('PATCH with echoed system fields succeeds and leaves them unchanged', async () => {
+    // Create record
+    const createRes = await server.inject({
+      method: 'POST',
+      url: `/api/entities/employee/records`,
+      headers: authA.headers,
+      payload: {
+        full_name: 'Echo Test User',
+        email: 'echo@example.com',
+      },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const created = JSON.parse(createRes.payload);
+    const originalId = created.id;
+    const originalCreatedAt = created.created_at;
+
+    // PATCH with echoed system fields
+    const patchRes = await server.inject({
+      method: 'PATCH',
+      url: `/api/entities/employee/records/${originalId}`,
+      headers: authA.headers,
+      payload: {
+        id: 'attempted-fake-id',
+        created_at: '2020-01-01T00:00:00.000Z',
+        updated_at: '2020-01-01T00:00:00.000Z',
+        full_name: 'Echo Test User Updated',
+      },
+    });
+    expect(patchRes.statusCode).toBe(200);
+    const updated = JSON.parse(patchRes.payload);
+
+    expect(updated.id).toBe(originalId);
+    expect(updated.created_at).toBe(originalCreatedAt);
+    expect(updated.full_name).toBe('Echo Test User Updated');
+  });
+
+  it('updateRecord with a full row object succeeds', async () => {
+    const created = await recordsService.createRecord(tenantA, 'employee', {
+      full_name: 'Full Row User',
+      email: 'fullrow@example.com',
+      age: 32,
+    });
+
+    // Update with full row object containing id, created_at, updated_at
+    const fullRow = {
+      ...created,
+      full_name: 'Full Row User Modified',
+    };
+
+    const updated = await recordsService.updateRecord(tenantA, 'employee', created.id, fullRow);
+    expect(updated.id).toBe(created.id);
+    expect(new Date(updated.created_at).toISOString()).toBe(new Date(created.created_at).toISOString());
+    expect(updated.full_name).toBe('Full Row User Modified');
+  });
+
+  it('PATCH with a truly unknown field still returns 400', async () => {
+    const createRes = await server.inject({
+      method: 'POST',
+      url: `/api/entities/employee/records`,
+      headers: authA.headers,
+      payload: {
+        full_name: 'Unknown Field Test',
+        email: 'unknown_patch@example.com',
+      },
+    });
+    const created = JSON.parse(createRes.payload);
+
+    // PATCH with system keys (ignored) AND truly unknown field
+    const res = await server.inject({
+      method: 'PATCH',
+      url: `/api/entities/employee/records/${created.id}`,
+      headers: authA.headers,
+      payload: {
+        id: created.id,
+        created_at: created.created_at,
+        truly_unknown_field: 'should-fail',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    const body = JSON.parse(res.payload);
+    expect(body.message).toContain('Unknown field(s): truly_unknown_field');
+  });
+
+  it('a viewer or editor with a read-only field does not send it and the save succeeds', async () => {
+    // Configure 'age' as read-only for editor role
+    await permissionService.setFieldPermission(tenantA, employeeEntityId, ageFieldId, 'editor', {
+      hidden: false,
+      readOnly: true,
+    });
+
+    const editorSession = await createTestSession(tenantA, 'editor', 'rec_ed_ro');
+
+    try {
+      const createRes = await server.inject({
+        method: 'POST',
+        url: `/api/entities/employee/records`,
+        headers: authA.headers,
+        payload: {
+          full_name: 'Editor RO Test',
+          email: 'editor_ro@example.com',
+          age: 25,
+        },
+      });
+      const created = JSON.parse(createRes.payload);
+
+      // Sending read-only field directly is rejected by server
+      const failRes = await server.inject({
+        method: 'PATCH',
+        url: `/api/entities/employee/records/${created.id}`,
+        headers: editorSession.headers,
+        payload: {
+          age: 26,
+          full_name: 'Attempted RO Update',
+        },
+      });
+      expect(failRes.statusCode).toBe(403);
+      expect(JSON.parse(failRes.payload).message).toContain('read-only');
+
+      // When editor does not send read-only field, save succeeds
+      const successRes = await server.inject({
+        method: 'PATCH',
+        url: `/api/entities/employee/records/${created.id}`,
+        headers: editorSession.headers,
+        payload: {
+          full_name: 'Editor RO Success',
+        },
+      });
+      expect(successRes.statusCode).toBe(200);
+      const updated = JSON.parse(successRes.payload);
+      expect(updated.full_name).toBe('Editor RO Success');
+      expect(Number(updated.age)).toBe(25);
+    } finally {
+      await cleanupTestUser(editorSession.userId);
+    }
   });
 
   // 4. Reference integrity on create

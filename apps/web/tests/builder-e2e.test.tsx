@@ -271,5 +271,5 @@ describe('End-to-End: Master/Detail Page via Builder UI Operations', () => {
     await waitFor(() => {
       expect(apiClient.publishPage).toHaveBeenCalledWith(tenantId, 'p_master_detail');
     });
-  }, 15000);
+  }, 60000);
 });

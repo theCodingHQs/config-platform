@@ -153,6 +153,34 @@ describe('Part A: Auth Fixes & Tests', () => {
       expect(checkB.json().data).toHaveLength(0);
     });
 
+    it('POST /entities/:id/import/commit on a foreign entity returns 404 and inserts nothing', async () => {
+      const boundary = '----WebKitFormBoundaryCrossTenantTest';
+      const body = Buffer.concat([
+        Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="test.csv"\r\nContent-Type: text/csv\r\n\r\ninv_num\nHACK-999\r\n`),
+        Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="mapping"\r\n\r\n{"inv_num":"f_foreign"}\r\n`),
+        Buffer.from(`--${boundary}--\r\n`),
+      ]);
+
+      const res = await server.inject({
+        method: 'POST',
+        url: `/api/entities/${entityIdB}/import/commit`,
+        headers: {
+          ...editorA.headers,
+          'content-type': `multipart/form-data; boundary=${boundary}`,
+        },
+        payload: body,
+      });
+      expect(res.statusCode).toBe(404);
+
+      // Verify no records inserted in Tenant B
+      const checkB = await server.inject({
+        method: 'GET',
+        url: `/api/entities/${entityIdB}/records`,
+        headers: ownerB.headers,
+      });
+      expect(checkB.json().data).toHaveLength(0);
+    });
+
     it('PUT /schema/entities/:id on a foreign entity returns 404 and changes nothing', async () => {
       const res = await server.inject({
         method: 'PUT',

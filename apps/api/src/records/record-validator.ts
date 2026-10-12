@@ -31,7 +31,8 @@ export class RecordValidator {
     tenantId: string,
     resolvedEntity: ResolvedEntity,
     data: Record<string, any>,
-    isPatch: boolean = false
+    isPatch: boolean = false,
+    options?: { skipReferenceDbCheck?: boolean }
   ): Promise<{ mappedPhysicalData: Record<string, any> }> {
     const errors: Record<string, string> = {};
     const unknownFields: string[] = [];
@@ -40,10 +41,7 @@ export class RecordValidator {
     // 1. Check for unknown fields
     for (const key of Object.keys(data)) {
       if (resolvedEntity.systemFields.has(key)) {
-        // Disallow client setting system timestamp/id directly
-        if (key === 'created_at' || key === 'updated_at') {
-          unknownFields.push(key);
-        }
+        // Silently ignore system keys (id, created_at, updated_at) if present - never write them
         continue;
       }
       if (!resolvedEntity.fieldByName.has(key)) {
@@ -162,6 +160,11 @@ export class RecordValidator {
           const cfg = (field.config || {}) as { targetEntityId: string };
           if (!cfg.targetEntityId) {
             errors[field.name] = `Reference target entity is not configured`;
+            break;
+          }
+
+          if (options?.skipReferenceDbCheck) {
+            mappedPhysicalData[field.physicalColumnName] = val;
             break;
           }
 

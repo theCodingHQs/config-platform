@@ -1,13 +1,30 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { QueryClientContext } from '@tanstack/react-query';
-import type { PageDefinition, DataSourceDefinition, ActionDefinition, ExpressionScope } from '@config-platform/schema';
-import { evaluateExpression, resolveTemplate } from '@config-platform/schema';
-import * as apiClient from '../api/client';
-import { executeActionChain, type ActionExecutionContext } from '../renderer/action-runner';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
+import { QueryClientContext } from "@tanstack/react-query";
+import type {
+  PageDefinition,
+  DataSourceDefinition,
+  ActionDefinition,
+  ExpressionScope,
+} from "@config-platform/schema";
+import { evaluateExpression, resolveTemplate } from "@config-platform/schema";
+import * as apiClient from "../api/client";
+import {
+  executeActionChain,
+  type ActionExecutionContext,
+} from "../renderer/action-runner";
+import { useOptionalMetadata } from "./metadata-context";
 
 export interface ToastState {
   message: string;
-  variant: 'info' | 'success' | 'warning' | 'error';
+  variant: "info" | "success" | "warning" | "error";
   visible: boolean;
 }
 
@@ -17,6 +34,13 @@ export interface DataSourceState {
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+  pageIndex: number;
+  pageSize: number;
+  nextCursor: string | null;
+  hasMore: boolean;
+  goToNextPage: () => Promise<void>;
+  goToPrevPage: () => Promise<void>;
+  setPageSize: (size: number) => Promise<void>;
 }
 
 export interface PageRuntimeContextType {
@@ -28,9 +52,15 @@ export interface PageRuntimeContextType {
   user: Record<string, any>;
   dataSources: Record<string, DataSourceState>;
   scope: ExpressionScope;
-  runActionChain: (actions: ActionDefinition[] | undefined, extraScope?: Partial<ExpressionScope>) => Promise<boolean>;
+  runActionChain: (
+    actions: ActionDefinition[] | undefined,
+    extraScope?: Partial<ExpressionScope>,
+  ) => Promise<boolean>;
   toast: ToastState;
-  showToast: (message: string, variant?: 'info' | 'success' | 'warning' | 'error') => void;
+  showToast: (
+    message: string,
+    variant?: "info" | "success" | "warning" | "error",
+  ) => void;
   hideToast: () => void;
 }
 
@@ -51,26 +81,30 @@ export interface PageRuntimeProviderProps {
 const inFlightQueries = new Map<string, Promise<any>>();
 
 const DEFAULT_PARAMS: Record<string, any> = {};
-const DEFAULT_USER: Record<string, any> = { id: 'u_admin', name: 'Admin', role: 'admin' };
+const DEFAULT_USER: Record<string, any> = {
+  id: "u_admin",
+  name: "Admin",
+  role: "admin",
+};
 const DEFAULT_PAGE: PageDefinition = {
-  id: 'default',
+  id: "default",
   schemaVersion: 2,
   version: 1,
-  route: '/',
+  route: "/",
   state: {},
   dataSources: [],
-  root: { id: 'root', type: 'stack', props: {} },
+  root: { id: "root", type: "stack", props: {} },
 };
 
 export function PageRuntimeProvider({
-  tenantId = 'default',
+  tenantId = "default",
   page = DEFAULT_PAGE,
   initialState,
   initialDataSources,
   params = DEFAULT_PARAMS,
   user = DEFAULT_USER,
   navigate = (url: string) => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       window.location.href = url;
     }
   },
@@ -88,20 +122,26 @@ export function PageRuntimeProvider({
 
   // 2. Toast State
   const [toast, setToast] = useState<ToastState>({
-    message: '',
-    variant: 'info',
+    message: "",
+    variant: "info",
     visible: false,
   });
 
   const toastTimerRef = useRef<any>(null);
 
-  const showToast = useCallback((message: string, variant: 'info' | 'success' | 'warning' | 'error' = 'info') => {
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast({ message, variant, visible: true });
-    toastTimerRef.current = setTimeout(() => {
-      setToast((prev) => ({ ...prev, visible: false }));
-    }, 4000);
-  }, []);
+  const showToast = useCallback(
+    (
+      message: string,
+      variant: "info" | "success" | "warning" | "error" = "info",
+    ) => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      setToast({ message, variant, visible: true });
+      toastTimerRef.current = setTimeout(() => {
+        setToast((prev) => ({ ...prev, visible: false }));
+      }, 4000);
+    },
+    [],
+  );
 
   const hideToast = useCallback(() => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -118,7 +158,12 @@ export function PageRuntimeProvider({
   } | null>(null);
 
   const requestConfirm = useCallback(
-    (options: { title?: string; message: string; confirmLabel?: string; cancelLabel?: string }) => {
+    (options: {
+      title?: string;
+      message: string;
+      confirmLabel?: string;
+      cancelLabel?: string;
+    }) => {
       return new Promise<boolean>((resolve) => {
         setConfirmDialog({
           ...options,
@@ -129,7 +174,7 @@ export function PageRuntimeProvider({
         });
       });
     },
-    []
+    [],
   );
 
   // 3. Base Scope for evaluation (state, params, user)
@@ -145,40 +190,125 @@ export function PageRuntimeProvider({
   const queryClient = useContext(QueryClientContext);
 
   // 4. Data Sources Manager
-  const [dsData, setDsData] = useState<Record<string, { data: any[]; total?: number; loading: boolean; error: string | null }>>({});
-  const [manualRefetchCounters, setManualRefetchCounters] = useState<Record<string, number>>({});
-
-  const refetchDataSource = useCallback(async (sourceId?: string) => {
-    // 1. Invalidate TanStack query cache for direct entity queries (Table, Stat, Chart)
-    if (queryClient) {
-      if (sourceId) {
-        queryClient.invalidateQueries({ queryKey: ['records', tenantId, sourceId] });
-        queryClient.invalidateQueries({ queryKey: ['aggregate', tenantId, sourceId] });
-        queryClient.invalidateQueries({ queryKey: ['chart-records', tenantId, sourceId] });
-      } else {
-        queryClient.invalidateQueries({ queryKey: ['records'] });
-        queryClient.invalidateQueries({ queryKey: ['aggregate'] });
-        queryClient.invalidateQueries({ queryKey: ['chart-records'] });
+  const [dsData, setDsData] = useState<
+    Record<
+      string,
+      {
+        data: any[];
+        total?: number;
+        nextCursor: string | null;
+        loading: boolean;
+        error: string | null;
       }
-    }
-
-    // 2. Trigger refetch for custom page Data Sources
-    setManualRefetchCounters((prev) => {
-      if (sourceId) {
-        return { ...prev, [sourceId]: (prev[sourceId] || 0) + 1 };
+    >
+  >({});
+  const [dsPagination, setDsPagination] = useState<
+    Record<
+      string,
+      {
+        cursorStack: (string | null)[];
+        pageIndex: number;
+        pageSize?: number;
       }
-      // Refetch all data sources
-      const next: Record<string, number> = {
+    >
+  >({});
+  const [manualRefetchCounters, setManualRefetchCounters] = useState<
+    Record<string, number>
+  >({});
+
+  const refetchDataSource = useCallback(
+    async (sourceId?: string) => {
+      // 1. Invalidate TanStack query cache for direct entity queries (Table, Stat, Chart)
+      if (queryClient) {
+        if (sourceId) {
+          queryClient.invalidateQueries({
+            queryKey: ["records", tenantId, sourceId],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["aggregate", tenantId, sourceId],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["chart-records", tenantId, sourceId],
+          });
+        } else {
+          queryClient.invalidateQueries({ queryKey: ["records"] });
+          queryClient.invalidateQueries({ queryKey: ["aggregate"] });
+          queryClient.invalidateQueries({ queryKey: ["chart-records"] });
+        }
+      }
+
+      // 2. Trigger refetch for custom page Data Sources
+      setManualRefetchCounters((prev) => {
+        if (sourceId) {
+          return { ...prev, [sourceId]: (prev[sourceId] || 0) + 1 };
+        }
+        // Refetch all data sources
+        const next: Record<string, number> = {
+          ...prev,
+          __all__: (prev.__all__ || 0) + 1,
+        };
+        const sources = initialDataSources || page?.dataSources || [];
+        for (const ds of sources) {
+          next[ds.id] = (prev[ds.id] || 0) + 1;
+        }
+        return next;
+      });
+    },
+    [page?.dataSources, initialDataSources, queryClient, tenantId],
+  );
+
+  const goToNextPage = useCallback(
+    async (dsId: string) => {
+      const currentData = dsData[dsId];
+      const nextCursor = currentData?.nextCursor;
+      if (!nextCursor) return;
+
+      setDsPagination((prev) => {
+        const cur = prev[dsId] || { cursorStack: [null], pageIndex: 0 };
+        const nextIndex = cur.pageIndex + 1;
+        const nextStack = [...cur.cursorStack];
+        if (nextIndex >= nextStack.length) {
+          nextStack.push(nextCursor);
+        } else {
+          nextStack[nextIndex] = nextCursor;
+        }
+        return {
+          ...prev,
+          [dsId]: {
+            ...cur,
+            cursorStack: nextStack,
+            pageIndex: nextIndex,
+          },
+        };
+      });
+    },
+    [dsData],
+  );
+
+  const goToPrevPage = useCallback(async (dsId: string) => {
+    setDsPagination((prev) => {
+      const cur = prev[dsId] || { cursorStack: [null], pageIndex: 0 };
+      if (cur.pageIndex <= 0) return prev;
+      return {
         ...prev,
-        __all__: (prev.__all__ || 0) + 1,
+        [dsId]: {
+          ...cur,
+          pageIndex: cur.pageIndex - 1,
+        },
       };
-      const sources = initialDataSources || page?.dataSources || [];
-      for (const ds of sources) {
-        next[ds.id] = (prev[ds.id] || 0) + 1;
-      }
-      return next;
     });
-  }, [page?.dataSources, initialDataSources, queryClient, tenantId]);
+  }, []);
+
+  const setDsPageSize = useCallback(async (dsId: string, size: number) => {
+    setDsPagination((prev) => ({
+      ...prev,
+      [dsId]: {
+        cursorStack: [null],
+        pageIndex: 0,
+        pageSize: size,
+      },
+    }));
+  }, []);
 
   const stateJson = JSON.stringify(pageState);
   const dataSourcesList = initialDataSources || page?.dataSources || [];
@@ -189,25 +319,72 @@ export function PageRuntimeProvider({
     const list = dataSourcesList;
     return list.map((ds) => {
       let resolvedFilter: Record<string, any> | undefined = undefined;
-      if (ds.filter && typeof ds.filter === 'object') {
+      if (ds.filter && typeof ds.filter === "object") {
         resolvedFilter = {};
         for (const [k, v] of Object.entries(ds.filter)) {
-          if (typeof v === 'string') {
+          if (typeof v === "string") {
             resolvedFilter[k] = resolveTemplate(v, baseScope);
           } else {
             resolvedFilter[k] = v;
           }
         }
       }
+
+      const pagination = dsPagination[ds.id];
+      const pageIndex = pagination?.pageIndex ?? 0;
+      const cursorStack = pagination?.cursorStack ?? [null];
+      const currentCursor = cursorStack[pageIndex] ?? null;
+      const currentLimit = pagination?.pageSize ?? ds.limit ?? 10;
+
       return {
         id: ds.id,
         entityId: ds.entityId,
         filter: resolvedFilter,
         sort: ds.sort,
-        limit: ds.limit,
+        limit: currentLimit,
+        cursor: currentCursor,
+        pageIndex,
+        cursorStack,
       };
     });
-  }, [dataSourcesJson, stateJson, baseScope]);
+  }, [dataSourcesList, stateJson, baseScope, dsPagination]);
+
+  // Reset pagination if filter expressions dynamically change
+  const filterStrings = useMemo(() => {
+    const res: Record<string, string> = {};
+    for (const ds of evaluatedDataSources) {
+      res[ds.id] = JSON.stringify(ds.filter);
+    }
+    return res;
+  }, [evaluatedDataSources]);
+
+  const prevFiltersRef = useRef<Record<string, string>>({});
+  useEffect(() => {
+    let changed = false;
+    const nextPag = { ...dsPagination };
+    for (const [id, filterStr] of Object.entries(filterStrings)) {
+      if (
+        prevFiltersRef.current[id] !== undefined &&
+        prevFiltersRef.current[id] !== filterStr
+      ) {
+        if (
+          nextPag[id] &&
+          (nextPag[id].pageIndex > 0 || nextPag[id].cursorStack.length > 1)
+        ) {
+          nextPag[id] = {
+            cursorStack: [null],
+            pageIndex: 0,
+            pageSize: nextPag[id].pageSize,
+          };
+          changed = true;
+        }
+      }
+      prevFiltersRef.current[id] = filterStr;
+    }
+    if (changed) {
+      setDsPagination(nextPag);
+    }
+  }, [filterStrings, dsPagination]);
 
   const lastFetchedKeyRef = useRef<Record<string, string>>({});
 
@@ -216,11 +393,17 @@ export function PageRuntimeProvider({
     let isCancelled = false;
 
     evaluatedDataSources.forEach((ds) => {
-      const refetchTrigger = (manualRefetchCounters[ds.id] || 0) + (manualRefetchCounters.__all__ || 0);
-      const queryKey = `${tenantId}:${ds.entityId}:${JSON.stringify(ds.filter)}:${JSON.stringify(ds.sort)}:${ds.limit}:${refetchTrigger}`;
+      const refetchTrigger =
+        (manualRefetchCounters[ds.id] || 0) +
+        (manualRefetchCounters.__all__ || 0);
+      const queryKey = `${tenantId}:${ds.entityId}:${JSON.stringify(ds.filter)}:${JSON.stringify(ds.sort)}:${ds.limit}:${ds.cursor || "null"}:${refetchTrigger}`;
 
       // Skip fetching if this exact queryKey was already fetched and data is loaded
-      if (lastFetchedKeyRef.current[ds.id] === queryKey && dsData[ds.id]?.data !== undefined && !dsData[ds.id]?.loading) {
+      if (
+        lastFetchedKeyRef.current[ds.id] === queryKey &&
+        dsData[ds.id]?.data !== undefined &&
+        !dsData[ds.id]?.loading
+      ) {
         return;
       }
       lastFetchedKeyRef.current[ds.id] = queryKey;
@@ -233,6 +416,7 @@ export function PageRuntimeProvider({
           [ds.id]: {
             data: prev[ds.id]?.data || [],
             total: prev[ds.id]?.total,
+            nextCursor: prev[ds.id]?.nextCursor || null,
             loading: true,
             error: null,
           },
@@ -242,13 +426,18 @@ export function PageRuntimeProvider({
       // Check if duplicate query is already in flight
       let fetchPromise = inFlightQueries.get(queryKey);
       if (!fetchPromise) {
-        const sortOrder = (ds.sort as any)?.order || (ds.sort as any)?.direction;
-        const sortParam = ds.sort ? `${sortOrder === 'desc' ? '-' : ''}${ds.sort.fieldId}` : undefined;
+        const sortOrder =
+          (ds.sort as any)?.order || (ds.sort as any)?.direction;
+        const sortParam = ds.sort
+          ? `${sortOrder === "desc" ? "-" : ""}${ds.sort.fieldId}`
+          : undefined;
         fetchPromise = apiClient
           .fetchRecords(tenantId, ds.entityId, {
             filter: ds.filter,
             sort: sortParam,
             limit: ds.limit,
+            cursor: ds.cursor,
+            count: true,
           })
           .finally(() => {
             inFlightQueries.delete(queryKey);
@@ -264,6 +453,7 @@ export function PageRuntimeProvider({
               [ds.id]: {
                 data: res.data || [],
                 total: res.total,
+                nextCursor: res.nextCursor || null,
                 loading: false,
                 error: null,
               },
@@ -276,8 +466,10 @@ export function PageRuntimeProvider({
               ...prev,
               [ds.id]: {
                 data: [],
+                total: 0,
+                nextCursor: null,
                 loading: false,
-                error: err?.message || 'Failed to load data',
+                error: err?.message || "Failed to load data",
               },
             }));
           }
@@ -292,18 +484,43 @@ export function PageRuntimeProvider({
   // Combined dataSources map for consumers
   const dataSources = useMemo<Record<string, DataSourceState>>(() => {
     const res: Record<string, DataSourceState> = {};
-    for (const ds of page.dataSources || []) {
-      const info = dsData[ds.id] || { data: [], loading: true, error: null };
+    for (const ds of dataSourcesList) {
+      const info = dsData[ds.id] || {
+        data: [],
+        loading: true,
+        error: null,
+        nextCursor: null,
+      };
+      const pag = dsPagination[ds.id];
+      const pageIndex = pag?.pageIndex ?? 0;
+      const pageSize = pag?.pageSize ?? ds.limit ?? 10;
+      const hasMore = Boolean(info.nextCursor);
+
       res[ds.id] = {
         data: info.data,
         total: info.total,
         loading: info.loading,
         error: info.error,
         refetch: () => refetchDataSource(ds.id),
+        pageIndex,
+        pageSize,
+        nextCursor: info.nextCursor || null,
+        hasMore,
+        goToNextPage: () => goToNextPage(ds.id),
+        goToPrevPage: () => goToPrevPage(ds.id),
+        setPageSize: (size: number) => setDsPageSize(ds.id, size),
       };
     }
     return res;
-  }, [page.dataSources, dsData, refetchDataSource]);
+  }, [
+    dataSourcesList,
+    dsData,
+    dsPagination,
+    refetchDataSource,
+    goToNextPage,
+    goToPrevPage,
+    setDsPageSize,
+  ]);
 
   // 5. Full Expression Scope including ds
   const fullScope = useMemo<ExpressionScope>(() => {
@@ -319,6 +536,40 @@ export function PageRuntimeProvider({
     };
   }, [pageState, params, user, dataSources]);
 
+  const metadata = useOptionalMetadata();
+
+  const sanitizeActionData = useCallback(
+    (entityId: string, data: Record<string, any>) => {
+      const SYSTEM_KEYS = new Set(["id", "created_at", "updated_at"]);
+      const clean: Record<string, any> = {};
+      if (!data || typeof data !== "object") return clean;
+
+      const entity = metadata?.resolveEntity(entityId);
+      const fieldMap = new Map<string, any>();
+      if (entity) {
+        for (const col of entity.columns || entity.fields || []) {
+          fieldMap.set(col.name, col);
+          fieldMap.set(col.id, col);
+        }
+      }
+
+      for (const [k, v] of Object.entries(data)) {
+        if (SYSTEM_KEYS.has(k)) continue;
+
+        if (entity && fieldMap.size > 0) {
+          const col = fieldMap.get(k);
+          if (!col) continue; // Exclude fields not configured in entity
+          if (SYSTEM_KEYS.has(col.name) || SYSTEM_KEYS.has(col.id)) continue;
+          clean[col.name] = v;
+        } else {
+          clean[k] = v;
+        }
+      }
+      return clean;
+    },
+    [metadata],
+  );
+
   // 6. Action Execution Context
   const actionContext = useMemo<ActionExecutionContext>(() => {
     return {
@@ -329,15 +580,39 @@ export function PageRuntimeProvider({
       navigate,
       showToast,
       refetchDataSource,
-      createRecord: (entityId, data) => apiClient.createRecord(tenantId, entityId, data),
-      updateRecord: (entityId, id, data) => apiClient.updateRecord(tenantId, entityId, id, data),
-      deleteRecord: (entityId, id) => apiClient.deleteRecord(tenantId, entityId, id),
+      createRecord: (entityId, data) =>
+        apiClient.createRecord(
+          tenantId,
+          entityId,
+          sanitizeActionData(entityId, data),
+        ),
+      updateRecord: (entityId, id, data) =>
+        apiClient.updateRecord(
+          tenantId,
+          entityId,
+          id,
+          sanitizeActionData(entityId, data),
+        ),
+      deleteRecord: (entityId, id) =>
+        apiClient.deleteRecord(tenantId, entityId, id),
       requestConfirm,
     };
-  }, [tenantId, pageState, setKey, navigate, showToast, refetchDataSource, requestConfirm]);
+  }, [
+    tenantId,
+    pageState,
+    setKey,
+    navigate,
+    showToast,
+    refetchDataSource,
+    requestConfirm,
+    sanitizeActionData,
+  ]);
 
   const runActionChain = useCallback(
-    async (actions: ActionDefinition[] | undefined, extraScope: Partial<ExpressionScope> = {}) => {
+    async (
+      actions: ActionDefinition[] | undefined,
+      extraScope: Partial<ExpressionScope> = {},
+    ) => {
       const currentScope: ExpressionScope = {
         ...fullScope,
         ...extraScope,
@@ -345,7 +620,7 @@ export function PageRuntimeProvider({
       };
       return executeActionChain(actions, actionContext, currentScope);
     },
-    [fullScope, pageState, actionContext]
+    [fullScope, pageState, actionContext],
   );
 
   return (
@@ -373,41 +648,44 @@ export function PageRuntimeProvider({
           aria-live="polite"
           data-testid="toast-notification"
           style={{
-            position: 'fixed',
-            bottom: 'var(--space-6)',
-            right: 'var(--space-6)',
+            position: "fixed",
+            bottom: "var(--space-6)",
+            right: "var(--space-6)",
             zIndex: 9999,
-            padding: 'var(--space-3) var(--space-5)',
-            borderRadius: 'var(--radius-md)',
+            padding: "var(--space-3) var(--space-5)",
+            borderRadius: "var(--radius-control)",
             background:
-              toast.variant === 'error'
-                ? 'var(--danger)'
-                : toast.variant === 'success'
-                ? 'var(--success)'
-                : toast.variant === 'warning'
-                ? 'var(--warning)'
-                : 'var(--surface-2)',
-            color: toast.variant === 'warning' ? 'var(--warning-contrast)' : 'var(--accent-contrast)',
-            boxShadow: 'var(--shadow-lg)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-3)',
-            fontSize: 'var(--font-size-sm)',
+              toast.variant === "error"
+                ? "var(--danger)"
+                : toast.variant === "success"
+                  ? "var(--success)"
+                  : toast.variant === "warning"
+                    ? "var(--warning)"
+                    : "var(--surface-2)",
+            color:
+              toast.variant === "warning"
+                ? "var(--warning-contrast)"
+                : "var(--accent-contrast)",
+            boxShadow: "var(--shadow-lg)",
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-3)",
+            fontSize: "var(--font-size-sm)",
             fontWeight: 500,
-            animation: 'fadeIn 0.2s ease-out',
+            animation: "fadeIn 0.2s ease-out",
           }}
         >
           <span>{toast.message}</span>
           <button
             onClick={hideToast}
             style={{
-              background: 'transparent',
-              border: 'none',
-              color: 'currentColor',
-              cursor: 'pointer',
+              background: "transparent",
+              border: "none",
+              color: "currentColor",
+              cursor: "pointer",
               padding: 0,
-              marginLeft: 'var(--space-2)',
-              fontSize: 'var(--font-size-base)',
+              marginLeft: "var(--space-2)",
+              fontSize: "var(--font-size-base)",
               lineHeight: 1,
             }}
           >
@@ -422,52 +700,71 @@ export function PageRuntimeProvider({
           aria-modal="true"
           data-testid="confirm-dialog"
           style={{
-            position: 'fixed',
+            position: "fixed",
             top: 0,
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'var(--overlay-bg)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            backgroundColor: "var(--overlay-bg)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             zIndex: 10000,
           }}
         >
           <div
             style={{
-              backgroundColor: 'var(--surface)',
-              borderRadius: 'var(--radius-lg)',
-              border: 'var(--border-width) solid var(--border)',
-              padding: 'var(--space-6)',
-              maxWidth: '420px',
-              width: '90%',
-              boxShadow: 'var(--shadow-xl)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 'var(--space-4)',
+              backgroundColor: "var(--surface)",
+              borderRadius: "var(--radius-surface)",
+              border: "var(--border-width) solid var(--border)",
+              padding: "var(--space-6)",
+              maxWidth: "420px",
+              width: "90%",
+              boxShadow: "var(--shadow-xl)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "var(--space-4)",
             }}
           >
-            <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>
-              {confirmDialog.title || 'Confirm Action'}
+            <h3
+              style={{
+                margin: 0,
+                fontSize: "var(--font-size-lg)",
+                fontWeight: 600,
+              }}
+            >
+              {confirmDialog.title || "Confirm Action"}
             </h3>
-            <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--muted)' }}>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "var(--font-size-sm)",
+                color: "var(--muted)",
+              }}
+            >
               {confirmDialog.message}
             </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "var(--space-2)",
+                marginTop: "var(--space-2)",
+              }}
+            >
               <button
                 type="button"
                 className="btn btn-secondary"
                 onClick={() => confirmDialog.resolve(false)}
               >
-                {confirmDialog.cancelLabel || 'Cancel'}
+                {confirmDialog.cancelLabel || "Cancel"}
               </button>
               <button
                 type="button"
                 className="btn btn-danger"
                 onClick={() => confirmDialog.resolve(true)}
               >
-                {confirmDialog.confirmLabel || 'Confirm'}
+                {confirmDialog.confirmLabel || "Confirm"}
               </button>
             </div>
           </div>

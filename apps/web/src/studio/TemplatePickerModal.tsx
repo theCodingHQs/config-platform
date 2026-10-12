@@ -73,7 +73,7 @@ export const TemplatePickerModal: React.FC<TemplatePickerModalProps> = ({
       <div
         style={{
           backgroundColor: 'var(--surface)',
-          borderRadius: 'var(--radius-lg)',
+          borderRadius: 'var(--radius-surface)',
           width: '560px',
           maxWidth: '90vw',
           maxHeight: '85vh',
@@ -127,7 +127,7 @@ export const TemplatePickerModal: React.FC<TemplatePickerModalProps> = ({
                       alignItems: 'flex-start',
                       gap: 'var(--space-3)',
                       padding: 'var(--space-3) var(--space-4)',
-                      borderRadius: 'var(--radius-md)',
+                      borderRadius: 'var(--radius-surface)',
                       border: `${isSelected ? '2px' : '1px'} solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
                       backgroundColor: isSelected ? 'var(--accent-subtle)' : 'transparent',
                       cursor: 'pointer',
@@ -137,7 +137,7 @@ export const TemplatePickerModal: React.FC<TemplatePickerModalProps> = ({
                     <div
                       style={{
                         padding: 'var(--space-2)',
-                        borderRadius: 'var(--radius-sm)',
+                        borderRadius: 'var(--radius-control)',
                         backgroundColor: isSelected ? 'var(--accent)' : 'var(--surface-2)',
                         color: isSelected ? 'var(--accent-contrast)' : 'var(--muted)',
                         display: 'flex',

@@ -340,7 +340,7 @@ export class QueryBuilder {
     const orderClauses = options.sorts.map(
       (s) => `"${s.physicalColumn}" ${s.direction} NULLS LAST`
     );
-    const orderSql = `ORDER BY ${orderClauses.join(', ')}`;
+    const orderSql = orderClauses.length > 0 ? `ORDER BY ${orderClauses.join(', ')}` : '';
 
     // Fetch limit + 1 to calculate nextCursor
     params.push(options.limit + 1);

@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import { FieldTypeSchema, FieldConfigSchema } from './fields.js';
+import { AllowedIconNameSchema } from './icons.js';
 
 export const CreateEntityInputSchema = z.object({
   name: z.string().min(1).regex(/^[a-zA-Z0-9_]+$/, 'Name must be alphanumeric'),
   label: z.string().min(1),
   displayFieldId: z.string().nullable().optional(),
+  icon: AllowedIconNameSchema.nullable().optional(),
   fields: z.array(z.object({
     name: z.string().min(1).regex(/^[a-zA-Z0-9_]+$/),
     label: z.string().min(1),
@@ -23,6 +25,7 @@ export const UpdateEntityInputSchema = z.object({
   label: z.string().min(1).optional(),
   name: z.string().min(1).regex(/^[a-zA-Z0-9_]+$/).optional(),
   displayFieldId: z.string().nullable().optional(),
+  icon: AllowedIconNameSchema.nullable().optional(),
 });
 
 export type UpdateEntityInput = z.infer<typeof UpdateEntityInputSchema>;

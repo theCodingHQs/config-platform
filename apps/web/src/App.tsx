@@ -14,17 +14,77 @@ import {
   QueryClientProvider,
   useQuery,
 } from "@tanstack/react-query";
-import { MetadataProvider } from "./context/metadata-context";
+import {
+  MetadataProvider,
+  useOptionalMetadata,
+} from "./context/metadata-context";
+import { DynamicIcon } from "./components/dynamic-icon";
 import { PageRuntimeProvider } from "./context/page-runtime-context";
 import { AuthProvider, useAuth } from "./context/auth-context";
 import { renderNode } from "./renderer/render-node";
 import { fetchPublishedPages, type CurrentUser } from "./api/client";
-import { EntityManager } from "./studio/EntityManager";
-import { PageManager } from "./studio/PageManager";
-import { PageBuilder } from "./studio/PageBuilder";
-import { PermissionsManager } from "./studio/PermissionsManager";
-import { WorkspaceSettings } from "./studio/WorkspaceSettings";
-import { ThemeStudio } from "./studio/ThemeStudio";
+const EntityManager = React.lazy(() =>
+  import("./studio/EntityManager").then((m) => ({ default: m.EntityManager }))
+);
+const PageManager = React.lazy(() =>
+  import("./studio/PageManager").then((m) => ({ default: m.PageManager }))
+);
+const PageBuilder = React.lazy(() =>
+  import("./studio/PageBuilder").then((m) => ({ default: m.PageBuilder }))
+);
+const PermissionsManager = React.lazy(() =>
+  import("./studio/PermissionsManager").then((m) => ({
+    default: m.PermissionsManager,
+  }))
+);
+const ExportTemplatesManager = React.lazy(() =>
+  import("./studio/ExportTemplatesManager").then((m) => ({
+    default: m.ExportTemplatesManager,
+  }))
+);
+const GridTemplateDesigner = React.lazy(() =>
+  import("./studio/GridTemplateDesigner").then((m) => ({
+    default: m.GridTemplateDesigner,
+  }))
+);
+const WorkspaceSettings = React.lazy(() =>
+  import("./studio/WorkspaceSettings").then((m) => ({
+    default: m.WorkspaceSettings,
+  }))
+);
+const ThemeStudio = React.lazy(() =>
+  import("./studio/ThemeStudio").then((m) => ({ default: m.ThemeStudio }))
+);
+
+function StudioLoadingFallback() {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "50vh",
+        color: "var(--text-muted)",
+        fontSize: "var(--font-size-sm)",
+      }}
+    >
+      <div style={{ textAlign: "center" }}>
+        <div
+          style={{
+            width: "2rem",
+            height: "2rem",
+            margin: "0 auto 1rem",
+            border: "2px solid var(--border)",
+            borderTopColor: "var(--accent)",
+            borderRadius: "var(--radius-pill)",
+            animation: "spin 0.8s linear infinite",
+          }}
+        />
+        <span>Loading Studio...</span>
+      </div>
+    </div>
+  );
+}
 import {
   fetchWorkspaces,
   switchWorkspace,
@@ -75,16 +135,34 @@ function RuntimeDynamicPage({
     if (pages.length === 0) {
       return (
         <div
-          style={{ maxWidth: "600px", margin: "4rem auto", textAlign: "center", padding: "2rem" }}
+          style={{
+            maxWidth: "600px",
+            margin: "4rem auto",
+            textAlign: "center",
+            padding: "2rem",
+          }}
         >
           <div style={{ marginBottom: "1rem", color: "var(--accent)" }}>
             <FileText size={48} style={{ margin: "0 auto", opacity: 0.8 }} />
           </div>
-          <h2 style={{ fontSize: "var(--font-size-2xl)", fontWeight: 600, marginBottom: "0.5rem" }}>
+          <h2
+            style={{
+              fontSize: "var(--font-size-2xl)",
+              fontWeight: 600,
+              marginBottom: "0.5rem",
+            }}
+          >
             No Pages in Workspace
           </h2>
-          <p style={{ color: "var(--text-muted)", marginBottom: "1.5rem", fontSize: "var(--font-size-sm)" }}>
-            This workspace doesn't have any published pages yet. Use Page Studio to design and publish your first page.
+          <p
+            style={{
+              color: "var(--text-muted)",
+              marginBottom: "1.5rem",
+              fontSize: "var(--font-size-sm)",
+            }}
+          >
+            This workspace doesn't have any published pages yet. Use Page Studio
+            to design and publish your first page.
           </p>
           <button
             type="button"
@@ -125,7 +203,25 @@ function RuntimeDynamicPage({
   );
 }
 
-function getPageIcon(page: PageDefinition): React.ReactNode {
+function getPageIcon(page: PageDefinition, metadata?: any): React.ReactNode {
+  // Check if page links to an entity in dataSources or root
+  if (metadata) {
+    const dsEntityId = page.dataSources?.[0]?.entityId;
+    if (dsEntityId) {
+      const entity = metadata.resolveEntity(dsEntityId);
+      if (entity?.icon) {
+        return <DynamicIcon name={entity.icon} size={16} />;
+      }
+    }
+    const rootEntityId = page.root?.props?.entityId;
+    if (rootEntityId) {
+      const entity = metadata.resolveEntity(rootEntityId);
+      if (entity?.icon) {
+        return <DynamicIcon name={entity.icon} size={16} />;
+      }
+    }
+  }
+
   const name = (
     ((page as any).name || "") +
     " " +
@@ -147,14 +243,21 @@ function getPageIcon(page: PageDefinition): React.ReactNode {
     name.includes("person")
   )
     return <Users size={16} />;
-  if (name.includes("order") || name.includes("inventory") || name.includes("product") || name.includes("item"))
+  if (
+    name.includes("order") ||
+    name.includes("inventory") ||
+    name.includes("product") ||
+    name.includes("item")
+  )
     return <Package size={16} />;
   return <FileText size={16} />;
 }
 
 function getPageTitle(page: PageDefinition): string {
   if ((page as any).name) return (page as any).name;
-  return page.root?.children?.[0]?.props?.value || page.route.replace(/^\//, "");
+  return (
+    page.root?.children?.[0]?.props?.value || page.route.replace(/^\//, "")
+  );
 }
 
 function WorkspaceSwitcher({
@@ -194,7 +297,7 @@ function WorkspaceSwitcher({
           fontFamily: "monospace",
           padding: "0.25rem 0.5rem",
           backgroundColor: "var(--surface-subtle)",
-          borderRadius: "var(--radius-sm)",
+          borderRadius: "var(--radius-control)",
           color: "var(--text-muted)",
           border: "1px solid var(--border)",
         }}
@@ -207,7 +310,9 @@ function WorkspaceSwitcher({
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
-      <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
+      <span
+        style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}
+      >
         Workspace:
       </span>
       <select
@@ -219,7 +324,7 @@ function WorkspaceSwitcher({
           padding: "0.25rem 0.5rem",
           backgroundColor: "var(--surface-subtle)",
           color: "var(--text)",
-          borderRadius: "var(--radius-sm)",
+          borderRadius: "var(--radius-control)",
           border: "1px solid var(--border)",
           cursor: "pointer",
         }}
@@ -237,6 +342,7 @@ function WorkspaceSwitcher({
 function AppContent({ user }: { user: CurrentUser }) {
   const { logout } = useAuth();
   const location = useLocation();
+  const metadata = useOptionalMetadata();
   const isStudioRoute = location.pathname.startsWith("/studio");
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -378,6 +484,23 @@ function AppContent({ user }: { user: CurrentUser }) {
                 Pages
               </NavLink>
               <NavLink
+                to="/studio/export-templates"
+                className={({ isActive }) =>
+                  isActive ? "btn btn-secondary active" : "btn btn-ghost"
+                }
+                style={({ isActive }) => ({
+                  fontSize: "var(--font-size-sm)",
+                  padding: "0.25rem 0.625rem",
+                  fontWeight: isActive ? 600 : 500,
+                  color: isActive ? "var(--accent)" : "var(--text)",
+                  backgroundColor: isActive
+                    ? "var(--accent-subtle)"
+                    : "transparent",
+                })}
+              >
+                Export Templates
+              </NavLink>
+              <NavLink
                 to="/studio/permissions"
                 className={({ isActive }) =>
                   isActive ? "btn btn-secondary active" : "btn btn-ghost"
@@ -433,7 +556,11 @@ function AppContent({ user }: { user: CurrentUser }) {
 
           {/* User Profile, Theme Mode Switch & Tenant Badge */}
           <div
-            style={{ display: "flex", alignItems: "center", gap: "var(--spacing-3)" }}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--spacing-3)",
+            }}
           >
             <WorkspaceSwitcher
               currentTenantId={user.tenantId}
@@ -447,7 +574,7 @@ function AppContent({ user }: { user: CurrentUser }) {
                 textTransform: "uppercase",
                 letterSpacing: "0.04em",
                 padding: "var(--spacing-1) var(--spacing-2)",
-                borderRadius: "var(--radius-sm)",
+                borderRadius: "var(--radius-control)",
                 backgroundColor: "var(--accent-subtle)",
                 color: "var(--accent)",
                 border: "var(--border-width-sm) solid var(--accent)",
@@ -496,69 +623,76 @@ function AppContent({ user }: { user: CurrentUser }) {
       {isStudioRoute ? (
         /* Studio Views (Data Entities, Page Manager, Page Builder) take full width */
         <main style={{ flex: 1 }}>
-          <Routes>
-            <Route
-              path="/studio/data"
-              element={
-                <div
-                  style={{
-                    maxWidth: "1400px",
-                    margin: "0 auto",
-                    padding: "2rem 1.5rem",
-                  }}
-                >
-                  <EntityManager />
-                </div>
-              }
-            />
-            <Route
-              path="/studio/pages"
-              element={
-                <div
-                  style={{
-                    maxWidth: "1400px",
-                    margin: "0 auto",
-                    padding: "2rem 1.5rem",
-                  }}
-                >
-                  <PageManager />
-                </div>
-              }
-            />
-            <Route
-              path="/studio/permissions"
-              element={
-                <div
-                  style={{
-                    maxWidth: "1400px",
-                    margin: "0 auto",
-                    padding: "2rem 1.5rem",
-                  }}
-                >
-                  <PermissionsManager />
-                </div>
-              }
-            />
-            <Route
-              path="/studio/settings"
-              element={
-                <div
-                  style={{
-                    maxWidth: "1400px",
-                    margin: "0 auto",
-                    padding: "2rem 1.5rem",
-                  }}
-                >
-                  <WorkspaceSettings />
-                </div>
-              }
-            />
-            <Route
-              path="/studio/theme"
-              element={<ThemeStudio />}
-            />
-            <Route path="/studio/pages/:id" element={<PageBuilder />} />
-          </Routes>
+          <React.Suspense fallback={<StudioLoadingFallback />}>
+            <Routes>
+              <Route
+                path="/studio/data"
+                element={
+                  <div
+                    style={{
+                      maxWidth: "1400px",
+                      margin: "0 auto",
+                      padding: "2rem 1.5rem",
+                    }}
+                  >
+                    <EntityManager />
+                  </div>
+                }
+              />
+              <Route
+                path="/studio/pages"
+                element={
+                  <div
+                    style={{
+                      maxWidth: "1400px",
+                      margin: "0 auto",
+                      padding: "2rem 1.5rem",
+                    }}
+                  >
+                    <PageManager />
+                  </div>
+                }
+              />
+              <Route
+                path="/studio/export-templates"
+                element={<ExportTemplatesManager />}
+              />
+              <Route
+                path="/studio/export-templates/:id/designer"
+                element={<GridTemplateDesigner />}
+              />
+              <Route
+                path="/studio/permissions"
+                element={
+                  <div
+                    style={{
+                      maxWidth: "1400px",
+                      margin: "0 auto",
+                      padding: "2rem 1.5rem",
+                    }}
+                  >
+                    <PermissionsManager />
+                  </div>
+                }
+              />
+              <Route
+                path="/studio/settings"
+                element={
+                  <div
+                    style={{
+                      maxWidth: "1400px",
+                      margin: "0 auto",
+                      padding: "2rem 1.5rem",
+                    }}
+                  >
+                    <WorkspaceSettings />
+                  </div>
+                }
+              />
+              <Route path="/studio/theme" element={<ThemeStudio />} />
+              <Route path="/studio/pages/:id" element={<PageBuilder />} />
+            </Routes>
+          </React.Suspense>
         </main>
       ) : (
         /* Application Runtime View with Responsive Sidebar */
@@ -578,7 +712,6 @@ function AppContent({ user }: { user: CurrentUser }) {
             }`}
           >
             <div className="app-sidebar-header">
-              <span className="app-sidebar-title">Application Pages</span>
               <button
                 type="button"
                 className="btn btn-ghost app-sidebar-collapse-btn"
@@ -624,7 +757,7 @@ function AppContent({ user }: { user: CurrentUser }) {
               ) : (
                 effectivePages.map((p) => {
                   const title = getPageTitle(p);
-                  const icon = getPageIcon(p);
+                  const icon = getPageIcon(p, metadata);
                   return (
                     <NavLink
                       key={p.id}
@@ -712,7 +845,7 @@ function AuthenticatedApp() {
             style={{
               display: "inline-flex",
               padding: "0.75rem",
-              borderRadius: "var(--radius-xl)",
+              borderRadius: "var(--radius-control)",
               backgroundColor: "var(--accent-subtle)",
               color: "var(--accent)",
               marginBottom: "1rem",
@@ -720,7 +853,12 @@ function AuthenticatedApp() {
           >
             <Zap size={28} />
           </div>
-          <p style={{ color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
+          <p
+            style={{
+              color: "var(--text-muted)",
+              fontSize: "var(--font-size-sm)",
+            }}
+          >
             Loading workspace session...
           </p>
         </div>

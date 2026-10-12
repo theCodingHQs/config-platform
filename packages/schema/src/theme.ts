@@ -613,6 +613,75 @@ export function validateAccentContrast(accentHex: string, bgHex: string = '#ffff
 /**
  * Generate tokens.css string from theme definitions (single source of truth)
  */
+export interface SemanticRadiusTokens {
+  base: string;
+  control: string;
+  surface: string;
+  pill: string;
+  button: string;
+}
+
+export function deriveSemanticRadius(override: ThemeRadiusOverride = 'md'): SemanticRadiusTokens {
+  switch (override) {
+    case 'none':
+      return {
+        base: '0px',
+        control: '0px',
+        surface: '0px',
+        pill: '0px',
+        button: '0px',
+      };
+    case 'sm':
+      return {
+        base: '4px',
+        control: '4px',
+        surface: '6px',
+        pill: '9999px',
+        button: '4px',
+      };
+    case 'md':
+      return {
+        base: '6px',
+        control: '6px',
+        surface: '10px',
+        pill: '9999px',
+        button: '6px',
+      };
+    case 'lg':
+      return {
+        base: '8px',
+        control: '8px',
+        surface: '14px',
+        pill: '9999px',
+        button: '8px',
+      };
+    case 'xl':
+      return {
+        base: '12px',
+        control: '8px', // capped: control never exceeds 8px
+        surface: '16px', // capped: surface never exceeds 16px
+        pill: '9999px',
+        button: '9999px',
+      };
+    case 'full':
+      return {
+        base: '16px', // capped: full does NOT turn modals, cards, tables into pills even if base is referenced
+        control: '8px', // capped: full does NOT turn inputs into pills!
+        surface: '16px', // capped: full does NOT turn modals, cards, tables into pills!
+        pill: '9999px',
+        button: '9999px', // buttons become pills on Full
+      };
+    default:
+      return {
+        base: '6px',
+        control: '6px',
+        surface: '10px',
+        pill: '9999px',
+        button: '6px',
+      };
+  }
+}
+
 export function generateTokensCss(options?: {
   presetId?: ThemePresetId;
   overrides?: ThemeOverrides;
@@ -628,9 +697,8 @@ export function generateTokensCss(options?: {
     ? getDensitySpacing(overrides.density)
     : defaultSharedTokens.spacing;
 
-  const radiusOverride = overrides?.radius
-    ? defaultSharedTokens.radius[overrides.radius]
-    : defaultSharedTokens.radius.md;
+  const semanticRadius = deriveSemanticRadius(overrides?.radius);
+  const radiusOverride = semanticRadius.base;
 
   let lightAccent = preset.light.accent;
   let lightAccentContrast = preset.light['accent-contrast'];
@@ -684,6 +752,12 @@ export function generateTokensCss(options?: {
   --radius-xl: ${defaultSharedTokens.radius.xl};
   --radius-full: ${defaultSharedTokens.radius.full};
   --radius: ${radiusOverride};
+
+  /* Semantic Radius Tokens */
+  --radius-control: ${semanticRadius.control};
+  --radius-surface: ${semanticRadius.surface};
+  --radius-pill: ${semanticRadius.pill};
+  --radius-button: ${semanticRadius.button};
 
   /* Border Widths */
   --border-width-none: ${defaultSharedTokens.borderWidth.none};

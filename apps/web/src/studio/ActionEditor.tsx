@@ -86,7 +86,7 @@ export const ActionEditor: React.FC<ActionEditorProps> = ({
               style={{
                 backgroundColor: 'var(--surface-2)',
                 border: 'var(--border-width) solid var(--border)',
-                borderRadius: 'var(--radius-md)',
+                borderRadius: 'var(--radius-control)',
                 padding: 'var(--space-2)',
                 display: 'flex',
                 flexDirection: 'column',

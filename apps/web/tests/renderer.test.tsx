@@ -417,4 +417,59 @@ describe('Renderer & Component System', () => {
     expect(screen.getByText('Item 1')).toBeInTheDocument();
     expect(screen.getByText('Item 2')).toBeInTheDocument();
   });
+
+  it('renders text and child stack with flex, noWrap, and custom layout sizing', () => {
+    const rootNode: NodeDefinition = {
+      id: 'header_stack',
+      type: 'stack',
+      props: {
+        direction: 'horizontal',
+        justify: 'space-between',
+        align: 'center',
+      },
+      children: [
+        {
+          id: 'title_text',
+          type: 'text',
+          props: {
+            value: 'Employee Management',
+            variant: 'h1',
+            flex: 1,
+            noWrap: true,
+          },
+        },
+        {
+          id: 'button_stack',
+          type: 'stack',
+          props: {
+            direction: 'horizontal',
+            flex: '0 0 auto',
+            width: 'auto',
+          },
+          children: [
+            {
+              id: 'btn_1',
+              type: 'button',
+              props: {
+                label: '+ New Employee',
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    render(renderNode(rootNode) as React.ReactElement);
+
+    const titleEl = screen.getByText('Employee Management');
+    expect(titleEl).toBeInTheDocument();
+    expect(titleEl.tagName.toLowerCase()).toBe('h1');
+    expect(['1', '1 1 0%']).toContain(titleEl.style.flex);
+    expect(titleEl.style.whiteSpace).toBe('nowrap');
+
+    const buttonStack = screen.getAllByTestId('layout-stack')[1];
+    expect(buttonStack).toBeInTheDocument();
+    expect(buttonStack.style.flex).toBe('0 0 auto');
+    expect(buttonStack.style.width).toBe('auto');
+  });
 });

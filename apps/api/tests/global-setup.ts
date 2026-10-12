@@ -112,6 +112,9 @@ export async function setup() {
       } finally {
         await client.end();
       }
+
+      // Ensure all catalog migrations (including new ones) are applied to test database
+      await runCatalogMigrations();
     }
   } catch (err: any) {
     console.warn(

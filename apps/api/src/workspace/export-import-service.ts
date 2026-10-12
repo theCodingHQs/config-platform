@@ -1,18 +1,89 @@
 import crypto from 'node:crypto';
+import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { defaultStorageAdapter } from '../db/storage-adapter.js';
 import { tenantLimitsService } from '../limits/tenant-limits.js';
 import { auditLogService } from '../audit/audit-service.js';
-import type { SessionPayload } from '../auth/auth-types.js';
+import type { SessionPayload, TenantRole } from '../auth/auth-types.js';
+import { ROLES } from '../auth/auth-types.js';
 import {
   generateTableId,
   generateColumnId,
   generatePageId,
   generateRelationId,
+  generateExportTemplateId,
   isValidStableId,
 } from '../utils/id-gen.js';
 import { pagesService } from '../pages/pages-service.js';
-import { WorkspaceThemeConfigSchema } from '@config-platform/schema';
+import {
+  WorkspaceThemeConfigSchema,
+  AllowedIconNameSchema,
+  ExportTemplateDefinitionSchema,
+} from '@config-platform/schema';
+import { exportTemplateService } from '../records/export/export-template-service.js';
+
+export interface EntityPermissionExport {
+  entityId: string;
+  role: TenantRole | string;
+  canRead: boolean;
+  canCreate: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
+  canExport?: boolean;
+}
+
+export interface FieldPermissionExport {
+  entityId: string;
+  fieldId: string;
+  role: TenantRole | string;
+  hidden: boolean;
+  readOnly: boolean;
+}
+
+export interface WorkspacePermissionsBundle {
+  entities: EntityPermissionExport[];
+  fields: FieldPermissionExport[];
+}
+
+export const EntityPermissionBundleSchema = z.object({
+  entityId: z.string().min(1, 'entityId is required'),
+  role: z.enum(ROLES, {
+    errorMap: () => ({
+      message: `Role must be one of: ${ROLES.join(', ')}`,
+    }),
+  }),
+  canRead: z.boolean(),
+  canCreate: z.boolean(),
+  canUpdate: z.boolean(),
+  canDelete: z.boolean(),
+  canExport: z.boolean().optional().default(false),
+});
+
+export const ExportTemplateBundleSchema = z.object({
+  id: z.string().min(1, 'id is required'),
+  name: z.string().min(1, 'name is required'),
+  entityId: z.string().min(1, 'entityId is required'),
+  draft: ExportTemplateDefinitionSchema,
+  published: ExportTemplateDefinitionSchema.nullable().optional(),
+  version: z.number().int().default(1),
+});
+
+export const FieldPermissionBundleSchema = z.object({
+  entityId: z.string().min(1, 'entityId is required'),
+  fieldId: z.string().min(1, 'fieldId is required'),
+  role: z.enum(ROLES, {
+    errorMap: () => ({
+      message: `Role must be one of: ${ROLES.join(', ')}`,
+    }),
+  }),
+  hidden: z.boolean(),
+  readOnly: z.boolean(),
+});
+
+export const WorkspacePermissionsBundleSchema = z.object({
+  entities: z.array(EntityPermissionBundleSchema).default([]),
+  fields: z.array(FieldPermissionBundleSchema).default([]),
+});
 
 export interface WorkspaceBundle {
   bundleVersion: number;
@@ -30,6 +101,7 @@ export interface WorkspaceBundle {
     name: string;
     label: string;
     displayFieldId?: string | null;
+    icon?: string | null;
     fields: Array<{
       id: string;
       name: string;
@@ -57,6 +129,15 @@ export interface WorkspaceBundle {
     published?: any;
     allowedRoles?: string[];
   }>;
+  exportTemplates?: Array<{
+    id: string;
+    name: string;
+    entityId: string;
+    draft: any;
+    published?: any;
+    version: number;
+  }>;
+  permissions?: WorkspacePermissionsBundle;
 }
 
 export interface ImportResult {
@@ -65,6 +146,13 @@ export interface ImportResult {
   conflicts: string[];
   entitiesCount: number;
   pagesCount: number;
+  exportTemplatesCount?: number;
+  permissions?: {
+    entityPermissionsCount: number;
+    fieldPermissionsCount: number;
+    entities: EntityPermissionExport[];
+    fields: FieldPermissionExport[];
+  };
 }
 
 /**
@@ -78,7 +166,13 @@ export function deepWalkRemap<T>(value: T, idMap: Map<string, string>): T {
     if (idMap.has(value)) {
       return idMap.get(value) as unknown as T;
     }
-    return value.replace(/[ct]_[0-9a-f]{8}/g, (match) => idMap.get(match) || match) as unknown as T;
+    let res = value.replace(/[ct]_[0-9a-f]{8}/g, (match) => idMap.get(match) || match);
+    for (const [oldId, newId] of idMap.entries()) {
+      if (oldId && res.includes(oldId)) {
+        res = res.split(oldId).join(newId);
+      }
+    }
+    return res as unknown as T;
   }
   if (Array.isArray(value)) {
     return value.map((item) => deepWalkRemap(item, idMap)) as unknown as T;
@@ -86,9 +180,14 @@ export function deepWalkRemap<T>(value: T, idMap: Map<string, string>): T {
   if (value !== null && typeof value === 'object') {
     const result: Record<string, any> = {};
     for (const [key, val] of Object.entries(value)) {
-      const remappedKey = idMap.has(key)
+      let remappedKey = idMap.has(key)
         ? idMap.get(key)!
         : key.replace(/[ct]_[0-9a-f]{8}/g, (match) => idMap.get(match) || match);
+      for (const [oldId, newId] of idMap.entries()) {
+        if (oldId && remappedKey.includes(oldId)) {
+          remappedKey = remappedKey.split(oldId).join(newId);
+        }
+      }
       result[remappedKey] = deepWalkRemap(val, idMap);
     }
     return result as unknown as T;
@@ -114,8 +213,9 @@ export class ExportImportService {
       name: string;
       label: string;
       display_field_id?: string | null;
+      icon?: string | null;
     }>(
-      `SELECT id, name, label, display_field_id FROM public.entity_def WHERE tenant_id = $1 ORDER BY name ASC`,
+      `SELECT id, name, label, display_field_id, icon FROM public.entity_def WHERE tenant_id = $1 ORDER BY name ASC`,
       [tenantId]
     );
 
@@ -143,6 +243,7 @@ export class ExportImportService {
         name: ent.name,
         label: ent.label,
         displayFieldId: ent.display_field_id || null,
+        icon: ent.icon || null,
         fields: fieldsRes.rows.map((f) => ({
           id: f.id,
           name: f.name,
@@ -205,13 +306,96 @@ export class ExportImportService {
       allowedRoles: p.allowed_roles,
     }));
 
+    // 4. Fetch entity permissions
+    const entityPermsRes = await pool.query<{
+      entity_id: string;
+      role: string;
+      can_read: boolean;
+      can_create: boolean;
+      can_update: boolean;
+      can_delete: boolean;
+      can_export: boolean;
+    }>(
+      `SELECT ep.entity_id, ep.role, ep.can_read, ep.can_create, ep.can_update, ep.can_delete, ep.can_export
+       FROM public.entity_permission ep
+       JOIN public.entity_def ed ON ed.id = ep.entity_id AND ed.tenant_id = ep.tenant_id
+       WHERE ep.tenant_id = $1
+       ORDER BY ed.name ASC, ep.role ASC`,
+      [tenantId]
+    );
+
+    const entityPermissions: EntityPermissionExport[] = entityPermsRes.rows.map((r) => ({
+      entityId: r.entity_id,
+      role: r.role,
+      canRead: r.can_read,
+      canCreate: r.can_create,
+      canUpdate: r.can_update,
+      canDelete: r.can_delete,
+      canExport: r.can_export ?? (r.role !== 'viewer'),
+    }));
+
+    // 5. Fetch field permissions
+    const fieldPermsRes = await pool.query<{
+      entity_id: string;
+      field_id: string;
+      role: string;
+      hidden: boolean;
+      read_only: boolean;
+    }>(
+      `SELECT fp.entity_id, fp.field_id, fp.role, fp.hidden, fp.read_only
+       FROM public.field_permission fp
+       JOIN public.entity_def ed ON ed.id = fp.entity_id AND ed.tenant_id = fp.tenant_id
+       JOIN public.field_def fd ON fd.id = fp.field_id AND fd.tenant_id = fp.tenant_id
+       WHERE fp.tenant_id = $1
+       ORDER BY ed.name ASC, fd.position ASC, fd.name ASC, fp.role ASC`,
+      [tenantId]
+    );
+
+    const fieldPermissions: FieldPermissionExport[] = fieldPermsRes.rows.map((r) => ({
+      entityId: r.entity_id,
+      fieldId: r.field_id,
+      role: r.role,
+      hidden: r.hidden,
+      readOnly: r.read_only,
+    }));
+
+    // 6. Fetch export templates
+    const exportTemplatesRes = await pool.query<{
+      id: string;
+      name: string;
+      entity_id: string;
+      draft: any;
+      published: any;
+      version: number;
+    }>(
+      `SELECT id, name, entity_id, draft, published, version
+       FROM public.export_template
+       WHERE tenant_id = $1
+       ORDER BY name ASC`,
+      [tenantId]
+    );
+
+    const exportTemplates = exportTemplatesRes.rows.map((t) => ({
+      id: t.id,
+      name: t.name,
+      entityId: t.entity_id,
+      draft: t.draft,
+      published: t.published,
+      version: t.version,
+    }));
+
     return {
-      bundleVersion: 1,
+      bundleVersion: 2,
       exportedAt: new Date().toISOString(),
       themeConfig,
       entities,
       relations,
       pages,
+      exportTemplates,
+      permissions: {
+        entities: entityPermissions,
+        fields: fieldPermissions,
+      },
     };
   }
 
@@ -221,8 +405,8 @@ export class ExportImportService {
     dryRun = false,
     session?: SessionPayload
   ): Promise<ImportResult> {
-    if (!bundle || bundle.bundleVersion !== 1) {
-      throw new Error('Unsupported bundle version or invalid bundle structure');
+    if (!bundle || (bundle.bundleVersion !== 1 && bundle.bundleVersion !== 2)) {
+      throw new Error('Unsupported bundle version or invalid bundle structure. Supported versions: 1, 2.');
     }
 
     // Check plan limits
@@ -241,6 +425,73 @@ export class ExportImportService {
         );
       } else {
         validatedThemeConfig = parsedTheme.data;
+      }
+    }
+
+    // Validate permissions upfront if present in bundle
+    let validatedPermissions: WorkspacePermissionsBundle | null = null;
+    if (bundle.permissions !== undefined && bundle.permissions !== null) {
+      const parsedPermissions = WorkspacePermissionsBundleSchema.safeParse(bundle.permissions);
+      if (!parsedPermissions.success) {
+        for (const issue of parsedPermissions.error.issues) {
+          conflicts.push(
+            `Invalid permissions in bundle: ${issue.path.join('.') || 'root'}: ${issue.message}`
+          );
+        }
+      } else {
+        validatedPermissions = parsedPermissions.data;
+      }
+    }
+
+    // Validate entity and field IDs referenced in permissions against bundle.entities
+    const bundleEntityMap = new Map<string, Set<string>>();
+    for (const ent of bundle.entities) {
+      const fSet = new Set<string>(ent.fields.map((f) => f.id));
+      bundleEntityMap.set(ent.id, fSet);
+    }
+
+    if (validatedPermissions) {
+      for (const ep of validatedPermissions.entities) {
+        if (!bundleEntityMap.has(ep.entityId)) {
+          conflicts.push(
+            `Unknown entity ID '${ep.entityId}' in entity permissions. Entity does not exist in workspace bundle.`
+          );
+        }
+      }
+      for (const fp of validatedPermissions.fields) {
+        const fSet = bundleEntityMap.get(fp.entityId);
+        if (!fSet) {
+          conflicts.push(
+            `Unknown entity ID '${fp.entityId}' in field permissions. Entity does not exist in workspace bundle.`
+          );
+        } else if (!fSet.has(fp.fieldId)) {
+          conflicts.push(
+            `Unknown field ID '${fp.fieldId}' in field permissions for entity '${fp.entityId}'. Field does not exist in workspace bundle.`
+          );
+        }
+      }
+    }
+
+    // Validate export templates upfront if present in bundle
+    let validatedExportTemplates: any[] = [];
+    if (bundle.exportTemplates !== undefined && bundle.exportTemplates !== null) {
+      for (let i = 0; i < bundle.exportTemplates.length; i++) {
+        const tpl = bundle.exportTemplates[i];
+        const parsedTpl = ExportTemplateBundleSchema.safeParse(tpl);
+        if (!parsedTpl.success) {
+          for (const issue of parsedTpl.error.issues) {
+            conflicts.push(
+              `Invalid export template '${tpl?.name || i}' in bundle: ${issue.path.join('.') || 'root'}: ${issue.message}`
+            );
+          }
+        } else {
+          validatedExportTemplates.push(parsedTpl.data);
+          if (!bundleEntityMap.has(tpl.entityId)) {
+            conflicts.push(
+              `Unknown entity ID '${tpl.entityId}' in export template '${tpl.name}'. Entity does not exist in workspace bundle.`
+            );
+          }
+        }
       }
     }
 
@@ -265,6 +516,14 @@ export class ExportImportService {
       if (entityNameSet.has(ent.name.toLowerCase())) {
         conflicts.push(`Entity with name '${ent.name}' already exists in workspace.`);
       }
+      if (ent.icon !== undefined && ent.icon !== null && ent.icon !== '') {
+        const parsedIcon = AllowedIconNameSchema.safeParse(ent.icon);
+        if (!parsedIcon.success) {
+          conflicts.push(
+            `Invalid entity icon '${ent.icon}' on entity '${ent.name}'. Must be one of the allowed curated icons.`
+          );
+        }
+      }
     }
 
     const existingPageRoutes = await pool.query<{ route: string }>(
@@ -277,6 +536,30 @@ export class ExportImportService {
       if (routeSet.has(p.route.toLowerCase())) {
         conflicts.push(`Page with route '${p.route}' already exists in workspace.`);
       }
+
+      const checkFormIcons = (node: any) => {
+        if (!node) return;
+        if (node.type === 'form' && node.props && Array.isArray(node.props.fields)) {
+          for (const f of node.props.fields) {
+            if (f && f.icon !== undefined && f.icon !== null && f.icon !== '') {
+              const parsedIcon = AllowedIconNameSchema.safeParse(f.icon);
+              if (!parsedIcon.success) {
+                conflicts.push(
+                  `Invalid form field icon '${f.icon}' on field '${f.fieldId || 'unknown'}' in page '${p.name || p.route}'. Must be one of the allowed curated icons.`
+                );
+              }
+            }
+          }
+        }
+        if (Array.isArray(node.children)) {
+          for (const child of node.children) {
+            checkFormIcons(child);
+          }
+        }
+      };
+
+      if (p.draft?.root) checkFormIcons(p.draft.root);
+      if (p.published?.root) checkFormIcons(p.published.root);
     }
 
     // Validate plan limits
@@ -337,10 +620,16 @@ export class ExportImportService {
       );
       const usedPageIds = new Set<string>(existingPageIdsRes.rows.map((r) => r.id));
 
+      const existingTemplateIdsRes = await client.query<{ id: string }>(
+        `SELECT id FROM public.export_template`
+      );
+      const usedTemplateIds = new Set<string>(existingTemplateIdsRes.rows.map((r) => r.id));
+
       const idMap = new Map<string, string>();
       const entityIdMap = new Map<string, string>();
       const fieldIdMap = new Map<string, string>();
       const pageIdMap = new Map<string, string>();
+      const templateIdMap = new Map<string, string>();
 
       // 1. Entities: keep original ID if valid t_xxxxxxxx and not collided; otherwise generate new t_xxxxxxxx
       for (const ent of bundle.entities) {
@@ -389,6 +678,21 @@ export class ExportImportService {
         idMap.set(p.id, targetId);
       }
 
+      // 3b. Export Templates: keep original ID if valid et_xxxxxxxx and not collided; otherwise generate new et_xxxxxxxx
+      for (const tpl of validatedExportTemplates) {
+        let targetId = tpl.id;
+        if (!isValidStableId(targetId, 'et') || usedTemplateIds.has(targetId)) {
+          let freshId: string;
+          do {
+            freshId = generateExportTemplateId();
+          } while (usedTemplateIds.has(freshId));
+          targetId = freshId;
+        }
+        usedTemplateIds.add(targetId);
+        templateIdMap.set(tpl.id, targetId);
+        idMap.set(tpl.id, targetId);
+      }
+
       // 4. Insert entities and fields, and create physical tables
       for (const ent of bundle.entities) {
         const newEntityId = entityIdMap.get(ent.id)!;
@@ -398,9 +702,9 @@ export class ExportImportService {
           : null;
 
         await client.query(
-          `INSERT INTO public.entity_def (id, tenant_id, name, label, physical_table_name, version, display_field_id, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, 1, $6, NOW(), NOW())`,
-          [newEntityId, tenantId, ent.name, ent.label, physicalTable, newDisplayFieldId]
+          `INSERT INTO public.entity_def (id, tenant_id, name, label, physical_table_name, version, display_field_id, icon, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, 1, $6, $7, NOW(), NOW())`,
+          [newEntityId, tenantId, ent.name, ent.label, physicalTable, newDisplayFieldId, ent.icon || null]
         );
 
         // Build physical table columns
@@ -513,7 +817,35 @@ export class ExportImportService {
         });
       }
 
-      // 7. Validate bindings on every page inside the same transaction
+      // 7. Remap permissions
+      const remappedEntityPerms: EntityPermissionExport[] = [];
+      const remappedFieldPerms: FieldPermissionExport[] = [];
+
+      if (validatedPermissions) {
+        for (const ep of validatedPermissions.entities) {
+          const targetEntityId = entityIdMap.get(ep.entityId);
+          if (targetEntityId) {
+            remappedEntityPerms.push({
+              ...ep,
+              entityId: targetEntityId,
+            });
+          }
+        }
+
+        for (const fp of validatedPermissions.fields) {
+          const targetEntityId = entityIdMap.get(fp.entityId);
+          const targetFieldId = fieldIdMap.get(fp.fieldId);
+          if (targetEntityId && targetFieldId) {
+            remappedFieldPerms.push({
+              ...fp,
+              entityId: targetEntityId,
+              fieldId: targetFieldId,
+            });
+          }
+        }
+      }
+
+      // 8. Validate bindings on every page inside the same transaction
       const brokenBindings: string[] = [];
       for (const pageItem of remappedPages) {
         if (pageItem.draft) {
@@ -539,10 +871,61 @@ export class ExportImportService {
           conflicts: brokenBindings,
           entitiesCount: bundle.entities.length,
           pagesCount: bundle.pages.length,
+          exportTemplatesCount: validatedExportTemplates.length,
+          permissions: {
+            entityPermissionsCount: remappedEntityPerms.length,
+            fieldPermissionsCount: remappedFieldPerms.length,
+            entities: remappedEntityPerms,
+            fields: remappedFieldPerms,
+          },
         };
       }
 
-      // 8. Import theme configuration if provided in bundle
+      // 8b. Insert export templates inside transaction with deepWalkRemap
+      for (const tpl of validatedExportTemplates) {
+        const newTemplateId = templateIdMap.get(tpl.id)!;
+        const newEntityId = entityIdMap.get(tpl.entityId) || idMap.get(tpl.entityId)!;
+        const remappedDraft = deepWalkRemap(tpl.draft, idMap);
+        const remappedPublished = tpl.published ? deepWalkRemap(tpl.published, idMap) : null;
+
+        await client.query(
+          `INSERT INTO public.export_template (id, tenant_id, entity_id, name, draft, published, version, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())`,
+          [
+            newTemplateId,
+            tenantId,
+            newEntityId,
+            tpl.name,
+            JSON.stringify(remappedDraft),
+            remappedPublished ? JSON.stringify(remappedPublished) : null,
+            tpl.version || 1,
+          ]
+        );
+      }
+
+      // 9. Insert entity and field permissions inside transaction
+      for (const ep of remappedEntityPerms) {
+        const canExport = ep.canExport ?? (ep.role !== 'viewer');
+        await client.query(
+          `INSERT INTO public.entity_permission (tenant_id, entity_id, role, can_read, can_create, can_update, can_delete, can_export)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           ON CONFLICT (tenant_id, entity_id, role) DO UPDATE
+             SET can_read = $4, can_create = $5, can_update = $6, can_delete = $7, can_export = $8`,
+          [tenantId, ep.entityId, ep.role, ep.canRead, ep.canCreate, ep.canUpdate, ep.canDelete, canExport]
+        );
+      }
+
+      for (const fp of remappedFieldPerms) {
+        await client.query(
+          `INSERT INTO public.field_permission (tenant_id, entity_id, field_id, role, hidden, read_only)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           ON CONFLICT (tenant_id, entity_id, field_id, role) DO UPDATE
+             SET hidden = $5, read_only = $6`,
+          [tenantId, fp.entityId, fp.fieldId, fp.role, fp.hidden, fp.readOnly]
+        );
+      }
+
+      // 10. Import theme configuration if provided in bundle
       if (validatedThemeConfig) {
         await client.query(
           `UPDATE public.tenant SET theme_config = $1 WHERE id = $2`,
@@ -564,6 +947,7 @@ export class ExportImportService {
             entitiesCount: bundle.entities.length,
             pagesCount: bundle.pages.length,
             themeConfig: bundle.themeConfig,
+            permissionsCount: remappedEntityPerms.length + remappedFieldPerms.length,
           },
         });
       }
@@ -574,6 +958,13 @@ export class ExportImportService {
         conflicts: [],
         entitiesCount: bundle.entities.length,
         pagesCount: bundle.pages.length,
+        exportTemplatesCount: validatedExportTemplates.length,
+        permissions: {
+          entityPermissionsCount: remappedEntityPerms.length,
+          fieldPermissionsCount: remappedFieldPerms.length,
+          entities: remappedEntityPerms,
+          fields: remappedFieldPerms,
+        },
       };
     } catch (err) {
       await client.query('ROLLBACK');

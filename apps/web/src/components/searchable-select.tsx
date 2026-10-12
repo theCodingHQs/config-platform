@@ -162,7 +162,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
             zIndex: 50,
             backgroundColor: 'var(--surface)',
             border: 'var(--border-width-sm) solid var(--border)',
-            borderRadius: 'var(--radius)',
+            borderRadius: 'var(--radius-control)',
             boxShadow: 'var(--shadow-lg)',
             maxHeight: '220px',
             display: 'flex',

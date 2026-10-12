@@ -110,7 +110,15 @@ export async function executeActionChain(
 
         case 'createRecord': {
           const entityId = String(resolveValue(params.entityId, scope));
-          const data = resolveValue(params.data || {}, scope);
+          const rawData = resolveValue(params.data || {}, scope);
+          const data: Record<string, any> = {};
+          if (rawData && typeof rawData === 'object') {
+            for (const [k, v] of Object.entries(rawData)) {
+              if (k !== 'id' && k !== 'created_at' && k !== 'updated_at') {
+                data[k] = v;
+              }
+            }
+          }
           const created = await context.createRecord(entityId, data);
           if (params.resultStateKey) {
             context.setKey(params.resultStateKey, created);
@@ -122,7 +130,15 @@ export async function executeActionChain(
         case 'updateRecord': {
           const entityId = String(resolveValue(params.entityId, scope));
           const id = String(resolveValue(params.id || params.recordId, scope));
-          const data = resolveValue(params.data || {}, scope);
+          const rawData = resolveValue(params.data || {}, scope);
+          const data: Record<string, any> = {};
+          if (rawData && typeof rawData === 'object') {
+            for (const [k, v] of Object.entries(rawData)) {
+              if (k !== 'id' && k !== 'created_at' && k !== 'updated_at') {
+                data[k] = v;
+              }
+            }
+          }
           const updated = await context.updateRecord(entityId, id, data);
           if (params.resultStateKey) {
             context.setKey(params.resultStateKey, updated);

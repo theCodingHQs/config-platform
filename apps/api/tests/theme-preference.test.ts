@@ -15,9 +15,15 @@ describe('Catalog Migration 008: User Theme Preference', () => {
     expect(migration009?.name).toBe('009_tenant_theme_config');
   });
 
+  it('includes migration 010_entity_def_icon in catalogMigrations', () => {
+    const migration010 = catalogMigrations.find((m) => m.version === 10);
+    expect(migration010).toBeDefined();
+    expect(migration010?.name).toBe('010_entity_def_icon');
+  });
+
   it('preserves all historical migrations without modification', () => {
     const versions = catalogMigrations.map((m) => m.version);
-    expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
   });
 
   it('validates ThemePreferenceSchema values (system, light, dark)', () => {

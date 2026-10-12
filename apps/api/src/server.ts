@@ -2,13 +2,16 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
+import fastifyMultipart from '@fastify/multipart';
 import { schemaRoutes } from './schema/schema-routes.js';
 import { recordsRoutes } from './records/records-routes.js';
+import { importRoutes } from './records/import/import-routes.js';
 import { pagesRoutes } from './pages/pages-routes.js';
 import { permissionRoutes } from './permissions/permission-routes.js';
 import { authRoutes, memberRoutes } from './auth/auth-routes.js';
 import { workspaceRoutes } from './workspace/workspace-routes.js';
 import { auditRoutes } from './audit/audit-routes.js';
+import { exportRoutes } from './records/export/export-routes.js';
 import { LimitExceededError } from './limits/tenant-limits.js';
 import { sessionMiddlewarePlugin, decorateSession, registerSessionHook } from './auth/session-middleware.js';
 import { initializeMetadataCatalog } from './db/catalog-init.js';
@@ -88,6 +91,7 @@ export async function buildServer() {
   const fastify = Fastify({
     logger: process.env.NODE_ENV === 'test' ? false : true,
     trustProxy: trustProxyConfig,
+    bodyLimit: 10 * 1024 * 1024,
     requestIdHeader: 'x-request-id',
     requestIdLogLabel: 'reqId',
     genReqId: (req) => (req.headers['x-request-id'] as string) || crypto.randomUUID(),
@@ -128,6 +132,14 @@ export async function buildServer() {
   await fastify.register(rateLimit, {
     global: false, // only apply where explicitly configured
     redis: undefined, // in-memory store is fine for single node
+  });
+
+  // ─── Multipart Support (10MB Cap) ───────────────────────────
+  await fastify.register(fastifyMultipart, {
+    limits: {
+      fileSize: 10 * 1024 * 1024, // 10 MB default cap
+      files: 1,
+    },
   });
 
   // ─── Body parser ──────────────────────────────────────────────
@@ -244,6 +256,7 @@ export async function buildServer() {
         statusCode: error.statusCode,
         error: error.name || 'Client Error',
         message: error.message,
+        errors: error.errors,
       });
     }
 
@@ -302,6 +315,8 @@ export async function buildServer() {
       await protectedApp.register(memberRoutes);
       await protectedApp.register(schemaRoutes);
       await protectedApp.register(recordsRoutes);
+      await protectedApp.register(importRoutes);
+      await protectedApp.register(exportRoutes);
       await protectedApp.register(pagesRoutes);
       await protectedApp.register(permissionRoutes);
       await protectedApp.register(workspaceRoutes);

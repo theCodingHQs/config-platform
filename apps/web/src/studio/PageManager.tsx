@@ -125,7 +125,7 @@ export const PageManager: React.FC = () => {
               <tr>
                 <td colSpan={6} style={{ textAlign: 'center', padding: '3rem 2rem', color: 'var(--text-muted)' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem', maxWidth: '480px', margin: '0 auto' }}>
-                    <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-lg)', backgroundColor: 'var(--accent-subtle)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-control)', backgroundColor: 'var(--accent-subtle)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Plus size={20} />
                     </div>
                     <strong style={{ fontSize: 'var(--font-size-md)', color: 'var(--text)' }}>No pages created yet</strong>
@@ -223,7 +223,7 @@ export const PageManager: React.FC = () => {
       {/* Modal: Create Page */}
       {showCreateModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--overlay-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ backgroundColor: 'var(--surface)', padding: 'var(--space-6)', borderRadius: 'var(--radius-lg)', width: '420px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', border: 'var(--border-width) solid var(--border)', boxShadow: 'var(--shadow-xl)' }}>
+          <div style={{ backgroundColor: 'var(--surface)', padding: 'var(--space-6)', borderRadius: 'var(--radius-surface)', width: '420px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', border: 'var(--border-width) solid var(--border)', boxShadow: 'var(--shadow-xl)' }}>
             <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>Create Page</h3>
             <div>
               <label className="form-label" style={{ fontSize: 'var(--font-size-xs)' }}>Page Title</label>

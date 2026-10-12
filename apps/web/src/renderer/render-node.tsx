@@ -70,6 +70,8 @@ function NodeRenderer({ node, ctx }: { node: NodeDefinition; ctx: RenderContext 
     );
   }
 
+  const childrenToRender = node.children || [];
+
   // 4. Validate resolved props with Zod schema
   const parsed = registration.propsSchema.safeParse(resolved);
   if (!parsed.success) {
@@ -85,8 +87,8 @@ function NodeRenderer({ node, ctx }: { node: NodeDefinition; ctx: RenderContext 
 
   // 5. Render children recursively if present
   let renderedChildren: React.ReactNode = undefined;
-  if (node.children && node.children.length > 0) {
-    renderedChildren = node.children.map((child) => renderNode(child, ctx));
+  if (childrenToRender.length > 0) {
+    renderedChildren = childrenToRender.map((child) => renderNode(child, ctx));
   }
 
   const Component = registration.component;

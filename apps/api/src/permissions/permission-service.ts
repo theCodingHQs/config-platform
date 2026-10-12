@@ -16,9 +16,11 @@ export interface EntityPermission {
   canCreate: boolean;
   canUpdate: boolean;
   canDelete: boolean;
+  canExport: boolean;
 }
 
 export interface FieldPermission {
+  fieldId: string;
   role: TenantRole;
   hidden: boolean;
   readOnly: boolean;
@@ -34,7 +36,7 @@ export class PermissionService {
     role: TenantRole
   ): Promise<EntityPermission> {
     const res = await pool.query(
-      `SELECT can_read, can_create, can_update, can_delete
+      `SELECT can_read, can_create, can_update, can_delete, can_export
        FROM public.entity_permission
        WHERE tenant_id = $1 AND entity_id = $2 AND role = $3`,
       [tenantId, entityId, role]
@@ -48,6 +50,7 @@ export class PermissionService {
         canCreate: r.can_create,
         canUpdate: r.can_update,
         canDelete: r.can_delete,
+        canExport: r.can_export ?? (role !== 'viewer'),
       };
     }
 
@@ -57,10 +60,10 @@ export class PermissionService {
 
   defaultEntityPermission(role: TenantRole): EntityPermission {
     if (role === 'viewer') {
-      return { role, canRead: true, canCreate: false, canUpdate: false, canDelete: false };
+      return { role, canRead: true, canCreate: false, canUpdate: false, canDelete: false, canExport: false };
     }
-    // editor, builder, admin, owner all get full CRUD
-    return { role, canRead: true, canCreate: true, canUpdate: true, canDelete: true };
+    // editor, builder, admin, owner all get full CRUD and export
+    return { role, canRead: true, canCreate: true, canUpdate: true, canDelete: true, canExport: true };
   }
 
   async setEntityPermission(
@@ -79,18 +82,20 @@ export class PermissionService {
       throw err;
     }
 
+    const canExport = perm.canExport ?? (role !== 'viewer');
+
     await pool.query(
-      `INSERT INTO public.entity_permission (tenant_id, entity_id, role, can_read, can_create, can_update, can_delete)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO public.entity_permission (tenant_id, entity_id, role, can_read, can_create, can_update, can_delete, can_export)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (tenant_id, entity_id, role) DO UPDATE
-         SET can_read=$4, can_create=$5, can_update=$6, can_delete=$7`,
-      [tenantId, entityId, role, perm.canRead, perm.canCreate, perm.canUpdate, perm.canDelete]
+         SET can_read=$4, can_create=$5, can_update=$6, can_delete=$7, can_export=$8`,
+      [tenantId, entityId, role, perm.canRead, perm.canCreate, perm.canUpdate, perm.canDelete, canExport]
     );
   }
 
   async getEntityPermissions(tenantId: string, entityId: string): Promise<EntityPermission[]> {
     const res = await pool.query(
-      `SELECT role, can_read, can_create, can_update, can_delete
+      `SELECT role, can_read, can_create, can_update, can_delete, can_export
        FROM public.entity_permission
        WHERE tenant_id = $1 AND entity_id = $2`,
       [tenantId, entityId]
@@ -101,7 +106,13 @@ export class PermissionService {
       canCreate: r.can_create,
       canUpdate: r.can_update,
       canDelete: r.can_delete,
+      canExport: r.can_export ?? (r.role !== 'viewer'),
     }));
+  }
+
+  async canExport(tenantId: string, entityId: string, role: TenantRole): Promise<boolean> {
+    const perm = await this.getEntityPermission(tenantId, entityId, role);
+    return Boolean(perm.canRead && perm.canExport);
   }
 
   // ─── Field Permissions ────────────────────────────────────────
@@ -162,6 +173,7 @@ export class PermissionService {
       [tenantId, entityId]
     );
     return res.rows.map((r) => ({
+      fieldId: r.fieldId,
       role: r.role as TenantRole,
       hidden: r.hidden,
       readOnly: r.readOnly,

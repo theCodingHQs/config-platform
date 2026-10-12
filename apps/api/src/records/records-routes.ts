@@ -105,6 +105,31 @@ export async function recordsRoutes(fastify: FastifyInstance) {
     return stripHiddenFromRecord(record, resolved, hiddenFieldIds);
   });
 
+  // GET /entities/:entityId/permissions - Get current role's effective entity & field permissions
+  fastify.get('/entities/:entityId/permissions', async (req: FastifyRequest) => {
+    const { tenantId, role } = req.session;
+    const { entityId } = req.params as { entityId: string };
+
+    const resolved = await entityCache.resolveEntity(tenantId, entityId);
+    const entityPerm = await permissionService.getEntityPermission(tenantId, resolved.entity.id, role);
+    const fieldPerms = await permissionService.getFieldPermissions(tenantId, resolved.entity.id, role);
+
+    const fieldsRecord: Record<string, { hidden: boolean; readOnly: boolean }> = {};
+    for (const [fieldId, p] of fieldPerms.entries()) {
+      fieldsRecord[fieldId] = { hidden: p.hidden, readOnly: p.readOnly };
+    }
+
+    return {
+      entityId: resolved.entity.id,
+      role,
+      canRead: entityPerm.canRead,
+      canCreate: entityPerm.canCreate,
+      canUpdate: entityPerm.canUpdate,
+      canDelete: entityPerm.canDelete,
+      fields: fieldsRecord,
+    };
+  });
+
   // PATCH /entities/:entityId/records/:id - Update record (editor+)
   fastify.patch('/entities/:entityId/records/:id', {
     preHandler: csrfCheckHook,

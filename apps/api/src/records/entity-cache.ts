@@ -9,6 +9,7 @@ export interface ResolvedEntity {
   fieldById: Map<string, FieldDef>;
   fieldByPhysicalName: Map<string, FieldDef>;
   systemFields: Set<string>;
+  displayField?: FieldDef;
 }
 
 interface CacheEntry {
@@ -47,7 +48,7 @@ export class EntityCache {
     try {
       // Fetch latest entity definition to check version
       const entityRes = await client.query<EntityDef>(
-        `SELECT id, tenant_id AS "tenantId", name, label, physical_table_name AS "physicalTableName", version, created_at AS "createdAt", updated_at AS "updatedAt"
+        `SELECT id, tenant_id AS "tenantId", name, label, physical_table_name AS "physicalTableName", display_field_id AS "displayFieldId", icon, version, created_at AS "createdAt", updated_at AS "updatedAt"
          FROM public.entity_def
          WHERE tenant_id = $1 AND (id = $2 OR name = $2)`,
         [tenantId, entityIdOrName]
@@ -84,6 +85,7 @@ export class EntityCache {
       }
 
       const systemFields = new Set(['id', 'created_at', 'updated_at']);
+      const displayField = entity.displayFieldId ? fieldById.get(entity.displayFieldId) : undefined;
 
       const resolved: ResolvedEntity = {
         entity,
@@ -92,6 +94,7 @@ export class EntityCache {
         fieldById,
         fieldByPhysicalName,
         systemFields,
+        displayField,
       };
 
       // Cache by both ID and Name

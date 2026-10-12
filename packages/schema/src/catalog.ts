@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { FieldDefSchema } from './fields.js';
+import { AllowedIconNameSchema } from './icons.js';
 
 export const TenantSchema = z.object({
   id: z.string(),
@@ -18,6 +19,7 @@ export const EntityDefSchema = z.object({
   physicalTableName: z.string(), // same as id or physical identifier e.g. t_8f2a
   version: z.number().int().default(1), // for optimistic locking
   displayFieldId: z.string().nullable().optional(),
+  icon: z.string().nullable().optional(),
   createdAt: z.string().or(z.date()).optional(),
   updatedAt: z.string().or(z.date()).optional(),
 });

@@ -1,0 +1,13 @@
+Name,Description,Setting,Config
+"CNC Lathe X-200","Precision metal turning lathe","High Precision","RPM: 3500 | Feed: 0.15"
+"Vertical Mill V-50","3-axis vertical machining center","Standard Cut","Coolant: Flood | Tool: 12mm"
+"Fiber Laser 4kW","Sheet metal laser cutting unit","Sheet Cutting","Gas: Nitrogen | Power: 85%"
+"Hydraulic Press 100T","Heavy duty stamping and forming","Continuous","Pressure: 180 Bar"
+"Surface Grinder G-12","Reciprocating table surface grinder","Fine Finish","Wheel: A46H | Grit: Fine"
+"Robotic Arm Weld-6","6-axis MIG/TIG welding manipulator","Auto-Cycle","Voltage: 24V | Wire: 0.8mm"
+"Injection Molder M-400","Plastic injection molding press","Temp: 220C","Clamp: 400T | Shot: 250g"
+"EDM Wire Cutter W-30","Submerged wire discharge machine","High Accuracy","Wire: 0.25mm Brass"
+"Band Saw Auto-Cut","Horizontal industrial metal bandsaw","Batch Feed","Speed: 45 m/min"
+"Coordinate Measuring CMM","Automated 3D inspection scanner","Calibrated","Probe: Renishaw PH10"
+"Plasma Cutter Pro","High definition air plasma cutter","Fast Pierce","Amps: 130A | Gas: O2"
+"Parts Washer Aqueous","Multi-stage ultrasonic cleaning tank","Heated: 60C","Wash: 8min | Rinse: 3min"

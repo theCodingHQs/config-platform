@@ -13,7 +13,16 @@ export const TableComponent: React.FC<TableProps> = ({
   entityId,
   columns,
   pageSize = 10,
+  striped = false,
+  compact = false,
+  bordered = false,
+  emptyMessage,
   onRowClick,
+  flex,
+  width,
+  minWidth,
+  maxWidth,
+  alignSelf,
 }) => {
   const { tenantId, resolveEntity, resolveField } = useMetadata();
   const runtime = usePageRuntime();
@@ -23,6 +32,7 @@ export const TableComponent: React.FC<TableProps> = ({
   const dsState = source && runtime ? runtime.dataSources[source] : undefined;
 
   // Pagination state for direct entityId query mode
+  const [localPageSize, setLocalPageSize] = useState(pageSize);
   const [cursorStack, setCursorStack] = useState<(string | null)[]>([null]);
   const [pageIndex, setPageIndex] = useState(0);
   const currentCursor = cursorStack[pageIndex] || null;
@@ -32,8 +42,8 @@ export const TableComponent: React.FC<TableProps> = ({
   const entity = effectiveEntityId ? resolveEntity(effectiveEntityId) : undefined;
 
   const { data, isLoading: queryLoading, isError, error } = useQuery<RecordsResponse, Error>({
-    queryKey: ['records', tenantId, effectiveEntityId, currentCursor, pageSize],
-    queryFn: () => fetchRecords(tenantId, effectiveEntityId!, { limit: pageSize, cursor: currentCursor }),
+    queryKey: ['records', tenantId, effectiveEntityId, currentCursor, localPageSize],
+    queryFn: () => fetchRecords(tenantId, effectiveEntityId!, { limit: localPageSize, cursor: currentCursor, count: true }),
     enabled: Boolean(!isDataSourceMode && entity && effectiveEntityId),
   });
 
@@ -43,29 +53,69 @@ export const TableComponent: React.FC<TableProps> = ({
 
   const records = isDataSourceMode ? dsState?.data || [] : data?.data || [];
   const isLoading = isDataSourceMode ? Boolean(dsState?.loading) : queryLoading;
-  const nextCursor = isDataSourceMode ? null : data?.nextCursor || null;
+  const total = isDataSourceMode ? dsState?.total : data?.total;
+  const effectivePageIndex = isDataSourceMode ? (dsState?.pageIndex ?? 0) : pageIndex;
+  const effectivePageSize = isDataSourceMode ? (dsState?.pageSize ?? pageSize) : localPageSize;
+  const hasNext = isDataSourceMode ? Boolean(dsState?.hasMore) : Boolean(data?.nextCursor);
+  const hasPrev = effectivePageIndex > 0;
 
   const handleNext = () => {
-    if (nextCursor) {
+    if (isDataSourceMode) {
+      dsState?.goToNextPage();
+    } else if (data?.nextCursor) {
       if (pageIndex + 1 < cursorStack.length) {
         setPageIndex(pageIndex + 1);
       } else {
-        setCursorStack([...cursorStack, nextCursor]);
+        setCursorStack([...cursorStack, data.nextCursor]);
         setPageIndex(pageIndex + 1);
       }
     }
   };
 
   const handlePrevious = () => {
-    if (pageIndex > 0) {
+    if (isDataSourceMode) {
+      dsState?.goToPrevPage();
+    } else if (pageIndex > 0) {
       setPageIndex(pageIndex - 1);
     }
   };
 
+  const handlePageSizeChange = (newSize: number) => {
+    if (isDataSourceMode) {
+      dsState?.setPageSize(newSize);
+    } else {
+      setLocalPageSize(newSize);
+      setCursorStack([null]);
+      setPageIndex(0);
+    }
+  };
+
+  const totalPages = total !== undefined && total > 0 ? Math.max(1, Math.ceil(total / effectivePageSize)) : undefined;
+  const startItem = records.length > 0 ? effectivePageIndex * effectivePageSize + 1 : 0;
+  const endItem = records.length > 0 ? (total !== undefined ? Math.min(startItem + records.length - 1, total) : startItem + records.length - 1) : 0;
+
+  const widthValue =
+    width !== undefined
+      ? (typeof width === 'number' ? `${width}px` : width)
+      : (flex !== undefined ? undefined : '100%');
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-3)', width: '100%' }}>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 'var(--spacing-3)',
+        flex: flex !== undefined ? flex : undefined,
+        width: widthValue,
+        minWidth: minWidth !== undefined ? (typeof minWidth === 'number' ? `${minWidth}px` : minWidth) : undefined,
+        maxWidth: maxWidth !== undefined ? (typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth) : undefined,
+        alignSelf,
+      }}
+    >
       <div className="table-container">
-        <table className="data-table">
+        <table
+          className={`data-table ${striped ? 'table-striped' : ''} ${compact ? 'table-compact' : ''} ${bordered ? 'table-bordered' : ''}`.trim()}
+        >
           <thead>
             <tr>
               {columns.map((col, idx) => {
@@ -98,7 +148,7 @@ export const TableComponent: React.FC<TableProps> = ({
             ) : records.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} style={{ textAlign: 'center', padding: 'var(--spacing-8)', color: 'var(--text-muted)' }}>
-                  No records found.
+                  {emptyMessage || 'No records found.'}
                 </td>
               </tr>
             ) : (
@@ -142,34 +192,96 @@ export const TableComponent: React.FC<TableProps> = ({
         </table>
       </div>
 
-      {/* Pagination controls for entityId mode */}
-      {!isDataSourceMode && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 var(--spacing-1)' }}>
+      {/* Pagination controls - unified across both DataSource and direct Entity modes */}
+      <div
+        className="table-pagination"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 'var(--spacing-2)',
+          padding: '0 var(--spacing-1)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-3)' }}>
           <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
-            Page {pageIndex + 1} {records.length > 0 && `(${records.length} items)`}
+            {total !== undefined
+              ? records.length === 0
+                ? 'Showing 0 of 0 records'
+                : `Showing ${startItem}–${endItem} of ${total.toLocaleString()} records`
+              : records.length === 0
+                ? '0 records'
+                : `Showing ${records.length} records`}
+          </span>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-1)' }}>
+            <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+              Per page:
+            </span>
+            <select
+              aria-label="Records per page"
+              className="form-select"
+              value={effectivePageSize}
+              onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+              style={{
+                width: 'auto',
+                padding: 'var(--spacing-1) var(--spacing-2)',
+                fontSize: 'var(--font-size-xs)',
+                minHeight: 'unset',
+              }}
+            >
+              <option value={5}>5</option>
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--spacing-2)' }}>
+          <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+            {totalPages !== undefined
+              ? `Page ${effectivePageIndex + 1} of ${totalPages}`
+              : `Page ${effectivePageIndex + 1}`}
           </span>
           <div style={{ display: 'flex', gap: 'var(--spacing-2)' }}>
             <button
               type="button"
               className="btn btn-secondary"
+              aria-label="Previous page"
               onClick={handlePrevious}
-              disabled={pageIndex === 0 || isLoading}
-              style={{ padding: 'var(--spacing-1) var(--spacing-3)', fontSize: 'var(--font-size-xs)', display: 'inline-flex', alignItems: 'center', gap: 'var(--spacing-1)' }}
+              disabled={!hasPrev || isLoading}
+              style={{
+                padding: 'var(--spacing-1) var(--spacing-3)',
+                fontSize: 'var(--font-size-xs)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 'var(--spacing-1)',
+              }}
             >
               <ChevronLeft size={14} /> Previous
             </button>
             <button
               type="button"
               className="btn btn-secondary"
+              aria-label="Next page"
               onClick={handleNext}
-              disabled={!nextCursor || isLoading}
-              style={{ padding: 'var(--spacing-1) var(--spacing-3)', fontSize: 'var(--font-size-xs)', display: 'inline-flex', alignItems: 'center', gap: 'var(--spacing-1)' }}
+              disabled={!hasNext || isLoading}
+              style={{
+                padding: 'var(--spacing-1) var(--spacing-3)',
+                fontSize: 'var(--font-size-xs)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 'var(--spacing-1)',
+              }}
             >
               Next <ChevronRight size={14} />
             </button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

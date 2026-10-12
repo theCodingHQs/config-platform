@@ -8,3 +8,7 @@ export * from './data-source.js';
 export * from './expression.js';
 export * from './migrator.js';
 export * from './theme.js';
+export * from './icons.js';
+export * from './import.js';
+export * from './export-template.js';
+export * from './export-template-grid.js';

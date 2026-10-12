@@ -7,6 +7,8 @@ export interface PlanLimits {
   maxRecordsPerEntity: number;
   maxPages: number;
   maxMembers: number;
+  maxExportRows: number;
+  maxConcurrentExports: number;
 }
 
 export const PLAN_LIMITS: Record<string, PlanLimits> = {
@@ -16,6 +18,8 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
     maxRecordsPerEntity: 1000,
     maxPages: 10,
     maxMembers: 5,
+    maxExportRows: 50000,
+    maxConcurrentExports: 2,
   },
   pro: {
     maxEntities: 100,
@@ -23,6 +27,8 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
     maxRecordsPerEntity: 100000,
     maxPages: 100,
     maxMembers: 50,
+    maxExportRows: 100000,
+    maxConcurrentExports: 5,
   },
   enterprise: {
     maxEntities: 1000,
@@ -30,6 +36,8 @@ export const PLAN_LIMITS: Record<string, PlanLimits> = {
     maxRecordsPerEntity: 10000000,
     maxPages: 1000,
     maxMembers: 1000,
+    maxExportRows: 500000,
+    maxConcurrentExports: 10,
   },
 };
 
@@ -40,6 +48,8 @@ export class LimitExceededError extends Error {
     this.name = 'LimitExceededError';
   }
 }
+
+const tenantExportConcurrency = new Map<string, number>();
 
 export class TenantLimitsService {
   async getTenantPlan(tenantId: string): Promise<{ plan: string; limits: PlanLimits }> {
@@ -120,6 +130,37 @@ export class TenantLimitsService {
         `Limit exceeded: Plan '${plan}' allows a maximum of ${limits.maxMembers} members (current: ${current}).`
       );
     }
+  }
+
+  async checkExportLimit(tenantId: string, rowCount: number): Promise<void> {
+    const { plan, limits } = await this.getTenantPlan(tenantId);
+    if (rowCount > limits.maxExportRows) {
+      throw new LimitExceededError(
+        `Export exceeds maximum allowed rows (${limits.maxExportRows.toLocaleString()}). Requested export size is ${rowCount.toLocaleString()} rows. Export aborted.`
+      );
+    }
+  }
+
+  async acquireExportSlot(tenantId: string): Promise<() => void> {
+    const { plan, limits } = await this.getTenantPlan(tenantId);
+    const current = tenantExportConcurrency.get(tenantId) || 0;
+    if (current >= limits.maxConcurrentExports) {
+      throw new LimitExceededError(
+        `Limit exceeded: Plan '${plan}' allows a maximum of ${limits.maxConcurrentExports} concurrent exports. Currently ${current} exports running.`
+      );
+    }
+    tenantExportConcurrency.set(tenantId, current + 1);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const count = tenantExportConcurrency.get(tenantId) || 1;
+      if (count <= 1) {
+        tenantExportConcurrency.delete(tenantId);
+      } else {
+        tenantExportConcurrency.set(tenantId, count - 1);
+      }
+    };
   }
 
   async getUsageReport(tenantId: string) {
