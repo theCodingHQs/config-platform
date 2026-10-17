@@ -153,6 +153,9 @@ importers:
       chart.js:
         specifier: ^4.5.1
         version: 4.5.1
+      echarts:
+        specifier: ^6.1.0
+        version: 6.1.0
       jsep:
         specifier: ^1.4.0
         version: 1.4.0

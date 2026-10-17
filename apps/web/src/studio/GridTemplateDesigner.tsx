@@ -25,6 +25,10 @@ import {
   Play,
   Calculator,
   X,
+  BarChart3,
+  PieChart,
+  LineChart,
+  AreaChart,
 } from 'lucide-react';
 import {
   getExportTemplate,
@@ -49,8 +53,12 @@ import {
   type GridDatasetField,
   type GridDatasetAggregate,
   type GridParameterDefinition,
+  type GridChartDefinition,
+  CHART_LIMITS,
 } from '@config-platform/schema';
 import { gridTemplateToUniver, univerToGridTemplate } from './export-grid/univer-adapter';
+import { ChartEditorModal } from './export-grid/ChartEditorModal';
+import { ChartOverlayCanvas } from './export-grid/ChartOverlayCanvas';
 import { useOptionalMetadata } from '../context/metadata-context';
 import { useTheme } from '../context/theme-context';
 import { useOptionalAppBar } from '../context/app-bar-context';
@@ -105,6 +113,7 @@ const CUSTOM_RIBBON_TABS = [
     groups: [{
       key: 'ribbon.insert.edit',
       items: [
+        { id: 'config-platform.command.ribbon.insert-chart', title: 'Insert Chart', action: 'charts' },
         { id: 'config-platform.command.ribbon.insert-starter', title: 'Starter Templates', action: 'starterTemplates' },
         { id: 'config-platform.command.ribbon.insert-datasets', title: 'Add or Edit Datasets', action: 'datasets' },
         { id: 'config-platform.command.ribbon.insert-regions', title: 'Repeating Regions', action: 'regions' },
@@ -206,18 +215,34 @@ export function GridTemplateDesigner() {
   const [viewMode, setViewMode] = useState<'design' | 'preview'>('design');
   const [loadingPreviewData, setLoadingPreviewData] = useState(false);
 
-  // Side panel state: 'datasets' vs 'fields' vs 'regions'
-  const [sidePanelTab, setSidePanelTab] = useState<'datasets' | 'fields' | 'regions'>('datasets');
+  // Side panel state: 'datasets' vs 'fields' vs 'regions' vs 'charts'
+  const [sidePanelTab, setSidePanelTab] = useState<'datasets' | 'fields' | 'regions' | 'charts'>('datasets');
+  const [showChartEditor, setShowChartEditor] = useState(false);
+  const [editingChart, setEditingChart] = useState<GridChartDefinition | null>(null);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
 
   const [selectedCell, setSelectedCell] = useState<{ row: number; col: number }>({ row: 0, col: 0 });
   const selectedCellRef = useRef<{ row: number; col: number }>({ row: 0, col: 0 });
+  const [selectedRange, setSelectedRange] = useState<{
+    sheetId: string;
+    startRow: number;
+    startCol: number;
+    endRow: number;
+    endCol: number;
+  }>({ sheetId: 'sheet_0', startRow: 0, startCol: 0, endRow: 0, endCol: 0 });
 
-  const handleSelectionChange = useCallback((row: number, col: number) => {
-    if (selectedCellRef.current.row !== row || selectedCellRef.current.col !== col) {
-      selectedCellRef.current = { row, col };
-      setSelectedCell({ row, col });
+  const handleSelectionChange = useCallback((startRow: number, startCol: number, endRow?: number, endCol?: number) => {
+    if (selectedCellRef.current.row !== startRow || selectedCellRef.current.col !== startCol) {
+      selectedCellRef.current = { row: startRow, col: startCol };
+      setSelectedCell({ row: startRow, col: startCol });
     }
+    setSelectedRange((prev) => ({
+      ...prev,
+      startRow,
+      startCol,
+      endRow: endRow !== undefined ? endRow : startRow,
+      endCol: endCol !== undefined ? endCol : startCol,
+    }));
   }, []);
 
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -485,13 +510,13 @@ export function GridTemplateDesigner() {
 
           // Track selection range
           const params = cmdInfo.params;
-          if (params?.range) {
-            handleSelectionChange(params.range.startRow, params.range.startColumn);
-          } else if (params?.selections?.[0]?.range) {
-            handleSelectionChange(
-              params.selections[0].range.startRow,
-              params.selections[0].range.startColumn
-            );
+          const r = params?.range || params?.selections?.[0]?.range;
+          if (r) {
+            const startRow = r.startRow ?? 0;
+            const startCol = r.startColumn ?? 0;
+            const endRow = r.endRow !== undefined ? r.endRow : startRow;
+            const endCol = r.endColumn !== undefined ? r.endColumn : startCol;
+            handleSelectionChange(startRow, startCol, endRow, endCol);
           }
         });
       }
@@ -552,10 +577,11 @@ export function GridTemplateDesigner() {
       return { draft: null, errors: ['Spreadsheet editor is not initialized'] };
     }
 
-    // Preserve template-level schemaVersion, datasets, and parameters
-    gridDraft.schemaVersion = (template?.draft as any)?.schemaVersion || 2;
+    // Preserve template-level schemaVersion, datasets, parameters, and charts
+    gridDraft.schemaVersion = (template?.draft as any)?.schemaVersion || 3;
     gridDraft.datasets = (template?.draft as any)?.datasets || [];
     gridDraft.parameters = (template?.draft as any)?.parameters || [];
+    gridDraft.charts = (template?.draft as any)?.charts || gridDraft.charts || [];
 
     // 1. Check Caps
     const capsCheck = validateGridCaps(gridDraft);
@@ -840,6 +866,10 @@ export function GridTemplateDesigner() {
       }
     },
     saveDraft: () => { void handleSaveDraft(); },
+    charts: () => {
+      setEditingChart(null);
+      setShowChartEditor(true);
+    },
     downloadPreview: () => { void handleDownloadPreview(); },
     publish: () => { void handlePublish(); },
   };
@@ -849,9 +879,79 @@ export function GridTemplateDesigner() {
     template?.draft?.kind === 'grid' ? (template.draft as any).datasets || [] : [];
   const currentParameters: GridParameterDefinition[] =
     template?.draft?.kind === 'grid' ? (template.draft as any).parameters || [] : [];
+  const currentCharts: GridChartDefinition[] =
+    template?.draft?.kind === 'grid' ? (template.draft as any).charts || [] : [];
+  const activeSheetId =
+    (template?.draft?.kind === 'grid' ? (template.draft as any).sheets?.[0]?.id : undefined) ||
+    'sheet_0';
 
   const currentDataset =
     currentDatasets.find((d) => d.id === selectedDatasetId) || currentDatasets[0] || null;
+
+  // ─── Chart Manipulation Actions ────────────────────────────────────────────
+  const updateChartsInDraft = (newCharts: GridChartDefinition[]) => {
+    if (!template) return;
+    const { draft } = extractAndValidateGridDraft();
+    if (!draft) return;
+
+    (draft as any).charts = newCharts;
+    setTemplate((prev) => (prev ? { ...prev, draft } : prev));
+    setHasUnsavedChanges(true);
+  };
+
+  const handleSaveChart = (chart: GridChartDefinition) => {
+    const existingIdx = currentCharts.findIndex((c) => c.id === chart.id);
+    let updated: GridChartDefinition[];
+    if (existingIdx >= 0) {
+      updated = [...currentCharts];
+      updated[existingIdx] = chart;
+    } else {
+      updated = [...currentCharts, chart];
+    }
+    updateChartsInDraft(updated);
+    showNotification('success', `Chart '${chart.title}' saved`);
+  };
+
+  const handleDeleteChart = (chartId: string) => {
+    const updated = currentCharts.filter((c) => c.id !== chartId);
+    updateChartsInDraft(updated);
+    showNotification('success', 'Chart removed');
+  };
+
+  const handleSheetCellReader = (sheetId: string, rangeA1: string): (string | number | null)[] => {
+    if (!workbookRef.current) return [];
+    try {
+      const snapshot = workbookRef.current.getSnapshot();
+      const targetSheet = snapshot.sheets?.[sheetId] || Object.values(snapshot.sheets || {})[0];
+      if (!targetSheet?.cellData) return [];
+
+      const m = rangeA1.trim().toUpperCase().match(/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/);
+      if (!m) return [];
+
+      const colToNum = (c: string) => {
+        let n = 0;
+        for (let i = 0; i < c.length; i++) n = n * 26 + (c.charCodeAt(i) - 64);
+        return n - 1;
+      };
+
+      const startCol = colToNum(m[1]);
+      const startRow = parseInt(m[2], 10) - 1;
+      const endCol = m[3] ? colToNum(m[3]) : startCol;
+      const endRow = m[4] ? parseInt(m[4], 10) - 1 : startRow;
+
+      const results: (string | number | null)[] = [];
+      for (let r = startRow; r <= endRow; r++) {
+        for (let c = startCol; c <= endCol; c++) {
+          const cell = targetSheet.cellData?.[r]?.[c];
+          const val = cell?.v ?? cell?.value ?? null;
+          results.push(val);
+        }
+      }
+      return results;
+    } catch {
+      return [];
+    }
+  };
 
   // ─── Dataset Manipulation Actions ──────────────────────────────────────────
   const updateDatasetsInDraft = (newDatasets: GridDatasetDefinition[]) => {
@@ -1323,6 +1423,22 @@ export function GridTemplateDesigner() {
           <button
             type="button"
             className="btn btn-secondary"
+            onClick={() => {
+              setEditingChart(null);
+              setShowChartEditor(true);
+            }}
+            disabled={viewMode === 'preview' || !template}
+            title="Insert a new chart into the grid template"
+            style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}
+            data-testid="insert-chart-header-btn"
+          >
+            <BarChart3 size={14} style={{ color: 'var(--accent)' }} />
+            <span style={{ fontSize: 'var(--font-size-sm)' }}>Insert Chart</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-secondary"
             onClick={() => setShowStarterTemplates(true)}
             disabled={viewMode === 'preview' || !template}
             title="Choose a starter layout for this entity"
@@ -1414,6 +1530,17 @@ export function GridTemplateDesigner() {
               left: 0,
             }}
           />
+          <ChartOverlayCanvas
+            charts={currentCharts}
+            activeSheetId={activeSheetId}
+            viewMode={viewMode}
+            onEditChart={(chart) => {
+              setEditingChart(chart);
+              setShowChartEditor(true);
+            }}
+            onDeleteChart={handleDeleteChart}
+            themeTokens={undefined}
+          />
         </div>
 
         {/* Right: Side Panel (Datasets, Fields, Regions) */}
@@ -1490,6 +1617,25 @@ export function GridTemplateDesigner() {
             >
               <Layers size={14} />
               <span style={{ fontSize: 'var(--font-size-xs)' }}>Regions ({activeRegions.length})</span>
+            </button>
+            <button
+              type="button"
+              className={`btn btn-ghost ${sidePanelTab === 'charts' ? 'active' : ''}`}
+              data-testid="charts-tab-btn"
+              onClick={() => setSidePanelTab('charts')}
+              style={{
+                flex: 1,
+                borderBottom: sidePanelTab === 'charts' ? 'var(--border-width) solid var(--accent)' : 'none',
+                fontWeight: sidePanelTab === 'charts' ? 600 : 400,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 'var(--space-1)',
+                padding: 'var(--space-2)',
+              }}
+            >
+              <BarChart3 size={14} />
+              <span style={{ fontSize: 'var(--font-size-xs)' }}>Charts ({currentCharts.length})</span>
             </button>
           </div>
 
@@ -1841,7 +1987,7 @@ export function GridTemplateDesigner() {
                             }}
                           >
                             <span>
-                              {agg.fn.toUpperCase()}({agg.fieldPath || '*'}) AS <strong>{agg.name}</strong>
+                              {(agg.fn || 'sum').toUpperCase()}({agg.fieldPath || '*'}) AS <strong>{agg.name}</strong>
                             </span>
                             <button
                               type="button"
@@ -1852,7 +1998,7 @@ export function GridTemplateDesigner() {
                                   aggregates: (ds.aggregates || []).filter((a) => a.id !== agg.id),
                                 }))
                               }
-                              style={{ color: 'var(--danger)', padding: 2 }}
+                              style={{ color: 'var(--danger)', padding: 'var(--space-1)' }}
                             >
                               <Trash2 size={12} />
                             </button>
@@ -2270,6 +2416,193 @@ export function GridTemplateDesigner() {
               ))}
             </div>
           )}
+
+          {/* TAB 4: CHARTS */}
+          {sidePanelTab === 'charts' && (
+            <div style={{ padding: 'var(--space-3)' }} data-testid="charts-panel-tab">
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 'var(--space-3)',
+                }}
+              >
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 'var(--font-size-sm)', fontWeight: 600 }}>Charts</h4>
+                  <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+                    {currentCharts.length} of {CHART_LIMITS.MAX_CHARTS_PER_TEMPLATE} charts
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  data-testid="insert-chart-panel-btn"
+                  onClick={() => {
+                    setEditingChart(null);
+                    setShowChartEditor(true);
+                  }}
+                  disabled={currentCharts.length >= CHART_LIMITS.MAX_CHARTS_PER_TEMPLATE}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-1)',
+                    fontSize: 'var(--font-size-xs)',
+                    padding: 'var(--space-1) var(--space-2)',
+                  }}
+                >
+                  <Plus size={14} />
+                  <span>Add Chart</span>
+                </button>
+              </div>
+
+              {currentCharts.length === 0 ? (
+                <div
+                  style={{
+                    padding: 'var(--space-4)',
+                    textAlign: 'center',
+                    backgroundColor: 'var(--surface-subtle)',
+                    borderRadius: 'var(--radius-md)',
+                    border: 'var(--border-width) dashed var(--border)',
+                    marginTop: 'var(--space-2)',
+                  }}
+                >
+                  <BarChart3 size={28} style={{ color: 'var(--text-muted)', margin: '0 auto var(--space-2)' }} />
+                  <p style={{ margin: '0 0 var(--space-1)', fontSize: 'var(--font-size-sm)', fontWeight: 500 }}>
+                    No charts yet
+                  </p>
+                  <p
+                    style={{
+                      margin: '0 0 var(--space-3)',
+                      fontSize: 'var(--font-size-xs)',
+                      color: 'var(--text-muted)',
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    Add bar, line, area, pie, donut or combo charts mapped to grid cell ranges or datasets.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setEditingChart(null);
+                      setShowChartEditor(true);
+                    }}
+                    style={{ fontSize: 'var(--font-size-xs)' }}
+                  >
+                    + Insert First Chart
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                  {currentCharts.map((chart) => {
+                    const isRange = chart.source.kind === 'range';
+                    return (
+                      <div
+                        key={chart.id}
+                        data-testid={`chart-card-${chart.id}`}
+                        style={{
+                          padding: 'var(--space-3)',
+                          backgroundColor: 'var(--surface-elevated, var(--surface))',
+                          border: 'var(--border-width) solid var(--border)',
+                          borderRadius: 'var(--radius-md)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 'var(--space-2)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 'var(--space-2)' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', marginBottom: 'var(--space-1)' }}>
+                              <span
+                                style={{
+                                  textTransform: 'uppercase',
+                                  fontSize: 'var(--font-size-xs)',
+                                  fontWeight: 700,
+                                  padding: 'var(--space-1) var(--space-2)',
+                                  borderRadius: 'var(--radius-control)',
+                                  backgroundColor: 'var(--accent-subtle)',
+                                  color: 'var(--accent)',
+                                }}
+                              >
+                                {chart.type}
+                              </span>
+                              <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>Sheet: {chart.anchor.sheetId}</span>
+                            </div>
+                            <strong
+                              style={{
+                                display: 'block',
+                                fontSize: 'var(--font-size-sm)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                              title={chart.title}
+                            >
+                              {chart.title}
+                            </strong>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              data-testid={`panel-edit-chart-${chart.id}`}
+                              title="Edit Chart"
+                              onClick={() => {
+                                setEditingChart(chart);
+                                setShowChartEditor(true);
+                              }}
+                              style={{ padding: 'var(--space-1)' }}
+                            >
+                              <Edit3 size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              data-testid={`panel-delete-chart-${chart.id}`}
+                              title="Delete Chart"
+                              onClick={() => handleDeleteChart(chart.id)}
+                              style={{ padding: 'var(--space-1)', color: 'var(--danger)' }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div
+                          style={{
+                            fontSize: 'var(--font-size-xs)',
+                            color: 'var(--text-muted)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 'var(--space-1)',
+                            paddingTop: 'var(--space-1)',
+                            borderTop: 'var(--border-width) solid var(--border-subtle, var(--border))',
+                          }}
+                        >
+                          <div>
+                            <strong>Source: </strong>
+                            {chart.source.kind === 'range'
+                              ? `Range (${chart.source.sheetId}!${chart.source.categoryRange || ''})`
+                              : `Dataset (${chart.source.datasetId})`}
+                          </div>
+                          <div>
+                            <strong>Series: </strong>
+                            {chart.source.series.length} series
+                          </div>
+                          <div>
+                            <strong>Anchor: </strong>
+                            R{chart.anchor.startRow + 1}:C{chart.anchor.startCol + 1} to R{chart.anchor.endRow + 1}:C{chart.anchor.endCol + 1}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </aside>
       </div>
 
@@ -2417,6 +2750,37 @@ export function GridTemplateDesigner() {
             </div>
           </div>
         </div>
+      )}
+
+      {showChartEditor && (
+        <ChartEditorModal
+          isOpen={showChartEditor}
+          onClose={() => {
+            setShowChartEditor(false);
+            setEditingChart(null);
+          }}
+          onSave={handleSaveChart}
+          initialChart={editingChart}
+          datasets={currentDatasets}
+          sheets={
+            template?.draft?.kind === 'grid' && template.draft.sheets
+              ? template.draft.sheets
+              : [{ id: activeSheetId || 'sheet_0', name: 'Sheet 1', rowCount: 100, columnCount: 26, cells: {} }]
+          }
+          selectedRange={
+            selectedRange
+              ? {
+                  sheetId: activeSheetId || 'sheet_0',
+                  startRow: selectedRange.startRow,
+                  startCol: selectedRange.startCol,
+                  endRow: selectedRange.endRow,
+                  endCol: selectedRange.endCol,
+                }
+              : undefined
+          }
+          themeTokens={undefined}
+          sheetCellReader={handleSheetCellReader}
+        />
       )}
     </div>
   );

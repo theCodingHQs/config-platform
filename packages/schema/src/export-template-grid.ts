@@ -502,8 +502,7 @@ export const BaseGridExportTemplateDefinitionSchema = z.object({
   charts: z
     .array(GridChartDefinitionSchema)
     .max(GRID_LIMITS.MAX_CHARTS, `Max ${GRID_LIMITS.MAX_CHARTS} charts allowed per template`)
-    .optional()
-    .default([]),
+    .optional(),
   sheets: z.array(GridSheetDefinitionSchema).min(1),
   filenameExpression: z.string().optional().default('"budget_report"'),
   pdf: z
