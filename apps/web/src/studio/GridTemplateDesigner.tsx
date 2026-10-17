@@ -24,7 +24,7 @@ import {
   Sliders,
   Play,
   Calculator,
-  Sparkles,
+  X,
 } from 'lucide-react';
 import {
   getExportTemplate,
@@ -39,7 +39,9 @@ import {
   validateGridCaps,
   validateGridFormulas,
   detectUnsupportedContent,
-  buildExecutiveReportTemplate,
+  buildGridStarterTemplate,
+  GRID_STARTER_TEMPLATES,
+  type GridStarterTemplateId,
   type GridExportTemplateDefinition,
   type GridRegionDefinition,
   type GridDatasetDefinition,
@@ -50,6 +52,8 @@ import {
 } from '@config-platform/schema';
 import { gridTemplateToUniver, univerToGridTemplate } from './export-grid/univer-adapter';
 import { useOptionalMetadata } from '../context/metadata-context';
+import { useTheme } from '../context/theme-context';
+import { useOptionalAppBar } from '../context/app-bar-context';
 
 // Univer styles
 import '@univerjs/design/lib/index.css';
@@ -70,6 +74,7 @@ import {
   UndoCommand,
   RedoCommand,
   mergeLocales,
+  ThemeService,
 } from '@univerjs/core';
 import { defaultTheme } from '@univerjs/presets';
 import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
@@ -79,7 +84,7 @@ import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
 import { UniverSheetsPlugin } from '@univerjs/sheets';
 import { UniverSheetsFormulaPlugin } from '@univerjs/sheets-formula';
 import { UniverSheetsNumfmtPlugin } from '@univerjs/sheets-numfmt';
-import { UniverUIPlugin } from '@univerjs/ui';
+import { IMenuManagerService, MenuItemType, UniverUIPlugin, type MenuSchemaType } from '@univerjs/ui';
 import { UniverSheetsUIPlugin } from '@univerjs/sheets-ui';
 import { UniverSheetsFormulaUIPlugin } from '@univerjs/sheets-formula-ui';
 import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
@@ -93,21 +98,109 @@ import SheetsFormulaEnUS from '@univerjs/sheets-formula/locale/en-US';
 import SheetsFormulaUIEnUS from '@univerjs/sheets-formula-ui/locale/en-US';
 import SheetsNumfmtUIEnUS from '@univerjs/sheets-numfmt-ui/locale/en-US';
 
+const CUSTOM_RIBBON_TABS = [
+  {
+    key: 'ribbon.insert',
+    title: 'Insert',
+    groups: [{
+      key: 'ribbon.insert.edit',
+      items: [
+        { id: 'config-platform.command.ribbon.insert-starter', title: 'Starter Templates', action: 'starterTemplates' },
+        { id: 'config-platform.command.ribbon.insert-datasets', title: 'Add or Edit Datasets', action: 'datasets' },
+        { id: 'config-platform.command.ribbon.insert-regions', title: 'Repeating Regions', action: 'regions' },
+      ],
+    }],
+  },
+  {
+    key: 'ribbon.data',
+    title: 'Data',
+    groups: [{
+      key: 'ribbon.data.organization',
+      items: [
+        { id: 'config-platform.command.ribbon.data-datasets', title: 'Datasets', action: 'datasets' },
+        { id: 'config-platform.command.ribbon.data-fields', title: 'Available Fields', action: 'fields' },
+        { id: 'config-platform.command.ribbon.data-preview', title: 'Preview with Data', action: 'previewData' },
+      ],
+    }],
+  },
+  {
+    key: 'ribbon.page-layout',
+    title: 'Page Layout',
+    groups: [{
+      key: 'ribbon.page-layout.options',
+      items: [
+        { id: 'config-platform.command.ribbon.layout-regions', title: 'Configure Repeating Regions', action: 'regions' },
+        { id: 'config-platform.command.ribbon.layout-design', title: 'Return to Design View', action: 'designView' },
+      ],
+    }],
+  },
+  {
+    key: 'ribbon.review',
+    title: 'Review',
+    groups: [{
+      key: 'ribbon.review.validation',
+      items: [
+        { id: 'config-platform.command.ribbon.review-validate', title: 'Validate Template', action: 'validate' },
+        { id: 'config-platform.command.ribbon.review-bindings', title: 'Review Data Bindings', action: 'fields' },
+      ],
+    }],
+  },
+  {
+    key: 'ribbon.export',
+    title: 'Export',
+    groups: [{
+      key: 'ribbon.export.actions',
+      items: [
+        { id: 'config-platform.command.ribbon.export-save', title: 'Save Draft', action: 'saveDraft' },
+        { id: 'config-platform.command.ribbon.export-download', title: 'Download XLSX Preview', action: 'downloadPreview' },
+        { id: 'config-platform.command.ribbon.export-publish', title: 'Publish Template', action: 'publish' },
+      ],
+    }],
+  },
+] as const;
+
+function buildCustomRibbonMenu(): MenuSchemaType {
+  const ribbon: Record<string, MenuSchemaType> = {};
+  CUSTOM_RIBBON_TABS.forEach((tab, tabIndex) => {
+    const groups: Record<string, MenuSchemaType> = {};
+    tab.groups.forEach((group, groupIndex) => {
+      const items: Record<string, MenuSchemaType> = {};
+      group.items.forEach((item, itemIndex) => {
+        items[item.id] = {
+          order: itemIndex,
+          menuItemFactory: () => ({
+            id: item.id,
+            title: item.title,
+            type: MenuItemType.BUTTON,
+          }),
+        };
+      });
+      groups[group.key] = { order: groupIndex, ...items };
+    });
+    ribbon[tab.key] = { order: tabIndex + 1, title: tab.title, ...groups };
+  });
+  return { ribbon };
+}
+
 export function GridTemplateDesigner() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const metadata = useOptionalMetadata();
+  const { resolvedTheme } = useTheme();
+  const appBar = useOptionalAppBar();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const univerRef = useRef<Univer | null>(null);
   const workbookRef = useRef<any>(null);
   const commandServiceRef = useRef<any>(null);
+  const ribbonActionsRef = useRef<Record<string, () => void>>({});
 
   const [template, setTemplate] = useState<ExportTemplateItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [showStarterTemplates, setShowStarterTemplates] = useState(false);
 
   // View Mode: 'design' vs 'preview' (live tenant data preview)
   const [viewMode, setViewMode] = useState<'design' | 'preview'>('design');
@@ -130,6 +223,7 @@ export function GridTemplateDesigner() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [unsupportedWarnings, setUnsupportedWarnings] = useState<string[]>([]);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const notificationTimerRef = useRef<number | null>(null);
   const [boundCellNotice, setBoundCellNotice] = useState<string | null>(null);
 
   // Dataset Preview state
@@ -148,11 +242,34 @@ export function GridTemplateDesigner() {
   const [selectedRefFieldForJoin, setSelectedRefFieldForJoin] = useState('');
 
   const showNotification = (type: 'success' | 'error', message: string) => {
-    setNotification({ type, message });
-    if (type === 'success') {
-      setTimeout(() => setNotification(null), 4000);
+    if (notificationTimerRef.current !== null) {
+      window.clearTimeout(notificationTimerRef.current);
     }
+    setNotification({ type, message });
+    appBar?.showMessage({ type, message });
+    notificationTimerRef.current = window.setTimeout(
+      () => {
+        setNotification(null);
+        appBar?.clearMessage();
+      },
+      type === 'success' ? 4000 : 7000
+    );
   };
+
+  const dismissNotification = () => {
+    if (notificationTimerRef.current !== null) {
+      window.clearTimeout(notificationTimerRef.current);
+      notificationTimerRef.current = null;
+    }
+    setNotification(null);
+    appBar?.clearMessage();
+  };
+
+  useEffect(() => () => {
+    if (notificationTimerRef.current !== null) {
+      window.clearTimeout(notificationTimerRef.current);
+    }
+  }, []);
 
   // Automatically update boundCellNotice when selectedCell changes
   useEffect(() => {
@@ -271,6 +388,7 @@ export function GridTemplateDesigner() {
     try {
       const univer = new Univer({
         theme: defaultTheme,
+        darkMode: resolvedTheme === 'dark',
         locale: LocaleType.EN_US,
         locales: {
           [LocaleType.EN_US]: mergeLocales(
@@ -307,6 +425,7 @@ export function GridTemplateDesigner() {
         univer.registerPlugin(UniverUIPlugin, {
           container: containerRef.current,
           menu: hiddenMenuConfig,
+          ribbonType: 'grid',
         });
         univer.registerPlugin(UniverDocsPlugin, { hasScroll: false });
         univer.registerPlugin(UniverDocsUIPlugin);
@@ -325,6 +444,26 @@ export function GridTemplateDesigner() {
       const commandService = (univer as any).__getInjector?.().get(ICommandService);
       if (commandService) {
         commandServiceRef.current = commandService;
+        if (typeof process === 'undefined' || process.env.NODE_ENV !== 'test') {
+          for (const tab of CUSTOM_RIBBON_TABS) {
+            for (const group of tab.groups) {
+              for (const item of group.items) {
+                commandService.registerCommand({
+                  id: item.id,
+                  type: CommandType.OPERATION,
+                  handler: () => {
+                    const action = ribbonActionsRef.current[item.action];
+                    if (!action) return false;
+                    action();
+                    return true;
+                  },
+                });
+              }
+            }
+          }
+          const injector = (univer as any).__getInjector?.();
+          injector?.get(IMenuManagerService).appendRootMenu(buildCustomRibbonMenu());
+        }
         commandService.onCommandExecuted((cmdInfo: any) => {
           if (!cmdInfo) return;
           if (cmdInfo.type === CommandType.MUTATION) {
@@ -359,7 +498,13 @@ export function GridTemplateDesigner() {
     } catch (err) {
       console.error('Failed to initialize Univer:', err);
     }
-  }, [handleSelectionChange]);
+  }, [handleSelectionChange, resolvedTheme]);
+
+  useEffect(() => {
+    if (!univerRef.current) return;
+    const injector = (univerRef.current as any).__getInjector?.();
+    injector?.get(ThemeService).setDarkMode(resolvedTheme === 'dark');
+  }, [resolvedTheme]);
 
   const templateId = template?.id;
   useEffect(() => {
@@ -616,21 +761,23 @@ export function GridTemplateDesigner() {
     }
   };
 
-  const handleApplyExecutiveTemplate = () => {
+  const handleApplyStarterTemplate = (kind: GridStarterTemplateId) => {
     if (!template) return;
     const targetEntity = metadata?.entities?.find((e: any) => e.id === template.entityId) || {
       id: template.entityId,
       name: template.name || 'Entity',
     };
-    const execDraft = buildExecutiveReportTemplate(targetEntity);
-    const univerData = gridTemplateToUniver(execDraft, { designView: viewMode === 'design' });
+    const starterDraft = buildGridStarterTemplate(targetEntity, kind);
+    const univerData = gridTemplateToUniver(starterDraft, { designView: viewMode === 'design' });
     initUniverWithData(univerData);
-    setTemplate((prev) => (prev ? { ...prev, draft: execDraft } : prev));
-    if (execDraft.datasets && execDraft.datasets.length > 0) {
-      setSelectedDatasetId(execDraft.datasets[0].id);
+    setTemplate((prev) => (prev ? { ...prev, draft: starterDraft } : prev));
+    if (starterDraft.datasets && starterDraft.datasets.length > 0) {
+      setSelectedDatasetId(starterDraft.datasets[0].id);
     }
     setHasUnsavedChanges(true);
-    showNotification('success', 'Applied Executive KPI & Breakdown template');
+    setShowStarterTemplates(false);
+    const starterName = GRID_STARTER_TEMPLATES.find((starter) => starter.id === kind)?.name || 'Starter';
+    showNotification('success', `Applied ${starterName} template`);
   };
 
   // ─── Toggle View Mode ──────────────────────────────────────────────────────
@@ -673,6 +820,28 @@ export function GridTemplateDesigner() {
       const univerData = gridTemplateToUniver(draftDef, { designView: true });
       initUniverWithData(univerData);
     }
+  };
+
+  ribbonActionsRef.current = {
+    starterTemplates: () => {
+      if (viewMode === 'design' && template) setShowStarterTemplates(true);
+    },
+    datasets: () => setSidePanelTab('datasets'),
+    fields: () => setSidePanelTab('fields'),
+    regions: () => setSidePanelTab('regions'),
+    previewData: () => { void handleToggleViewMode('preview'); },
+    designView: () => { void handleToggleViewMode('design'); },
+    validate: () => {
+      const { errors } = extractAndValidateGridDraft();
+      if (errors.length > 0) {
+        showNotification('error', errors.join('; '));
+      } else {
+        showNotification('success', 'Template validation passed');
+      }
+    },
+    saveDraft: () => { void handleSaveDraft(); },
+    downloadPreview: () => { void handleDownloadPreview(); },
+    publish: () => { void handlePublish(); },
   };
 
   // ─── Inspect Selected Cell & Datasets ──────────────────────────────────────
@@ -991,6 +1160,19 @@ export function GridTemplateDesigner() {
   const draftCoord = `${selectedCell.row}:${selectedCell.col}`;
   const draftCell = template?.draft?.kind === 'grid' ? template.draft.sheets?.[0]?.cells?.[draftCoord] : null;
   const activeBinding = draftCell?.binding;
+  const selectedColumnLabel = (() => {
+    let column = selectedCell.col + 1;
+    let label = '';
+    while (column > 0) {
+      const remainder = (column - 1) % 26;
+      label = String.fromCharCode(65 + remainder) + label;
+      column = Math.floor((column - 1) / 26);
+    }
+    return label;
+  })();
+  const bindingLabel = boundCellNotice
+    ?.replace(/^This cell is bound to /, '')
+    .replace(/; edit the binding in the panel\.$/, '');
   const activeRegions: GridRegionDefinition[] =
     template?.draft?.kind === 'grid' ? template.draft.sheets?.[0]?.regions || [] : [];
 
@@ -999,13 +1181,48 @@ export function GridTemplateDesigner() {
   const baseEntity = allEntities.find((e: any) => e.id === currentDataset?.source.baseEntityId);
   const baseEntityRefFields = (baseEntity?.fields || []).filter((f: any) => f.type === 'reference');
 
+  useEffect(() => {
+    if (!appBar) return;
+    appBar.setContent(
+      <div className="grid-designer-bar-context">
+        <span className="grid-designer-cell-address" title={`Row ${selectedCell.row + 1}, column ${selectedCell.col + 1}`}>
+          {selectedColumnLabel}{selectedCell.row + 1}
+        </span>
+        {boundCellNotice && (
+          <span
+            className="grid-designer-binding-status"
+            data-testid="bound-cell-notice"
+            title={`${boundCellNotice} The binding takes precedence when the template is rendered.`}
+          >
+            <LinkIcon size={13} aria-hidden="true" />
+            <span>Bound · {bindingLabel}</span>
+          </span>
+        )}
+      </div>,
+      boundCellNotice ? (
+        <button type="button" className="app-statusbar-action" onClick={handleUnbindCell}>
+          Unbind
+        </button>
+      ) : null
+    );
+    return appBar.clearContent;
+  }, [
+    appBar?.setContent,
+    appBar?.clearContent,
+    selectedCell,
+    selectedColumnLabel,
+    boundCellNotice,
+    bindingLabel,
+  ]);
+
   return (
     <div
       style={{
         display: 'flex',
         flexDirection: 'column',
         width: '100%',
-        height: '100vh',
+        height: '100%',
+        minHeight: 0,
         overflow: 'hidden',
         backgroundColor: 'var(--bg)',
         color: 'var(--text-main)',
@@ -1106,13 +1323,13 @@ export function GridTemplateDesigner() {
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={handleApplyExecutiveTemplate}
+            onClick={() => setShowStarterTemplates(true)}
             disabled={viewMode === 'preview' || !template}
-            title="Generate Executive KPI & Data Breakdown layout for this entity"
+            title="Choose a starter layout for this entity"
             style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}
           >
-            <Sparkles size={14} style={{ color: 'var(--accent)' }} />
-            <span style={{ fontSize: 'var(--font-size-sm)' }}>Starter Template</span>
+            <FileSpreadsheet size={14} style={{ color: 'var(--accent)' }} />
+            <span style={{ fontSize: 'var(--font-size-sm)' }}>Starter Templates</span>
           </button>
 
           <button
@@ -1157,75 +1374,8 @@ export function GridTemplateDesigner() {
         </div>
       </header>
 
-      {/* ─── Bound Cell Notice Banner ─── */}
-      {boundCellNotice && (
-        <div
-          data-testid="bound-cell-notice"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: 'var(--space-2) var(--space-4)',
-            backgroundColor: 'var(--accent-subtle)',
-            borderBottom: 'var(--border-width) solid var(--accent)',
-            color: 'var(--text-main)',
-            fontSize: 'var(--font-size-sm)',
-            flexShrink: 0,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            <LinkIcon size={16} style={{ color: 'var(--accent)' }} />
-            <span>
-              <strong>Binding Notice:</strong> {boundCellNotice} The binding always wins at render time.
-            </span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
-            <button
-              type="button"
-              className="btn btn-sm btn-secondary"
-              onClick={handleUnbindCell}
-              style={{ fontSize: 'var(--font-size-xs)' }}
-            >
-              Unbind Cell
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => setBoundCellNotice(null)}
-              style={{ fontSize: 'var(--font-size-xs)' }}
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ─── Notification Toast ─── */}
-      {notification && (
-        <div
-          data-testid="notification-toast"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-2)',
-            padding: 'var(--space-2) var(--space-4)',
-            backgroundColor:
-              notification.type === 'success' ? 'var(--success-subtle)' : 'var(--danger-subtle)',
-            borderBottom: `var(--border-width) solid ${
-              notification.type === 'success' ? 'var(--success)' : 'var(--danger)'
-            }`,
-            color: notification.type === 'success' ? 'var(--success)' : 'var(--danger)',
-            fontSize: 'var(--font-size-sm)',
-            flexShrink: 0,
-          }}
-        >
-          {notification.type === 'success' ? <Check size={16} /> : <AlertCircle size={16} />}
-          <span>{notification.message}</span>
-        </div>
-      )}
-
       {/* ─── Main Workspace & Side Panel ─── */}
-      <div style={{ display: 'flex', flex: 1, width: '100%', height: '100%', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flex: 1, minHeight: 0, width: '100%', overflow: 'hidden' }}>
         {/* Left: Univer Spreadsheet Canvas */}
         <div
           style={{
@@ -2122,6 +2272,152 @@ export function GridTemplateDesigner() {
           )}
         </aside>
       </div>
+
+      {!appBar && (
+        <footer className="grid-designer-statusbar">
+          <div className="grid-designer-status-context">
+            <span className="grid-designer-cell-address" title={`Row ${selectedCell.row + 1}, column ${selectedCell.col + 1}`}>
+              {selectedColumnLabel}{selectedCell.row + 1}
+            </span>
+            {boundCellNotice && (
+              <span
+                className="grid-designer-binding-status"
+                data-testid="bound-cell-notice"
+                title={`${boundCellNotice} The binding takes precedence when the template is rendered.`}
+              >
+                <LinkIcon size={13} aria-hidden="true" />
+                <span>Bound · {bindingLabel}</span>
+                <button type="button" onClick={handleUnbindCell} aria-label="Unbind selected cell">
+                  Unbind
+                </button>
+              </span>
+            )}
+          </div>
+          <div
+            className={`grid-designer-feedback ${notification ? `grid-designer-feedback-${notification.type}` : ''}`}
+            data-testid="notification-toast"
+            role={notification?.type === 'error' ? 'alert' : 'status'}
+            aria-live={notification?.type === 'error' ? 'assertive' : 'polite'}
+            aria-atomic="true"
+          >
+            {notification && (
+              <>
+                <span className="grid-designer-feedback-icon" aria-hidden="true">
+                  {notification.type === 'success' ? <Check size={14} /> : <AlertCircle size={14} />}
+                </span>
+                <span className="grid-designer-feedback-message">{notification.message}</span>
+                <button
+                  type="button"
+                  className="grid-designer-feedback-dismiss"
+                  onClick={dismissNotification}
+                  aria-label="Dismiss notification"
+                >
+                  <X size={14} />
+                </button>
+              </>
+            )}
+          </div>
+        </footer>
+      )}
+      {showStarterTemplates && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="starter-template-title"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setShowStarterTemplates(false);
+          }}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1200,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 'var(--space-5)',
+            backgroundColor: 'var(--overlay-bg)',
+          }}
+        >
+          <div
+            style={{
+              width: 'min(760px, 100%)',
+              maxHeight: '90vh',
+              overflow: 'auto',
+              color: 'var(--text)',
+              backgroundColor: 'var(--surface)',
+              border: 'var(--border-width) solid var(--border)',
+              borderRadius: 'var(--radius-surface)',
+              boxShadow: 'var(--shadow-xl)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: 'var(--space-4)',
+                padding: 'var(--space-5)',
+                borderBottom: 'var(--border-width) solid var(--border)',
+              }}
+            >
+              <div>
+                <h2 id="starter-template-title" style={{ margin: 0, fontSize: 'var(--font-size-lg)' }}>
+                  Choose a starter layout
+                </h2>
+                <p style={{ margin: 'var(--space-1) 0 0', color: 'var(--text-muted)', fontSize: 'var(--font-size-sm)' }}>
+                  Applying replaces the current draft layout. Each template is connected to {template?.name || 'this entity'} and can be customized afterward.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setShowStarterTemplates(false)}
+                aria-label="Close starter templates"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+                gap: 'var(--space-3)',
+                padding: 'var(--space-5)',
+              }}
+            >
+              {GRID_STARTER_TEMPLATES.map((starter, index) => {
+                const Icon = [FileSpreadsheet, Sliders, Calculator, Table][index];
+                return (
+                  <button
+                    key={starter.id}
+                    type="button"
+                    className="btn btn-secondary"
+                    aria-label={`Apply ${starter.name} starter template`}
+                    onClick={() => handleApplyStarterTemplate(starter.id)}
+                    style={{
+                      minHeight: 116,
+                      padding: 'var(--space-4)',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 'var(--space-3)',
+                      textAlign: 'left',
+                      whiteSpace: 'normal',
+                    }}
+                  >
+                    <Icon size={18} style={{ flexShrink: 0, color: 'var(--accent)' }} />
+                    <span style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+                      <strong>{starter.name}</strong>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)', lineHeight: 1.5 }}>
+                        {starter.description}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

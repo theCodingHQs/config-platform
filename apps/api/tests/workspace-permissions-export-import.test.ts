@@ -407,15 +407,18 @@ describe('Workspace Permissions Export / Import & Policy', () => {
     await migrationService.provisionTenant(targetTenant, 'Target Tenant Page Roles');
 
     try {
+      const analyticsFolder = await pagesService.createFolder(sourceTenant, { name: 'Analytics' });
+      await pagesService.createFolder(sourceTenant, { name: 'Archive' });
       // 1. Create a page with restricted allowedRoles in source workspace
       const createdPage = await pagesService.createPage(sourceTenant, {
         name: 'Executive Dashboard',
-        route: '/executive-dashboard',
+        route: '/analytics/executive-dashboard',
+        folderId: analyticsFolder.id,
         draft: {
           schemaVersion: 2,
           id: 'p_exec_dash',
           version: 1,
-          route: '/executive-dashboard',
+          route: '/analytics/executive-dashboard',
           allowedRoles: ['admin', 'builder'],
           root: {
             id: 'root_text',
@@ -434,9 +437,11 @@ describe('Workspace Permissions Export / Import & Policy', () => {
       // 2. Export source workspace
       const bundle = await exportImportService.exportBundle(sourceTenant);
       expect(bundle.bundleVersion).toBe(2);
-      const exportedPage = bundle.pages.find((p) => p.route === '/executive-dashboard');
+      const exportedPage = bundle.pages.find((p) => p.route === '/analytics/executive-dashboard');
       expect(exportedPage).toBeDefined();
       expect(exportedPage?.allowedRoles).toEqual(['admin', 'builder']);
+      expect(bundle.navigationFolders?.map((folder) => folder.name)).toEqual(['Analytics', 'Archive']);
+      expect(exportedPage?.folderId).toBe(analyticsFolder.id);
 
       // 3. Import bundle into target workspace
       const importRes = await exportImportService.importBundle(targetTenant, bundle, false);
@@ -444,14 +449,18 @@ describe('Workspace Permissions Export / Import & Policy', () => {
 
       // 4. Export again from target workspace (round trip)
       const targetBundle = await exportImportService.exportBundle(targetTenant);
-      const roundTripPage = targetBundle.pages.find((p) => p.route === '/executive-dashboard');
+      const roundTripPage = targetBundle.pages.find((p) => p.route === '/analytics/executive-dashboard');
       expect(roundTripPage).toBeDefined();
       expect(roundTripPage?.allowedRoles).toEqual(['admin', 'builder']);
+      const importedAnalytics = targetBundle.navigationFolders?.find((folder) => folder.name === 'Analytics');
+      expect(importedAnalytics).toBeDefined();
+      expect(targetBundle.navigationFolders?.some((folder) => folder.name === 'Archive')).toBe(true);
+      expect(roundTripPage?.folderId).toBe(importedAnalytics?.id);
 
       // 5. Query database in target workspace directly to confirm persistence
       const pageDb = await pool.query<{ allowed_roles: string[] }>(
         `SELECT allowed_roles FROM public.page_def WHERE tenant_id = $1 AND route = $2`,
-        [targetTenant, '/executive-dashboard']
+        [targetTenant, '/analytics/executive-dashboard']
       );
       expect(pageDb.rows.length).toBe(1);
       expect(pageDb.rows[0].allowed_roles).toEqual(['admin', 'builder']);

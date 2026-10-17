@@ -7,6 +7,72 @@ import { tenantLimitsService } from '../limits/tenant-limits.js';
 import { auditLogService } from '../audit/audit-service.js';
 
 export async function pagesRoutes(fastify: FastifyInstance) {
+  fastify.get('/pages/navigation', async (req: FastifyRequest) => {
+    const { tenantId, role } = req.session;
+    const navigation = await pagesService.getNavigation(tenantId);
+    if (hasMinRole(role, 'builder')) return navigation;
+    const pages = navigation.pages.filter((page) =>
+      page.hasPublished && permissionService.canAccessPage(role, (page as any).allowedRoles, true)
+    );
+    const visibleFolderIds = new Set<string>();
+    const foldersById = new Map(navigation.folders.map((folder) => [folder.id, folder]));
+    for (const page of pages) {
+      let folder = page.folderId ? foldersById.get(page.folderId) : undefined;
+      while (folder) {
+        visibleFolderIds.add(folder.id);
+        folder = folder.parentId ? foldersById.get(folder.parentId) : undefined;
+      }
+    }
+    return { pages, folders: navigation.folders.filter((folder) => visibleFolderIds.has(folder.id)) };
+  });
+
+  fastify.post('/pages/navigation/folders', {
+    preHandler: csrfCheckHook,
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!hasMinRole(req.session.role, 'builder')) {
+      return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'Builder role or higher required' });
+    }
+    const body = (req.body as any) || {};
+    if (typeof body.name !== 'string') return reply.status(400).send({ error: 'Folder name is required' });
+    return reply.status(201).send(await pagesService.createFolder(req.session.tenantId, body));
+  });
+
+  fastify.put('/pages/navigation/folders/:id', {
+    preHandler: csrfCheckHook,
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!hasMinRole(req.session.role, 'builder')) {
+      return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'Builder role or higher required' });
+    }
+    const { id } = req.params as { id: string };
+    return pagesService.updateFolder(req.session.tenantId, id, (req.body as any) || {});
+  });
+
+  fastify.delete('/pages/navigation/folders/:id', {
+    preHandler: csrfCheckHook,
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!hasMinRole(req.session.role, 'builder')) {
+      return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'Builder role or higher required' });
+    }
+    const { id } = req.params as { id: string };
+    await pagesService.deleteFolder(req.session.tenantId, id);
+    return { success: true, id };
+  });
+
+  fastify.put('/pages/:id/navigation', {
+    preHandler: csrfCheckHook,
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!hasMinRole(req.session.role, 'builder')) {
+      return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'Builder role or higher required' });
+    }
+    const { id } = req.params as { id: string };
+    const body = (req.body as any) || {};
+    if (body.folderId !== null && typeof body.folderId !== 'string') {
+      return reply.status(400).send({ error: 'folderId must be a folder ID or null' });
+    }
+    await pagesService.movePage(req.session.tenantId, id, body.folderId);
+    return { success: true, id };
+  });
+
   // GET /pages - List all pages for tenant (builder+ get all; others see published they can access)
   fastify.get('/pages', async (req: FastifyRequest) => {
     const { tenantId, role } = req.session;

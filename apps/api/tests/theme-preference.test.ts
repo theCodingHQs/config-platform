@@ -23,7 +23,7 @@ describe('Catalog Migration 008: User Theme Preference', () => {
 
   it('preserves all historical migrations without modification', () => {
     const versions = catalogMigrations.map((m) => m.version);
-    expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
   });
 
   it('validates ThemePreferenceSchema values (system, light, dark)', () => {

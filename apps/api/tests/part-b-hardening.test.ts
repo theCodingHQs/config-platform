@@ -266,7 +266,7 @@ describe('Part B: Hardening & Enterprise Guardrails', () => {
       });
       expect(exportRes.statusCode).toBe(200);
       const bundle = exportRes.json();
-      expect(bundle.bundleVersion).toBe(1);
+      expect(bundle.bundleVersion).toBe(2);
       expect(bundle.entities.length).toBeGreaterThan(0);
       expect(bundle.entities.some((e: any) => e.name === 'device')).toBe(true);
 

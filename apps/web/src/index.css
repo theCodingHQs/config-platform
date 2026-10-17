@@ -1,9 +1,297 @@
 @import "./styles/tokens.css";
 
+.grid-designer-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  min-height: 2.25rem;
+  padding: 0 var(--space-3);
+  border-top: var(--border-width) solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  flex: 0 0 auto;
+  font-size: var(--font-size-xs);
+}
+
+.app-statusbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-3);
+  min-height: 1.75rem;
+  padding: 0 var(--space-3);
+  border-top: var(--border-width) solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  flex: 0 0 auto;
+  font-size: var(--font-size-xs);
+}
+
+.app-statusbar-content,
+.app-statusbar-actions,
+.app-statusbar-message {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.app-statusbar-content {
+  flex: 0 1 auto;
+  max-width: 65%;
+  overflow: hidden;
+}
+
+.app-statusbar-actions {
+  flex: 0 0 auto;
+}
+
+.app-statusbar-message {
+  justify-content: flex-end;
+  flex: 0 1 auto;
+  margin-left: auto;
+  min-height: 1.5rem;
+  color: var(--text-muted);
+}
+
+.app-statusbar-message-success {
+  color: var(--success);
+}
+
+.app-statusbar-message-error {
+  color: var(--danger);
+}
+
+.app-statusbar-message-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.app-statusbar-message-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: min(36rem, 45vw);
+}
+
+.app-statusbar-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.375rem;
+  padding: 0 var(--space-2);
+  border: var(--border-width-sm) solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.app-statusbar-dismiss {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.app-statusbar-dismiss:hover {
+  color: var(--text);
+}
+
+.app-statusbar-action:hover {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+.app-statusbar-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.app-statusbar-dismiss:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.grid-designer-bar-context {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.grid-designer-status-context,
+.grid-designer-binding-status,
+.grid-designer-feedback {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.grid-designer-status-context {
+  gap: var(--space-3);
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.grid-designer-cell-address {
+  display: inline-flex;
+  align-items: center;
+  min-width: 2.5rem;
+  padding: 0 var(--space-2);
+  border: var(--border-width-sm) solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.grid-designer-binding-status {
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 0 var(--space-2);
+  border: var(--border-width-sm) solid var(--accent-subtle);
+  border-radius: var(--radius-control);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  overflow: hidden;
+}
+
+.grid-designer-binding-status > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid-designer-binding-status button,
+.grid-designer-feedback-dismiss {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.grid-designer-binding-status button {
+  padding: 0 var(--space-1);
+  color: var(--accent);
+  font-size: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.grid-designer-binding-status button:hover,
+.grid-designer-feedback-dismiss:hover {
+  color: var(--text);
+}
+
+.grid-designer-binding-status button:focus-visible,
+.grid-designer-feedback-dismiss:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.grid-designer-feedback {
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex: 0 1 55%;
+  min-height: 1.5rem;
+  padding-left: var(--space-3);
+  color: var(--text-muted);
+}
+
+.grid-designer-feedback-success {
+  color: var(--success);
+}
+
+.grid-designer-feedback-error {
+  color: var(--danger);
+}
+
+.grid-designer-feedback-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.grid-designer-feedback-message {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid-designer-feedback-dismiss {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: var(--space-1);
+  border-radius: var(--radius-control);
+}
+
+@media (max-width: 600px) {
+  .app-statusbar {
+    gap: var(--space-2);
+    padding: 0 var(--space-2);
+  }
+
+  .app-statusbar-message {
+    flex: 1 1 auto;
+  }
+
+  .app-statusbar-message-text {
+    max-width: 40vw;
+  }
+
+  .app-statusbar-content {
+    max-width: 62%;
+  }
+
+  .grid-designer-bar-context {
+    gap: var(--space-1);
+  }
+
+  .grid-designer-statusbar {
+    gap: var(--space-2);
+    padding: 0 var(--space-2);
+  }
+
+  .grid-designer-status-context {
+    gap: var(--space-2);
+  }
+
+  .grid-designer-feedback {
+    flex-basis: 58%;
+    padding-left: var(--space-2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grid-designer-statusbar,
+  .grid-designer-feedback {
+    animation: none;
+  }
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+}
+
+html,
+body,
+#root {
+  height: 100%;
 }
 
 body {
@@ -351,13 +639,14 @@ input:-webkit-autofill:active {
 }
 
 .main-height {
-  height: calc(100vh - var(--navbar-height));
+  height: 100%;
+  min-height: 0;
 }
 
 .app-layout {
   display: flex;
   flex: 1;
-  min-height: calc(100vh - var(--navbar-height));
+  min-height: 0;
   position: relative;
 }
 
@@ -368,8 +657,7 @@ input:-webkit-autofill:active {
   display: flex;
   flex-direction: column;
   position: sticky;
-  top: var(--navbar-height);
-  height: calc(100vh - var(--navbar-height));
+  top: 0;
   flex-shrink: 0;
   transition:
     width 0.2s cubic-bezier(0.4, 0, 0.2, 1),
@@ -491,6 +779,7 @@ input:-webkit-autofill:active {
 
 .app-main-content {
   flex: 1;
+  min-height: 0;
   min-width: 0;
   background-color: var(--bg);
   overflow-y: auto;
@@ -507,7 +796,6 @@ input:-webkit-autofill:active {
     top: var(--navbar-height);
     bottom: 0;
     left: 0;
-    height: calc(100vh - var(--navbar-height));
     box-shadow: var(--shadow-lg);
     transform: translateX(-100%);
     width: 250px !important;

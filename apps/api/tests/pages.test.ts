@@ -241,6 +241,37 @@ describe('Pages Service & Publishing', () => {
     expect(body.hasPublished).toBe(true);
   });
 
+  it('keeps nested page routes and published JSON in sync when groups are renamed or pages move', async () => {
+    const sales = await pagesService.createFolder(tenantId, { name: 'Sales' });
+    const orders = await pagesService.createFolder(tenantId, { name: 'Orders', parentId: sales.id });
+    const nestedPage = await pagesService.createPage(tenantId, {
+      name: 'Order List',
+      route: '/sales/orders/list',
+      folderId: orders.id,
+    });
+    await pagesService.publishPage(tenantId, nestedPage.id);
+    const rootCollision = await pagesService.createPage(tenantId, {
+      name: 'Orders Root',
+      route: '/list',
+    });
+
+    await expect(pagesService.movePage(tenantId, nestedPage.id, null)).rejects.toThrow(/already in use/);
+    expect((await pagesService.getPage(tenantId, nestedPage.id)).route).toBe('/sales/orders/list');
+
+    await pagesService.updateFolder(tenantId, sales.id, { name: 'Revenue' });
+    const renamed = await pagesService.getPage(tenantId, nestedPage.id);
+    expect(renamed.route).toBe('/revenue/orders/list');
+    expect(renamed.draft.route).toBe('/revenue/orders/list');
+    expect(renamed.published?.route).toBe('/revenue/orders/list');
+
+    await pagesService.deletePage(tenantId, rootCollision.id);
+    await pagesService.movePage(tenantId, nestedPage.id, null);
+    expect((await pagesService.getPage(tenantId, nestedPage.id)).route).toBe('/list');
+    await pagesService.deleteFolder(tenantId, orders.id);
+    await pagesService.deleteFolder(tenantId, sales.id);
+    await pagesService.deletePage(tenantId, nestedPage.id);
+  });
+
   it('deletes a page definition', async () => {
     const res = await pagesService.deletePage(tenantId, createdPageId);
     expect(res.success).toBe(true);

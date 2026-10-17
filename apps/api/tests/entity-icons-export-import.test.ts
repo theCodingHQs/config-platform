@@ -22,7 +22,7 @@ describe('Entity Icons, Migration 10 & Export/Import Policy', () => {
 
     // Confirm versions are strictly sequential
     const versions = catalogMigrations.map((m) => m.version);
-    expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(versions).toEqual(Array.from({ length: catalogMigrations.length }, (_, index) => index + 1));
   });
 
   it('validates entity.icon against allowed curated icons with Zod on create', () => {

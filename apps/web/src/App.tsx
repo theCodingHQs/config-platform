@@ -22,7 +22,6 @@ import { DynamicIcon } from "./components/dynamic-icon";
 import { PageRuntimeProvider } from "./context/page-runtime-context";
 import { AuthProvider, useAuth } from "./context/auth-context";
 import { renderNode } from "./renderer/render-node";
-import { fetchPublishedPages, type CurrentUser } from "./api/client";
 const EntityManager = React.lazy(() =>
   import("./studio/EntityManager").then((m) => ({ default: m.EntityManager }))
 );
@@ -88,7 +87,10 @@ function StudioLoadingFallback() {
 import {
   fetchWorkspaces,
   switchWorkspace,
-  type WorkspaceItem,
+  fetchPageNavigation,
+  fetchPublishedPages,
+  type CurrentUser,
+  type PageNavigation,
 } from "./api/client";
 import { AuthPage } from "./pages/AuthPage";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
@@ -106,9 +108,10 @@ import {
   Package,
   LogOut,
   Shield,
-  Sliders,
+  Folder,
 } from "lucide-react";
 import type { PageDefinition } from "@config-platform/schema";
+import { AppBarProvider } from "./context/app-bar-context";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -359,11 +362,55 @@ function AppContent({ user }: { user: CurrentUser }) {
   });
 
   const effectivePages = apiPublishedPages;
+  const { data: pageNavigation } = useQuery<PageNavigation>({
+    queryKey: ["page-navigation", user.tenantId],
+    queryFn: () => fetchPageNavigation(user.tenantId),
+  });
+  const publishedPageIds = new Set(effectivePages.map((page) => page.id));
+  const visibleNavigationPages = (pageNavigation?.pages ?? []).filter((page) => publishedPageIds.has(page.id));
+  const renderNavigation = (folderId: string | null, depth = 0): React.ReactNode => (
+    <>
+      {visibleNavigationPages.filter((page) => page.folderId === folderId).map((summary) => {
+        const page = effectivePages.find((candidate) => candidate.id === summary.id);
+        if (!page) return null;
+        const title = getPageTitle(page);
+        const icon = getPageIcon(page, metadata);
+        return (
+          <NavLink
+            key={page.id}
+            to={page.route}
+            title={title}
+            className={({ isActive }) => `app-sidebar-item ${isActive ? "active" : ""}`}
+            style={{ paddingLeft: `${0.75 + depth * 0.9}rem` }}
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <span className="app-sidebar-icon">{icon}</span>
+            <span className="app-sidebar-item-title">{title}</span>
+          </NavLink>
+        );
+      })}
+      {(pageNavigation?.folders ?? []).filter((folder) => folder.parentId === folderId).map((folder) => (
+        <details key={folder.id} open>
+          <summary style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 0.75rem", paddingLeft: `${0.75 + depth * 0.9}rem`, cursor: "pointer", color: "var(--text-muted)", listStyle: "none" }}>
+            <Folder size={16} />
+            <span className="app-sidebar-item-title">{folder.name}</span>
+          </summary>
+          {renderNavigation(folder.id, depth + 1)}
+        </details>
+      ))}
+    </>
+  );
 
   return (
     <div
-      style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}
+      style={{
+        height: "100%",
+        minHeight: 0,
+        display: "flex",
+        flexDirection: "column",
+      }}
     >
+      <AppBarProvider routeKey={location.pathname}>
       {/* Top Navbar: Brand + Studio Tools + User Profile */}
       <header
         style={{
@@ -622,7 +669,15 @@ function AppContent({ user }: { user: CurrentUser }) {
       {/* Main Body */}
       {isStudioRoute ? (
         /* Studio Views (Data Entities, Page Manager, Page Builder) take full width */
-        <main style={{ flex: 1 }}>
+        <main
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+            overflowY: "auto",
+          }}
+        >
           <React.Suspense fallback={<StudioLoadingFallback />}>
             <Routes>
               <Route
@@ -754,26 +809,7 @@ function AppContent({ user }: { user: CurrentUser }) {
                     Create Page
                   </NavLink>
                 </div>
-              ) : (
-                effectivePages.map((p) => {
-                  const title = getPageTitle(p);
-                  const icon = getPageIcon(p, metadata);
-                  return (
-                    <NavLink
-                      key={p.id}
-                      to={p.route}
-                      title={title}
-                      className={({ isActive }) =>
-                        `app-sidebar-item ${isActive ? "active" : ""}`
-                      }
-                      onClick={() => setMobileMenuOpen(false)}
-                    >
-                      <span className="app-sidebar-icon">{icon}</span>
-                      <span className="app-sidebar-item-title">{title}</span>
-                    </NavLink>
-                  );
-                })
-              )}
+              ) : renderNavigation(null)}
             </nav>
 
             <div className="app-sidebar-footer">
@@ -822,6 +858,7 @@ function AppContent({ user }: { user: CurrentUser }) {
           </main>
         </div>
       )}
+      </AppBarProvider>
     </div>
   );
 }
@@ -833,7 +870,7 @@ function AuthenticatedApp() {
     return (
       <div
         style={{
-          minHeight: "100vh",
+          minHeight: "100%",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",

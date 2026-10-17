@@ -1045,32 +1045,53 @@ export interface ExecutiveReportEntityInput {
   fields?: Array<{ id: string; name: string; type?: string; label?: string }>;
 }
 
+export type GridStarterTemplateId = 'executive' | 'operations' | 'financial' | 'audit';
+
+export const GRID_STARTER_TEMPLATES: Array<{
+  id: GridStarterTemplateId;
+  name: string;
+  description: string;
+}> = [
+  {
+    id: 'executive',
+    name: 'Executive Dashboard',
+    description: 'Four KPI cards, a polished summary banner, and a formatted detail table.',
+  },
+  {
+    id: 'operations',
+    name: 'Operations Board',
+    description: 'Prioritizes status, ownership, and date fields for an at-a-glance work queue.',
+  },
+  {
+    id: 'financial',
+    name: 'Financial Overview',
+    description: 'Emphasizes numeric measures with formatted totals, averages, and a detail table.',
+  },
+  {
+    id: 'audit',
+    name: 'Audit Register',
+    description: 'A clean, date-first register suited to reviewing recent records and changes.',
+  },
+];
+
 /**
  * Generates a professional Executive KPI & Data Breakdown template dynamically connected to database data.
  * Features:
  * - Brand-styled header banner with dynamic timestamp and user email binding expressions
- * - 3 KPI summary cards at top (Total Records, Volume Sum, and Average Value) bound to dataset aggregates
+ * - 4 KPI summary cards at top (record count, sum, average, and maximum) bound to dataset aggregates
  * - Formatted repeating data region bound to entity dataset columns
- * - Totals row with Excel SUM formula
+ * - Banded repeating rows and a totals row with an Excel SUM formula
  */
 export function buildExecutiveReportTemplate(entity: ExecutiveReportEntityInput): GridExportTemplateDefinition {
   const entityLabel = entity.label || entity.name || 'Entity';
   const entityName = entity.name || 'entity';
   const rawFields = (entity.columns || entity.fields || []).filter(Boolean);
 
-  // Pick up to 6 meaningful fields, preferring non-system fields
+  // Pick up to 8 meaningful fields, preferring non-system fields
   const nonSystemFields = rawFields.filter(
     (f) => !['id', 'created_at', 'updated_at', 'deleted_at'].includes(f.name.toLowerCase())
   );
-  const selectedFields = (nonSystemFields.length > 0 ? nonSystemFields : rawFields).slice(0, 6);
-
-  // If no fields provided, synthesize starter fields
-  if (selectedFields.length === 0) {
-    selectedFields.push(
-      { id: 'f_title', name: 'title', label: 'Title', type: 'text' },
-      { id: 'f_amount', name: 'amount', label: 'Amount', type: 'number' }
-    );
-  }
+  const selectedFields = (nonSystemFields.length > 0 ? nonSystemFields : rawFields).slice(0, 8);
 
   // Identify numeric & date columns for KPI aggregates & formatting
   const numericField = selectedFields.find(
@@ -1083,6 +1104,12 @@ export function buildExecutiveReportTemplate(entity: ExecutiveReportEntityInput)
       ['date', 'datetime', 'timestamp'].includes((f.type || '').toLowerCase()) ||
       /date|time|created/i.test(f.name)
   );
+  const numericFormat = numericField
+    ? (numericField.type || '').toLowerCase() === 'currency' ||
+      /price|amount|cost|total|value|salary|revenue|budget/i.test(numericField.name)
+      ? '$#,##0.00'
+      : '#,##0.00'
+    : '#,##0';
 
   const numColIndex = numericField ? selectedFields.findIndex((f) => f.id === numericField.id) : -1;
 
@@ -1111,6 +1138,12 @@ export function buildExecutiveReportTemplate(entity: ExecutiveReportEntityInput)
       fn: 'avg',
       fieldPath: numericField.name,
     });
+    aggregates.push({
+      id: 'agg_max',
+      name: 'Maximum Value',
+      fn: 'max',
+      fieldPath: numericField.name,
+    });
   }
 
   const dataset: GridDatasetDefinition = {
@@ -1128,7 +1161,7 @@ export function buildExecutiveReportTemplate(entity: ExecutiveReportEntityInput)
     having: [],
   };
 
-  const colCount = Math.max(selectedFields.length, 6);
+  const colCount = Math.max(selectedFields.length, 8);
   const cells: Record<string, GridCellDefinition> = {};
 
   // Palette
@@ -1140,6 +1173,8 @@ export function buildExecutiveReportTemplate(entity: ExecutiveReportEntityInput)
   const INDIGO_BG = '#EEF2FF';
   const EMERALD = '#059669';
   const EMERALD_BG = '#ECFDF5';
+  const VIOLET = '#7C3AED';
+  const VIOLET_BG = '#F5F3FF';
   const CARD_BG = '#F8FAFC';
 
   const fontTitle = { bold: true, size: 14, color: WHITE, name: 'Calibri' };
@@ -1148,6 +1183,7 @@ export function buildExecutiveReportTemplate(entity: ExecutiveReportEntityInput)
   const fontCardBig = { bold: true, size: 18, color: NAVY, name: 'Calibri' };
   const fontCardBigIndigo = { bold: true, size: 18, color: INDIGO, name: 'Calibri' };
   const fontCardBigEmerald = { bold: true, size: 18, color: EMERALD, name: 'Calibri' };
+  const fontCardBigViolet = { bold: true, size: 18, color: VIOLET, name: 'Calibri' };
   const fontCardSub = { size: 8, color: '#94A3B8', name: 'Calibri' };
   const fontTableHeader = { bold: true, size: 10, color: WHITE, name: 'Calibri' };
   const fontData = { size: 10, color: '#1E293B', name: 'Calibri' };
@@ -1170,6 +1206,15 @@ export function buildExecutiveReportTemplate(entity: ExecutiveReportEntityInput)
     style: {
       font: fontSubtitle,
       fill: { fgColor: SUBNAVY },
+      alignment: { horizontal: 'left', vertical: 'middle' },
+    },
+  };
+
+  cells['2:0'] = {
+    value: 'DATASET SNAPSHOT  •  VALUES REFRESH WHEN EXPORTED',
+    style: {
+      font: { bold: true, size: 8, color: MUTED_LABEL, name: 'Calibri' },
+      fill: { fgColor: '#F1F5F9' },
       alignment: { horizontal: 'left', vertical: 'middle' },
     },
   };
@@ -1203,7 +1248,7 @@ export function buildExecutiveReportTemplate(entity: ExecutiveReportEntityInput)
       aggregateId: numericField ? 'agg_sum' : 'agg_count',
       displayLabel: 'Total Volume',
     },
-    numFmt: numericField ? '$#,##0.00' : '#,##0',
+    numFmt: numericField ? numericFormat : '#,##0',
     style: { font: fontCardBigIndigo, fill: { fgColor: INDIGO_BG }, alignment: { horizontal: 'center', vertical: 'middle' } },
   };
   cells['5:2'] = {
@@ -1223,12 +1268,32 @@ export function buildExecutiveReportTemplate(entity: ExecutiveReportEntityInput)
       aggregateId: numericField ? 'agg_avg' : 'agg_count',
       displayLabel: 'Average',
     },
-    numFmt: numericField ? '$#,##0.00' : '#,##0',
+    numFmt: numericField ? numericFormat : '#,##0',
     style: { font: fontCardBigEmerald, fill: { fgColor: EMERALD_BG }, alignment: { horizontal: 'center', vertical: 'middle' } },
   };
   cells['5:4'] = {
     value: 'Mean Benchmark Value',
     style: { font: { ...fontCardSub, color: '#10B981' }, fill: { fgColor: EMERALD_BG }, alignment: { horizontal: 'center', vertical: 'middle' } },
+  };
+
+  // Card 4: Maximum / Peak Value (Cols 6-7)
+  cells['3:6'] = {
+    value: numericField ? `MAX ${numericField.label?.toUpperCase() || numericField.name.toUpperCase()}` : 'DATA FIELDS',
+    style: { font: { ...fontCardLabel, color: VIOLET }, fill: { fgColor: VIOLET_BG }, alignment: { horizontal: 'center', vertical: 'middle' } },
+  };
+  cells['4:6'] = {
+    value: 0,
+    binding: {
+      datasetId: 'ds_exec_report',
+      aggregateId: numericField ? 'agg_max' : 'agg_count',
+      displayLabel: numericField ? 'Maximum Value' : 'Total Records',
+    },
+    numFmt: numericField ? numericFormat : '#,##0',
+    style: { font: fontCardBigViolet, fill: { fgColor: VIOLET_BG }, alignment: { horizontal: 'center', vertical: 'middle' } },
+  };
+  cells['5:6'] = {
+    value: numericField ? 'Highest recorded value' : 'Records in this report',
+    style: { font: { ...fontCardSub, color: VIOLET }, fill: { fgColor: VIOLET_BG }, alignment: { horizontal: 'center', vertical: 'middle' } },
   };
 
   // 3. Table Headers (Row 7)
@@ -1243,25 +1308,25 @@ export function buildExecutiveReportTemplate(entity: ExecutiveReportEntityInput)
       },
     };
   });
+  if (selectedFields.length === 0) {
+    cells['7:0'] = {
+      value: 'No fields available for this entity',
+      style: { font: fontTableHeader, fill: { fgColor: SUBNAVY } },
+    };
+  }
 
-  // 4. Sample Rows for repeating region (Rows 8..10)
-  const sampleValues = [
-    ['Alpha Record', 1250.0, '2026-01-15', 'Active', 'High', 'Approved'],
-    ['Beta Record', 890.5, '2026-02-20', 'Pending', 'Medium', 'Review'],
-    ['Gamma Record', 2410.75, '2026-03-10', 'Active', 'High', 'Approved'],
-  ];
-
-  for (let rIdx = 0; rIdx < 3; rIdx++) {
+  // 4. Repeating data area: keep the body empty and let bindings supply placeholders.
+  for (let rIdx = 0; rIdx < 10; rIdx++) {
     const rowNum = 8 + rIdx;
     selectedFields.forEach((field, cIdx) => {
       const isNum = field === numericField;
       const isDate = field === dateField;
-      const rawVal = sampleValues[rIdx][cIdx % sampleValues[rIdx].length];
-      const val = isNum ? (typeof rawVal === 'number' ? rawVal : 100 * (rIdx + 1)) : rawVal;
 
       cells[`${rowNum}:${cIdx}`] = {
-        value: val,
-        numFmt: isNum ? '$#,##0.00' : isDate ? 'YYYY-MM-DD' : undefined,
+        value: '',
+        numFmt: isNum
+          ? numericFormat
+          : isDate ? 'YYYY-MM-DD' : undefined,
         style: {
           font: fontData,
           fill: { fgColor: rIdx % 2 === 1 ? '#F8FAFC' : WHITE },
@@ -1272,55 +1337,67 @@ export function buildExecutiveReportTemplate(entity: ExecutiveReportEntityInput)
   }
 
   // 5. Repeating Region
-  const region: GridRegionDefinition = {
-    id: 'reg_main',
-    datasetId: 'ds_exec_report',
-    startRow: 8,
-    endRow: 10,
-    startCol: 0,
-    endCol: selectedFields.length - 1,
-    columns: selectedFields.map((f, cIdx) => ({
-      col: cIdx,
-      fieldId: f.id,
-      displayLabel: f.label || f.name,
-    })),
-  };
+  const regions: GridRegionDefinition[] = selectedFields.length > 0
+    ? [{
+        id: 'reg_main',
+        datasetId: 'ds_exec_report',
+        startRow: 8,
+        endRow: 17,
+        startCol: 0,
+        endCol: selectedFields.length - 1,
+        columns: selectedFields.map((f, cIdx) => ({
+          col: cIdx,
+          fieldId: f.id,
+          displayLabel: f.label || f.name,
+        })),
+      }]
+    : [];
 
-  // 6. Totals Row (Row 11)
-  cells['11:0'] = {
-    value: 'Total / Summary',
-    style: {
+  // 6. Totals Row (Row 18)
+  if (numColIndex !== 0 || selectedFields.length < 2) {
+    cells['18:0'] = {
+      value: 'Total / Summary',
+      style: {
+        font: fontTotal,
+        fill: { fgColor: '#F1F5F9' },
+        alignment: { horizontal: 'left', vertical: 'middle' },
+      },
+    };
+  } else {
+    cells[`18:${selectedFields.length - 1}`] = {
+      value: 'Total / Summary',
+      style: {
+        font: fontTotal,
+        fill: { fgColor: '#F1F5F9' },
+        alignment: { horizontal: 'left', vertical: 'middle' },
+      },
+    };
+  }
+
+  selectedFields.forEach((field, cIdx) => {
+    const totalStyle = {
       font: fontTotal,
       fill: { fgColor: '#F1F5F9' },
-      alignment: { horizontal: 'left', vertical: 'middle' },
-    },
-  };
-
-  for (let cIdx = 1; cIdx < selectedFields.length; cIdx++) {
-    if (cIdx === numColIndex) {
+      alignment: { horizontal: cIdx === numColIndex ? 'right' as const : 'left' as const, vertical: 'middle' as const },
+    };
+    if (numericField && cIdx === numColIndex && selectedFields.length > 1) {
       const letter = String.fromCharCode(65 + cIdx);
-      cells[`11:${cIdx}`] = {
+      cells[`18:${cIdx}`] = {
         value: 0,
-        formula: `SUM(${letter}9:${letter}11)`,
-        numFmt: '$#,##0.00',
-        style: {
-          font: fontTotal,
-          fill: { fgColor: '#F1F5F9' },
-          alignment: { horizontal: 'right', vertical: 'middle' },
-        },
+        formula: `SUM(${letter}9:${letter}18)`,
+        numFmt: numericFormat,
+        style: totalStyle,
       };
-    } else {
-      cells[`11:${cIdx}`] = {
-        value: '',
-        style: { fill: { fgColor: '#F1F5F9' } },
-      };
+    } else if (cIdx !== 0 && !(numColIndex === 0 && cIdx === selectedFields.length - 1)) {
+      cells[`18:${cIdx}`] = { value: '', style: totalStyle };
     }
-  }
+  });
 
   // Merges
   const merges: GridMergeRange[] = [
     { startRow: 0, startCol: 0, endRow: 0, endCol: colCount - 1 },
     { startRow: 1, startCol: 0, endRow: 1, endCol: colCount - 1 },
+    { startRow: 2, startCol: 0, endRow: 2, endCol: colCount - 1 },
     { startRow: 3, startCol: 0, endRow: 3, endCol: 1 },
     { startRow: 4, startCol: 0, endRow: 4, endCol: 1 },
     { startRow: 5, startCol: 0, endRow: 5, endCol: 1 },
@@ -1330,6 +1407,9 @@ export function buildExecutiveReportTemplate(entity: ExecutiveReportEntityInput)
     { startRow: 3, startCol: 4, endRow: 3, endCol: 5 },
     { startRow: 4, startCol: 4, endRow: 4, endCol: 5 },
     { startRow: 5, startCol: 4, endRow: 5, endCol: 5 },
+    { startRow: 3, startCol: 6, endRow: 3, endCol: 7 },
+    { startRow: 4, startCol: 6, endRow: 4, endCol: 7 },
+    { startRow: 5, startCol: 6, endRow: 5, endCol: 7 },
   ];
 
   const colWidths: Record<string, number> = {};
@@ -1345,21 +1425,19 @@ export function buildExecutiveReportTemplate(entity: ExecutiveReportEntityInput)
     rowHeights: {
       '0': 38,
       '1': 20,
-      '2': 12,
+      '2': 20,
       '3': 20,
       '4': 32,
       '5': 16,
       '6': 16,
       '7': 26,
-      '8': 22,
-      '9': 22,
-      '10': 22,
-      '11': 24,
+      ...Object.fromEntries(Array.from({ length: 10 }, (_, idx) => [String(8 + idx), 22])),
+      '18': 24,
     },
     colWidths,
     merges,
     cells,
-    regions: [region],
+    regions,
     conditionalFormats: [],
   };
 
@@ -1375,3 +1453,80 @@ export function buildExecutiveReportTemplate(entity: ExecutiveReportEntityInput)
   };
 }
 
+function prioritizeStarterFields(
+  entity: ExecutiveReportEntityInput,
+  kind: Exclude<GridStarterTemplateId, 'executive'>,
+): ExecutiveReportEntityInput {
+  const fields = entity.columns || entity.fields || [];
+  const rank = (field: { name: string; type?: string }) => {
+    const name = field.name.toLowerCase();
+    if (kind === 'financial') {
+      if (['number', 'integer', 'decimal', 'float', 'currency'].includes((field.type || '').toLowerCase()) ||
+          /price|amount|cost|total|quantity|units|volume|value|salary|revenue|budget/i.test(name)) return 0;
+      if (/date|time|created/i.test(name)) return 1;
+    } else if (kind === 'operations') {
+      if (/status|state|stage|active|priority/i.test(name)) return 0;
+      if (/owner|assignee|assigned|team/i.test(name)) return 1;
+      if (/date|time|due|created/i.test(name)) return 2;
+    } else {
+      if (/date|time|created|updated/i.test(name)) return 0;
+      if (/user|owner|actor|changed|action|status/i.test(name)) return 1;
+    }
+    return 3;
+  };
+  return { ...entity, fields: [...fields].sort((a, b) => rank(a) - rank(b)) };
+}
+
+export function buildGridStarterTemplate(
+  entity: ExecutiveReportEntityInput,
+  kind: GridStarterTemplateId,
+): GridExportTemplateDefinition {
+  const template = buildExecutiveReportTemplate(
+    kind === 'executive' ? entity : prioritizeStarterFields(entity, kind),
+  );
+  const sheet = template.sheets[0];
+  const titles: Record<GridStarterTemplateId, string> = {
+    executive: `${entity.label || entity.name} EXECUTIVE DASHBOARD`,
+    operations: `${entity.label || entity.name} OPERATIONS BOARD`,
+    financial: `${entity.label || entity.name} FINANCIAL OVERVIEW`,
+    audit: `${entity.label || entity.name} AUDIT REGISTER`,
+  };
+  const palettes: Record<Exclude<GridStarterTemplateId, 'executive'>, Record<string, string>> = {
+    operations: { '#0F172A': '#123047', '#1E293B': '#1D4ED8', '#4F46E5': '#2563EB', '#EEF2FF': '#EFF6FF', '#059669': '#0F766E', '#ECFDF5': '#F0FDFA', '#7C3AED': '#D97706', '#F5F3FF': '#FFFBEB' },
+    financial: { '#0F172A': '#14291F', '#1E293B': '#1F5137', '#4F46E5': '#15803D', '#EEF2FF': '#ECFDF3', '#059669': '#047857', '#ECFDF5': '#D1FAE5', '#7C3AED': '#0F766E', '#F5F3FF': '#F0FDFA' },
+    audit: { '#0F172A': '#1F2937', '#1E293B': '#374151', '#4F46E5': '#475569', '#EEF2FF': '#F1F5F9', '#059669': '#0F766E', '#ECFDF5': '#F0FDFA', '#7C3AED': '#334155', '#F5F3FF': '#F1F5F9' },
+  };
+
+  sheet.cells['0:0'].value = titles[kind];
+  sheet.name = kind === 'executive'
+    ? 'Executive Dashboard'
+    : kind === 'operations'
+      ? 'Operations Board'
+      : kind === 'financial'
+        ? 'Financial Overview'
+        : 'Audit Register';
+  template.filenameExpression = `"${(entity.name || 'entity').toLowerCase()}_${kind}_report"`;
+  template.datasets[0].name = `${entity.label || entity.name} ${sheet.name} Dataset`;
+  if (kind === 'audit') {
+    const dateField = template.datasets[0].fields.find((field) =>
+      /date|time/i.test(field.fieldPath || ''),
+    );
+    if (dateField?.fieldPath) {
+      template.datasets[0].sort = [{ fieldPath: dateField.fieldPath, direction: 'desc' }];
+    }
+  }
+
+  if (kind !== 'executive') {
+    const palette = palettes[kind];
+    for (const cell of Object.values(sheet.cells)) {
+      const style = cell.style;
+      if (!style) continue;
+      const fillColor = style.fill?.fgColor;
+      if (fillColor && palette[fillColor]) style.fill!.fgColor = palette[fillColor];
+      const fontColor = style.font?.color;
+      if (fontColor && palette[fontColor]) style.font!.color = palette[fontColor];
+    }
+  }
+
+  return template;
+}

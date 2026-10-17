@@ -128,6 +128,15 @@ export interface WorkspaceBundle {
     draft: any;
     published?: any;
     allowedRoles?: string[];
+    folderId?: string | null;
+    position?: number;
+  }>;
+  navigationFolders?: Array<{
+    id: string;
+    parentId: string | null;
+    name: string;
+    slug: string;
+    position: number;
   }>;
   exportTemplates?: Array<{
     id: string;
@@ -289,8 +298,10 @@ export class ExportImportService {
       draft: any;
       published: any;
       allowed_roles: string[];
+      nav_folder_id: string | null;
+      nav_position: number;
     }>(
-      `SELECT id, name, route, draft, published, allowed_roles
+      `SELECT id, name, route, draft, published, allowed_roles, nav_folder_id, nav_position
        FROM public.page_def
        WHERE tenant_id = $1
        ORDER BY route ASC`,
@@ -304,6 +315,27 @@ export class ExportImportService {
       draft: p.draft,
       published: p.published,
       allowedRoles: p.allowed_roles,
+      folderId: p.nav_folder_id,
+      position: p.nav_position,
+    }));
+
+    const navigationFoldersRes = await pool.query<{
+      id: string;
+      parent_id: string | null;
+      name: string;
+      slug: string;
+      position: number;
+    }>(
+      `SELECT id, parent_id, name, slug, position FROM public.page_nav_folder
+       WHERE tenant_id = $1 ORDER BY position ASC, name ASC`,
+      [tenantId]
+    );
+    const navigationFolders = navigationFoldersRes.rows.map((folder) => ({
+      id: folder.id,
+      parentId: folder.parent_id,
+      name: folder.name,
+      slug: folder.slug,
+      position: folder.position,
     }));
 
     // 4. Fetch entity permissions
@@ -391,6 +423,7 @@ export class ExportImportService {
       entities,
       relations,
       pages,
+      navigationFolders,
       exportTemplates,
       permissions: {
         entities: entityPermissions,
@@ -412,6 +445,31 @@ export class ExportImportService {
     // Check plan limits
     const { plan, limits } = await tenantLimitsService.getTenantPlan(tenantId);
     const conflicts: string[] = [];
+    const navigationFolders = bundle.navigationFolders ?? [];
+    const navigationFolderIds = new Set(navigationFolders.map((folder) => folder.id));
+    if (navigationFolderIds.size !== navigationFolders.length) {
+      conflicts.push('Navigation folder IDs must be unique in the bundle.');
+    }
+    for (const folder of navigationFolders) {
+      if (folder.parentId && !navigationFolderIds.has(folder.parentId)) {
+        conflicts.push(`Navigation folder '${folder.name}' references a missing parent folder.`);
+      }
+      const visited = new Set<string>([folder.id]);
+      let parentId = folder.parentId;
+      while (parentId) {
+        if (visited.has(parentId)) {
+          conflicts.push(`Navigation folder '${folder.name}' is part of a folder cycle.`);
+          break;
+        }
+        visited.add(parentId);
+        parentId = navigationFolders.find((candidate) => candidate.id === parentId)?.parentId ?? null;
+      }
+    }
+    for (const page of bundle.pages) {
+      if (page.folderId && !navigationFolderIds.has(page.folderId)) {
+        conflicts.push(`Page '${page.name}' references a missing navigation folder.`);
+      }
+    }
 
     // Validate theme configuration upfront if present in bundle
     let validatedThemeConfig: any = null;
@@ -531,6 +589,16 @@ export class ExportImportService {
       [tenantId]
     );
     const routeSet = new Set(existingPageRoutes.rows.map((r) => r.route.toLowerCase()));
+    const existingRootFolderSlugs = await pool.query<{ slug: string }>(
+      `SELECT slug FROM public.page_nav_folder WHERE tenant_id = $1 AND parent_id IS NULL`,
+      [tenantId]
+    );
+    const existingFolderSlugSet = new Set(existingRootFolderSlugs.rows.map((folder) => folder.slug));
+    for (const folder of navigationFolders.filter((entry) => !entry.parentId)) {
+      if (existingFolderSlugSet.has(folder.slug)) {
+        conflicts.push(`Navigation group '${folder.name}' already exists in the workspace.`);
+      }
+    }
 
     for (const p of bundle.pages) {
       if (routeSet.has(p.route.toLowerCase())) {
@@ -629,6 +697,7 @@ export class ExportImportService {
       const entityIdMap = new Map<string, string>();
       const fieldIdMap = new Map<string, string>();
       const pageIdMap = new Map<string, string>();
+      const navigationFolderIdMap = new Map<string, string>();
       const templateIdMap = new Map<string, string>();
 
       // 1. Entities: keep original ID if valid t_xxxxxxxx and not collided; otherwise generate new t_xxxxxxxx
@@ -676,6 +745,10 @@ export class ExportImportService {
         usedPageIds.add(targetId);
         pageIdMap.set(p.id, targetId);
         idMap.set(p.id, targetId);
+      }
+
+      for (const folder of navigationFolders) {
+        navigationFolderIdMap.set(folder.id, `nf_${crypto.randomBytes(6).toString('hex')}`);
       }
 
       // 3b. Export Templates: keep original ID if valid et_xxxxxxxx and not collided; otherwise generate new et_xxxxxxxx
@@ -778,6 +851,26 @@ export class ExportImportService {
       }
 
       // 6. Remap and insert pages using deepWalkRemap
+      const folderById = new Map(navigationFolders.map((folder) => [folder.id, folder]));
+      const folderDepth = (folderId: string): number => {
+        const parentId = folderById.get(folderId)?.parentId;
+        return parentId ? 1 + folderDepth(parentId) : 0;
+      };
+      for (const folder of [...navigationFolders].sort((a, b) => folderDepth(a.id) - folderDepth(b.id))) {
+        await client.query(
+          `INSERT INTO public.page_nav_folder (id, tenant_id, parent_id, name, slug, position)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            navigationFolderIdMap.get(folder.id),
+            tenantId,
+            folder.parentId ? navigationFolderIdMap.get(folder.parentId) : null,
+            folder.name,
+            folder.slug,
+            folder.position,
+          ]
+        );
+      }
+
       const remappedPages: Array<{
         newPageId: string;
         name: string;
@@ -795,8 +888,8 @@ export class ExportImportService {
         if (remappedPublished) remappedPublished.id = newPageId;
 
         await client.query(
-          `INSERT INTO public.page_def (id, tenant_id, name, route, draft, published, version, allowed_roles, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, 1, $7, NOW(), NOW())`,
+          `INSERT INTO public.page_def (id, tenant_id, name, route, draft, published, version, allowed_roles, nav_folder_id, nav_position, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, 1, $7, $8, $9, NOW(), NOW())`,
           [
             newPageId,
             tenantId,
@@ -805,6 +898,8 @@ export class ExportImportService {
             JSON.stringify(remappedDraft),
             remappedPublished ? JSON.stringify(remappedPublished) : null,
             p.allowedRoles || null,
+            p.folderId ? navigationFolderIdMap.get(p.folderId) : null,
+            p.position ?? 0,
           ]
         );
 

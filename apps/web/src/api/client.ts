@@ -750,6 +750,22 @@ export interface PageSummary {
   hasPublished: boolean;
   createdAt: string;
   updatedAt: string;
+  folderId?: string | null;
+  position?: number;
+  allowedRoles?: string[] | null;
+}
+
+export interface PageNavFolder {
+  id: string;
+  parentId: string | null;
+  name: string;
+  slug: string;
+  position: number;
+}
+
+export interface PageNavigation {
+  folders: PageNavFolder[];
+  pages: PageSummary[];
 }
 
 export interface PageDetail extends PageSummary {
@@ -761,6 +777,48 @@ export interface PageDetail extends PageSummary {
 export async function fetchPages(_tenantId?: string): Promise<PageSummary[]> {
   const res = await apiFetch(`${API_BASE_URL}/pages`);
   return handleResponse<PageSummary[]>(res);
+}
+
+export async function fetchPageNavigation(_tenantId?: string): Promise<PageNavigation> {
+  const res = await apiFetch(`${API_BASE_URL}/pages/navigation`);
+  return handleResponse<PageNavigation>(res);
+}
+
+export async function createPageFolder(
+  data: { name: string; parentId?: string | null },
+): Promise<PageNavFolder> {
+  const res = await apiFetch(`${API_BASE_URL}/pages/navigation/folders`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<PageNavFolder>(res);
+}
+
+export async function updatePageFolder(
+  folderId: string,
+  data: { name?: string; parentId?: string | null },
+): Promise<PageNavFolder> {
+  const res = await apiFetch(`${API_BASE_URL}/pages/navigation/folders/${folderId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<PageNavFolder>(res);
+}
+
+export async function deletePageFolder(folderId: string): Promise<{ success: boolean; id: string }> {
+  const res = await apiFetch(`${API_BASE_URL}/pages/navigation/folders/${folderId}`, { method: "DELETE" });
+  return handleResponse<{ success: boolean; id: string }>(res);
+}
+
+export async function movePageToFolder(pageId: string, folderId: string | null): Promise<void> {
+  const res = await apiFetch(`${API_BASE_URL}/pages/${pageId}/navigation`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folderId }),
+  });
+  await handleResponse<{ success: boolean; id: string }>(res);
 }
 
 export async function fetchPublishedPages(_tenantId?: string): Promise<any[]> {
@@ -778,7 +836,7 @@ export async function fetchPage(
 
 export async function createPage(
   _tenantId: string,
-  data: { name: string; route: string; draft?: any },
+  data: { name: string; route: string; draft?: any; folderId?: string | null },
 ): Promise<PageDetail> {
   const res = await apiFetch(`${API_BASE_URL}/pages`, {
     method: "POST",
@@ -1058,4 +1116,3 @@ export async function fetchDatasetPreview(
   });
   return handleResponse(res);
 }
-

@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import {
   Univer,
@@ -21,6 +21,7 @@ import {
 } from '@config-platform/schema';
 import { gridTemplateToUniver, univerToGridTemplate } from '../src/studio/export-grid/univer-adapter';
 import { GridTemplateDesigner } from '../src/studio/GridTemplateDesigner';
+import { AppBarProvider } from '../src/context/app-bar-context';
 
 // Mock API client
 vi.mock('../src/api/client', () => ({
@@ -92,6 +93,19 @@ vi.mock('@univerjs/ui', async (importOriginal) => {
 });
 
 describe('Phase 2A: Grid Template Designer Frontend Suite', () => {
+  it('keeps the shared app bar hidden when there is no content, action, or message', () => {
+    render(
+      <MemoryRouter>
+        <AppBarProvider>
+          <div>Page content</div>
+        </AppBarProvider>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByText('Page content')).toBeInTheDocument();
+    expect(screen.queryByTestId('app-bottom-bar')).not.toBeInTheDocument();
+  });
+
   // ─── 1. Zero Foreign Network Requests ──────────────────────────────────────
 
   describe('Zero Outbound Foreign Origin Network Requests', () => {
@@ -169,6 +183,83 @@ describe('Phase 2A: Grid Template Designer Frontend Suite', () => {
       // Verify no foreign network requests were fired
       expect(foreignRequests).toEqual([]);
     });
+  });
+
+  it('offers multiple starter layouts and applies the selected template', async () => {
+    render(
+      <MemoryRouter initialEntries={['/studio/export-templates/tpl_1/designer']}>
+        <Routes>
+          <Route path="/studio/export-templates/:id/designer" element={<GridTemplateDesigner />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Budget Template')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Starter Templates' }));
+    expect(screen.getByRole('dialog', { name: 'Choose a starter layout' })).toBeInTheDocument();
+    expect(screen.getByText('Executive Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('Operations Board')).toBeInTheDocument();
+    expect(screen.getByText('Financial Overview')).toBeInTheDocument();
+    expect(screen.getByText('Audit Register')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Operations Board starter template' }));
+    await waitFor(() => {
+      expect(screen.getByText('Applied Operations Board template')).toBeInTheDocument();
+    });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows publish confirmation in the designer status bar', async () => {
+    render(
+      <MemoryRouter initialEntries={['/studio/export-templates/tpl_1/designer']}>
+        <Routes>
+          <Route path="/studio/export-templates/:id/designer" element={<GridTemplateDesigner />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Budget Template')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+    const statusBar = screen.getByTestId('notification-toast');
+    await waitFor(() => {
+      expect(statusBar).toHaveTextContent('Published grid template successfully');
+    });
+    expect(statusBar.closest('footer')).toBeInTheDocument();
+  });
+
+  it('shows designer context and publish feedback in the shared app bar', async () => {
+    render(
+      <MemoryRouter initialEntries={['/studio/export-templates/tpl_1/designer']}>
+        <AppBarProvider>
+          <Routes>
+            <Route
+              path="/studio/export-templates/:id/designer"
+              element={<GridTemplateDesigner />}
+            />
+          </Routes>
+        </AppBarProvider>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Budget Template')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('app-bottom-bar')).toHaveTextContent('A1');
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('app-status-notification')).toHaveTextContent(
+        'Published grid template successfully'
+      );
+    });
+    expect(screen.queryByTestId('notification-toast')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('contentinfo')).toHaveLength(1);
   });
 
   // ─── 2. Programmatic Editing in Real Univer Instance ───────────────────────

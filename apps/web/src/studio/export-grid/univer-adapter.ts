@@ -315,84 +315,89 @@ export function univerToGridTemplate(
           }
 
           if (uCell.s) {
-            const s = uCell.s;
-            const style: GridCellStyle = {};
+            const s =
+              typeof uCell.s === "string"
+                ? univerSnapshot.styles?.[uCell.s]
+                : uCell.s;
+            if (s && typeof s === "object") {
+              const style: GridCellStyle = {};
 
-            // Do not persist temporary design view region shading into template
-            if (s.bg?.rgb && !uCell.custom?.__regionShading) {
-              style.fill = {
-                ...(s.bg.type ? { type: s.bg.type } : {}),
-                fgColor: s.bg.rgb,
-              };
-            }
-
-            if (
-              s.cl?.rgb ||
-              s.bl ||
-              s.it ||
-              s.fs ||
-              s.ff ||
-              s.ul?.s ||
-              s.st?.s
-            ) {
-              const font: any = {};
-              if (s.bl) font.bold = true;
-              if (s.it) font.italic = true;
-              if (s.ul?.s) font.underline = true;
-              if (s.st?.s) font.strike = true;
-              if (s.cl?.rgb) font.color = s.cl.rgb;
-              if (s.fs) font.size = s.fs;
-              if (s.ff) font.name = s.ff;
-              if (Object.keys(font).length > 0) style.font = font;
-            }
-            if (
-              s.ht !== undefined ||
-              s.vt !== undefined ||
-              s.tb !== undefined
-            ) {
-              const alignment: any = {};
-              if (s.ht === 2) alignment.horizontal = "center";
-              else if (s.ht === 3) alignment.horizontal = "right";
-              else if (s.ht === 4) alignment.horizontal = "justify";
-              else if (s.ht === 1) alignment.horizontal = "left";
-
-              if (s.vt === 1) alignment.vertical = "top";
-              else if (s.vt === 3) alignment.vertical = "bottom";
-              else if (s.vt === 2) alignment.vertical = "middle";
-
-              if (s.tb === 1) alignment.wrapText = true;
-
-              if (Object.keys(alignment).length > 0)
-                style.alignment = alignment;
-            }
-
-            if (s.bd) {
-              const border: any = {};
-              if (s.bd.t)
-                border.top = {
-                  style: s.bd.t.style || "thin",
-                  color: s.bd.t.cl?.rgb || DEFAULT_GRID_BORDER_COLOR,
+              // Do not persist temporary design view region shading into template
+              if (s.bg?.rgb && !uCell.custom?.__regionShading) {
+                style.fill = {
+                  ...(s.bg.type ? { type: s.bg.type } : {}),
+                  fgColor: s.bg.rgb,
                 };
-              if (s.bd.b)
-                border.bottom = {
-                  style: s.bd.b.style || "thin",
-                  color: s.bd.b.cl?.rgb || DEFAULT_GRID_BORDER_COLOR,
-                };
-              if (s.bd.l)
-                border.left = {
-                  style: s.bd.l.style || "thin",
-                  color: s.bd.l.cl?.rgb || DEFAULT_GRID_BORDER_COLOR,
-                };
-              if (s.bd.r)
-                border.right = {
-                  style: s.bd.r.style || "thin",
-                  color: s.bd.r.cl?.rgb || DEFAULT_GRID_BORDER_COLOR,
-                };
-              if (Object.keys(border).length > 0) style.border = border;
-            }
+              }
 
-            if (s.n?.pattern) cellDef.numFmt = s.n.pattern;
-            if (Object.keys(style).length > 0) cellDef.style = style;
+              if (
+                s.cl?.rgb ||
+                s.bl ||
+                s.it ||
+                s.fs ||
+                s.ff ||
+                s.ul?.s ||
+                s.st?.s
+              ) {
+                const font: any = {};
+                if (s.bl) font.bold = true;
+                if (s.it) font.italic = true;
+                if (s.ul?.s) font.underline = true;
+                if (s.st?.s) font.strike = true;
+                if (s.cl?.rgb) font.color = s.cl.rgb;
+                if (s.fs) font.size = s.fs;
+                if (s.ff) font.name = s.ff;
+                if (Object.keys(font).length > 0) style.font = font;
+              }
+              if (
+                s.ht !== undefined ||
+                s.vt !== undefined ||
+                s.tb !== undefined
+              ) {
+                const alignment: any = {};
+                if (s.ht === 2) alignment.horizontal = "center";
+                else if (s.ht === 3) alignment.horizontal = "right";
+                else if (s.ht === 4) alignment.horizontal = "justify";
+                else if (s.ht === 1) alignment.horizontal = "left";
+
+                if (s.vt === 1) alignment.vertical = "top";
+                else if (s.vt === 3) alignment.vertical = "bottom";
+                else if (s.vt === 2) alignment.vertical = "middle";
+
+                if (s.tb === 1) alignment.wrapText = true;
+
+                if (Object.keys(alignment).length > 0)
+                  style.alignment = alignment;
+              }
+
+              if (s.bd) {
+                const border: any = {};
+                if (s.bd.t)
+                  border.top = {
+                    style: s.bd.t.style || "thin",
+                    color: s.bd.t.cl?.rgb || DEFAULT_GRID_BORDER_COLOR,
+                  };
+                if (s.bd.b)
+                  border.bottom = {
+                    style: s.bd.b.style || "thin",
+                    color: s.bd.b.cl?.rgb || DEFAULT_GRID_BORDER_COLOR,
+                  };
+                if (s.bd.l)
+                  border.left = {
+                    style: s.bd.l.style || "thin",
+                    color: s.bd.l.cl?.rgb || DEFAULT_GRID_BORDER_COLOR,
+                  };
+                if (s.bd.r)
+                  border.right = {
+                    style: s.bd.r.style || "thin",
+                    color: s.bd.r.cl?.rgb || DEFAULT_GRID_BORDER_COLOR,
+                  };
+                if (Object.keys(border).length > 0) style.border = border;
+              }
+
+              if (s.n?.pattern) cellDef.numFmt = s.n.pattern;
+              if (Object.keys(style).length > 0) cellDef.style = style;
+            }
           }
 
           if (

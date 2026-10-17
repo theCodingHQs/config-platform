@@ -170,14 +170,11 @@ describe('Phase 2B Addendum: Designer Visibility of Bindings & Panels', () => {
 
     // Bound cell notice should be displayed
     await waitFor(() => {
-      expect(screen.getByTestId('bound-cell-notice')).toHaveTextContent(
-        'This cell is bound to First Name'
-      );
-      expect(screen.getByText(/edit the binding in the panel/i)).toBeInTheDocument();
+      expect(screen.getByTestId('bound-cell-notice')).toHaveTextContent('Bound · First Name');
     });
 
     // Unbind button should be available
-    const unbindBtns = screen.getAllByRole('button', { name: /unbind cell/i });
+    const unbindBtns = screen.getAllByRole('button', { name: /unbind selected cell/i });
     expect(unbindBtns.length).toBeGreaterThan(0);
   });
 

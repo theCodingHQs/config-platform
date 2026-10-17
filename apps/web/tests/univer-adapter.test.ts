@@ -114,6 +114,52 @@ describe('Univer Spreadsheet Engine Adapter Round-Trip Tests', () => {
     expect(restored).toEqual(original);
   });
 
+  it('preserves styles stored by Univer as workbook-level style references', () => {
+    const snapshot = {
+      sheetOrder: ['sheet_styles'],
+      styles: {
+        styled_header: {
+          bg: { rgb: '#111827' },
+          cl: { rgb: '#FFFFFF' },
+          bl: 1,
+          fs: 16,
+          ht: 2,
+          vt: 2,
+        },
+      },
+      sheets: {
+        sheet_styles: {
+          id: 'sheet_styles',
+          name: 'Styles Test',
+          cellData: {
+            0: {
+              0: { v: 'Styled Header', s: 'styled_header' },
+            },
+          },
+          mergeData: [],
+        },
+      },
+    };
+
+    const restored = univerToGridTemplate(snapshot);
+
+    expect(restored.sheets[0].cells['0:0'].style).toEqual({
+      fill: { fgColor: '#111827' },
+      font: { bold: true, color: '#FFFFFF', size: 16 },
+      alignment: { horizontal: 'center', vertical: 'middle' },
+    });
+    expect(
+      gridTemplateToUniver(restored).sheets.sheet_styles.cellData[0][0].s,
+    ).toEqual({
+      bg: { rgb: '#111827' },
+      cl: { rgb: '#FFFFFF' },
+      bl: 1,
+      fs: 16,
+      ht: 2,
+      vt: 2,
+    });
+  });
+
   it('losslessly preserves number formats', () => {
     const original: GridExportTemplateDefinition = {
       kind: 'grid',
@@ -485,4 +531,3 @@ describe('Univer Spreadsheet Engine Adapter Round-Trip Tests', () => {
     expect(saved.sheets[0].cells['4:0']).toBeUndefined();
   });
 });
-

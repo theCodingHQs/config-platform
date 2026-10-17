@@ -21,7 +21,6 @@ import {
   Moon,
   TrendingUp,
   Layers,
-  Sparkles,
   Tv,
 } from "lucide-react";
 

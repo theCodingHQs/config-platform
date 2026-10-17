@@ -372,6 +372,36 @@ export const catalogMigrations: CatalogMigration[] = [
       `);
     },
   },
+  {
+    version: 13,
+    name: '013_nested_page_navigation',
+    up: async (client: PoolClient) => {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.page_nav_folder (
+          id VARCHAR(64) PRIMARY KEY,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          parent_id VARCHAR(64),
+          name VARCHAR(128) NOT NULL,
+          slug VARCHAR(128) NOT NULL,
+          position INT NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CONSTRAINT fk_page_nav_folder_parent
+            FOREIGN KEY (parent_id) REFERENCES public.page_nav_folder(id) ON DELETE CASCADE
+        );
+
+        ALTER TABLE public.page_def
+          ADD COLUMN IF NOT EXISTS nav_folder_id VARCHAR(64),
+          ADD COLUMN IF NOT EXISTS nav_position INT NOT NULL DEFAULT 0;
+
+        CREATE INDEX IF NOT EXISTS idx_page_nav_folder_tenant_parent
+          ON public.page_nav_folder(tenant_id, parent_id, position);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_page_nav_folder_sibling_slug
+          ON public.page_nav_folder(tenant_id, COALESCE(parent_id, ''), slug);
+        CREATE INDEX IF NOT EXISTS idx_page_def_tenant_nav
+          ON public.page_def(tenant_id, nav_folder_id, nav_position);
+      `);
+    },
+  },
 ];
 
 /**

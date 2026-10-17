@@ -137,18 +137,21 @@ describe('Studio & Page Builder UI', () => {
 
   // 2. Page Manager list and create
   it('page manager lists pages and creates a new page', async () => {
-    vi.spyOn(apiClient, 'fetchPages').mockResolvedValue([
-      {
+    vi.spyOn(apiClient, 'fetchPageNavigation').mockResolvedValue({
+      folders: [{ id: 'nf_sales', parentId: null, name: 'Sales', slug: 'sales', position: 0 }],
+      pages: [{
         id: 'p_1',
         name: 'Telemetry Dashboard',
-        route: '/telemetry',
+        route: '/sales/telemetry',
         version: 1,
         hasDraft: true,
         hasPublished: true,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
-      },
-    ]);
+        folderId: 'nf_sales',
+        position: 0,
+      }],
+    });
 
     const createPageSpy = vi.spyOn(apiClient, 'createPage').mockResolvedValue({
       id: 'p_new',
@@ -175,7 +178,8 @@ describe('Studio & Page Builder UI', () => {
     await waitFor(() => {
       expect(screen.getByText('Telemetry Dashboard')).toBeInTheDocument();
     });
-    expect(screen.getByText('/telemetry')).toBeInTheDocument();
+    expect(screen.getByText('Sales', { selector: 'strong' })).toBeInTheDocument();
+    expect(screen.getByText('/sales/telemetry')).toBeInTheDocument();
     expect(screen.getByText('Published')).toBeInTheDocument();
 
     // Create page
@@ -185,7 +189,7 @@ describe('Studio & Page Builder UI', () => {
     await user.type(screen.getByPlaceholderText(/Inventory Dashboard/i), 'Analytics');
     await user.click(screen.getByRole('button', { name: /^Create Page$/i }));
 
-    expect(createPageSpy).toHaveBeenCalledWith('test_tenant', { name: 'Analytics', route: '/analytics' });
+    expect(createPageSpy).toHaveBeenCalledWith('test_tenant', { name: 'Analytics', route: '/analytics', folderId: null });
   });
 
   // 3. Builder adds a table, binds an entity and columns, saves, publishes

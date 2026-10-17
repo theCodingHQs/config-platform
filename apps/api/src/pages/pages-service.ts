@@ -1,4 +1,4 @@
-import type { PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { pool } from '../db/pool.js';
 import {
   PageDefinitionSchema,
@@ -19,6 +19,22 @@ export interface PageSummary {
   hasPublished: boolean;
   createdAt: string;
   updatedAt: string;
+  folderId?: string | null;
+  position?: number;
+  allowedRoles?: string[] | null;
+}
+
+export interface PageNavFolder {
+  id: string;
+  parentId: string | null;
+  name: string;
+  slug: string;
+  position: number;
+}
+
+export interface PageNavigation {
+  folders: PageNavFolder[];
+  pages: PageSummary[];
 }
 
 export interface PageDetail extends PageSummary {
@@ -224,18 +240,166 @@ export class PagesService {
    */
   async listPages(tenantId: string): Promise<PageSummary[]> {
     const res = await pool.query(
-      `SELECT id, name, route, version,
+      `SELECT id, name, route, version, nav_folder_id AS "folderId", nav_position AS position,
+              allowed_roles AS "allowedRoles",
               (draft IS NOT NULL) AS "hasDraft",
               (published IS NOT NULL) AS "hasPublished",
               created_at AS "createdAt",
               updated_at AS "updatedAt"
        FROM public.page_def
        WHERE tenant_id = $1
-       ORDER BY updated_at DESC`,
+       ORDER BY nav_position ASC, updated_at DESC`,
       [tenantId]
     );
 
     return res.rows;
+  }
+
+  async getNavigation(tenantId: string): Promise<PageNavigation> {
+    const [folders, pages] = await Promise.all([
+      pool.query(
+        `SELECT id, parent_id AS "parentId", name, slug, position
+         FROM public.page_nav_folder WHERE tenant_id = $1
+         ORDER BY position ASC, name ASC`,
+        [tenantId]
+      ),
+      this.listPages(tenantId),
+    ]);
+    return { folders: folders.rows, pages };
+  }
+
+  async createFolder(tenantId: string, input: { name: string; parentId?: string | null }): Promise<PageNavFolder> {
+    const name = input.name.trim();
+    if (!name || name.length > 128) throw new Error('Folder name must be between 1 and 128 characters');
+    if (input.parentId) await this.assertFolder(tenantId, input.parentId);
+    const slug = this.slugify(name);
+    const siblings = await pool.query<{ name: string; slug: string }>(
+      `SELECT name, slug FROM public.page_nav_folder
+       WHERE tenant_id = $1 AND parent_id IS NOT DISTINCT FROM $2`,
+      [tenantId, input.parentId ?? null]
+    );
+    if (siblings.rows.some((folder) => folder.slug === slug || folder.name.toLowerCase() === name.toLowerCase())) {
+      throw new Error('A folder with this name already exists at this level');
+    }
+    const id = `nf_${crypto.randomBytes(6).toString('hex')}`;
+    const nextPosition = await pool.query<{ position: number }>(
+      `SELECT COALESCE(MAX(position) + 1, 0) AS position FROM public.page_nav_folder
+       WHERE tenant_id = $1 AND parent_id IS NOT DISTINCT FROM $2`,
+      [tenantId, input.parentId ?? null]
+    );
+    const res = await pool.query(
+      `INSERT INTO public.page_nav_folder (id, tenant_id, parent_id, name, slug, position)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, parent_id AS "parentId", name, slug, position`,
+      [id, tenantId, input.parentId ?? null, name, slug, nextPosition.rows[0].position]
+    );
+    return res.rows[0];
+  }
+
+  async updateFolder(
+    tenantId: string,
+    folderId: string,
+    input: { name?: string; parentId?: string | null }
+  ): Promise<PageNavFolder> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [tenantId]);
+      const current = await client.query<PageNavFolder>(
+        `SELECT id, parent_id AS "parentId", name, slug, position
+         FROM public.page_nav_folder WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+        [tenantId, folderId]
+      );
+      if (!current.rows[0]) throw new Error(`Folder '${folderId}' not found`);
+      const folder = current.rows[0];
+      const parentId = input.parentId === undefined ? folder.parentId : input.parentId;
+      if (parentId) await this.assertFolder(tenantId, parentId, client);
+      if (parentId === folderId) throw new Error('A folder cannot be its own parent');
+      const newName = input.name === undefined ? folder.name : input.name.trim();
+      if (!newName || newName.length > 128) throw new Error('Folder name must be between 1 and 128 characters');
+      const slug = input.name === undefined ? folder.slug : this.slugify(newName);
+      const descendants = await client.query<{ id: string; parent_id: string | null; slug: string }>(
+        `WITH RECURSIVE tree AS (
+           SELECT id, parent_id, slug FROM public.page_nav_folder WHERE tenant_id = $1 AND id = $2
+           UNION ALL
+           SELECT f.id, f.parent_id, f.slug FROM public.page_nav_folder f JOIN tree t ON f.parent_id = t.id
+           WHERE f.tenant_id = $1
+         ) SELECT * FROM tree`,
+        [tenantId, folderId]
+      );
+      if (parentId && descendants.rows.some((entry) => entry.id === parentId)) {
+        throw new Error('A folder cannot be moved inside its descendant');
+      }
+      const siblingCheck = await client.query<{ id: string }>(
+        `SELECT id FROM public.page_nav_folder
+         WHERE tenant_id = $1 AND parent_id IS NOT DISTINCT FROM $2 AND id <> $3
+           AND (slug = $4 OR lower(name) = lower($5))`,
+        [tenantId, parentId, folderId, slug, newName]
+      );
+      if (siblingCheck.rowCount) throw new Error('A folder with this name already exists at this level');
+
+      await client.query(
+        `UPDATE public.page_nav_folder SET name = $3, slug = $4, parent_id = $5 WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, folderId, newName, slug, parentId]
+      );
+      await this.rebuildFolderRoutes(client, tenantId, descendants.rows.map((entry) => entry.id));
+      const updated = await client.query(
+        `SELECT id, parent_id AS "parentId", name, slug, position
+         FROM public.page_nav_folder WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, folderId]
+      );
+      await client.query('COMMIT');
+      return updated.rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deleteFolder(tenantId: string, folderId: string): Promise<void> {
+    const result = await pool.query(
+      `DELETE FROM public.page_nav_folder f
+       WHERE f.tenant_id = $1 AND f.id = $2
+         AND NOT EXISTS (SELECT 1 FROM public.page_nav_folder c WHERE c.tenant_id = $1 AND c.parent_id = f.id)
+         AND NOT EXISTS (SELECT 1 FROM public.page_def p WHERE p.tenant_id = $1 AND p.nav_folder_id = f.id)
+       RETURNING f.id`,
+      [tenantId, folderId]
+    );
+    if (!result.rowCount) throw new Error('Folder not found or not empty');
+  }
+
+  async movePage(tenantId: string, pageId: string, folderId: string | null): Promise<void> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [tenantId]);
+      if (folderId) await this.assertFolder(tenantId, folderId, client);
+      const page = await client.query<{ route: string }>(
+        `SELECT route FROM public.page_def WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+        [tenantId, pageId]
+      );
+      if (!page.rows[0]) throw new Error(`Page '${pageId}' not found`);
+      const nextRoute = await this.routeForFolder(client, tenantId, folderId, page.rows[0].route.split('/').filter(Boolean).pop()!);
+      await this.applyRouteChanges(client, tenantId, new Map([[pageId, nextRoute]]));
+      const nextPosition = await client.query<{ position: number }>(
+        `SELECT COALESCE(MAX(nav_position) + 1, 0) AS position FROM public.page_def
+         WHERE tenant_id = $1 AND nav_folder_id IS NOT DISTINCT FROM $2 AND id <> $3`,
+        [tenantId, folderId, pageId]
+      );
+      await client.query(
+        `UPDATE public.page_def SET nav_folder_id = $3, nav_position = $4
+         WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, pageId, folderId, nextPosition.rows[0].position]
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /**
@@ -297,10 +461,11 @@ export class PagesService {
    */
   async createPage(
     tenantId: string,
-    input: { name: string; route: string; draft?: PageDefinition }
+    input: { name: string; route: string; draft?: PageDefinition; folderId?: string | null }
   ): Promise<PageDetail> {
     const id = `p_${crypto.randomBytes(4).toString('hex')}`;
     let formattedRoute = input.route.startsWith('/') ? input.route : `/${input.route}`;
+    if (input.folderId) await this.assertFolder(tenantId, input.folderId);
 
     // Default blank page if no draft provided
     const initialDraft: PageDefinition = input.draft
@@ -333,10 +498,10 @@ export class PagesService {
     }
 
     const res = await pool.query(
-      `INSERT INTO public.page_def (id, tenant_id, name, route, draft, published, version, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, NULL, 1, NOW(), NOW())
+      `INSERT INTO public.page_def (id, tenant_id, name, route, draft, published, version, nav_folder_id, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NULL, 1, $6, NOW(), NOW())
        RETURNING id, name, route, draft, published, version, created_at AS "createdAt", updated_at AS "updatedAt"`,
-      [id, tenantId, input.name, formattedRoute, JSON.stringify(parsed.data)]
+      [id, tenantId, input.name, formattedRoute, JSON.stringify({ ...parsed.data, route: formattedRoute }), input.folderId ?? null]
     );
 
     const row = res.rows[0];
@@ -483,6 +648,98 @@ export class PagesService {
     }
 
     return { success: true, id };
+  }
+
+  private slugify(value: string): string {
+    const slug = value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    if (!slug) throw new Error('Folder name must contain at least one letter or number');
+    return slug;
+  }
+
+  private async assertFolder(tenantId: string, folderId: string, client: Pool | PoolClient = pool): Promise<void> {
+    const result = await client.query(
+      `SELECT 1 FROM public.page_nav_folder WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, folderId]
+    );
+    if (!result.rowCount) throw new Error(`Folder '${folderId}' not found`);
+  }
+
+  private async routeForFolder(
+    client: PoolClient,
+    tenantId: string,
+    folderId: string | null,
+    pageSlug: string
+  ): Promise<string> {
+    if (!folderId) return `/${pageSlug}`;
+    const result = await client.query<{ id: string; parent_id: string | null; slug: string }>(
+      `SELECT id, parent_id, slug FROM public.page_nav_folder WHERE tenant_id = $1`,
+      [tenantId]
+    );
+    const byId = new Map(result.rows.map((folder) => [folder.id, folder]));
+    const segments: string[] = [];
+    let current = byId.get(folderId);
+    while (current) {
+      segments.unshift(current.slug);
+      current = current.parent_id ? byId.get(current.parent_id) : undefined;
+    }
+    return `/${[...segments, pageSlug].join('/')}`;
+  }
+
+  private async rebuildFolderRoutes(client: PoolClient, tenantId: string, folderIds: string[]): Promise<void> {
+    if (!folderIds.length) return;
+    const pages = await client.query<{ id: string; route: string; nav_folder_id: string }>(
+      `SELECT id, route, nav_folder_id FROM public.page_def
+       WHERE tenant_id = $1 AND nav_folder_id = ANY($2::varchar[])`,
+      [tenantId, folderIds]
+    );
+    const routes = new Map<string, string>();
+    for (const page of pages.rows) {
+      routes.set(page.id, await this.routeForFolder(
+        client, tenantId, page.nav_folder_id, page.route.split('/').filter(Boolean).pop()!
+      ));
+    }
+    await this.applyRouteChanges(client, tenantId, routes);
+  }
+
+  private async applyRouteChanges(client: PoolClient, tenantId: string, changes: Map<string, string>): Promise<void> {
+    if (!changes.size) return;
+    const current = await client.query<{ id: string; route: string }>(
+      `SELECT id, route FROM public.page_def WHERE tenant_id = $1`,
+      [tenantId]
+    );
+    const changedIds = new Set(changes.keys());
+    const desired = new Set<string>();
+    for (const route of changes.values()) {
+      const normalized = route.toLowerCase();
+      if (desired.has(normalized)) throw new Error(`Navigation change would create duplicate route '${route}'`);
+      desired.add(normalized);
+    }
+    const occupied = new Map(current.rows.filter((page) => !changedIds.has(page.id)).map((page) => [page.route.toLowerCase(), page.route]));
+    for (const route of changes.values()) {
+      const conflictingRoute = occupied.get(route.toLowerCase());
+      if (conflictingRoute) throw new Error(`Route '${route}' is already in use`);
+    }
+
+    for (const id of changes.keys()) {
+      const temporaryRoute = `/__nav_move_${crypto.randomBytes(8).toString('hex')}`;
+      await client.query(
+        `UPDATE public.page_def SET route = $1,
+           draft = CASE WHEN draft IS NULL THEN NULL ELSE jsonb_set(draft, '{route}', to_jsonb($2::text), true) END,
+           published = CASE WHEN published IS NULL THEN NULL ELSE jsonb_set(published, '{route}', to_jsonb($3::text), true) END
+         WHERE tenant_id = $4 AND id = $5`,
+        [temporaryRoute, temporaryRoute, temporaryRoute, tenantId, id]
+      );
+    }
+    for (const [id, route] of changes) {
+      await client.query(
+        `UPDATE public.page_def SET route = $1,
+           draft = CASE WHEN draft IS NULL THEN NULL ELSE jsonb_set(draft, '{route}', to_jsonb($2::text), true) END,
+           published = CASE WHEN published IS NULL THEN NULL ELSE jsonb_set(published, '{route}', to_jsonb($3::text), true) END,
+           version = version + 1, updated_at = NOW()
+         WHERE tenant_id = $4 AND id = $5`,
+        [route, route, route, tenantId, id]
+      );
+    }
   }
 }
 

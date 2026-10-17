@@ -18,7 +18,6 @@ import {
   Search,
   X,
   SlidersHorizontal,
-  Sparkles,
 } from "lucide-react";
 import {
   listExportTemplates,
@@ -34,7 +33,10 @@ import {
 } from "../api/client";
 import { useMetadata } from "../context/metadata-context";
 import {
+  buildGridStarterTemplate,
   buildExecutiveReportTemplate,
+  GRID_STARTER_TEMPLATES,
+  type GridStarterTemplateId,
   type SimpleExportTemplateDefinition,
   type ExportTemplateColumn,
   type ExportTemplateSort,
@@ -60,7 +62,7 @@ export function ExportTemplatesManager() {
   const [newTemplateKind, setNewTemplateKind] = useState<"simple" | "grid">(
     "grid",
   );
-  const [gridPreset, setGridPreset] = useState<"executive" | "blank">(
+  const [gridPreset, setGridPreset] = useState<GridStarterTemplateId | "blank">(
     "executive",
   );
 
@@ -133,8 +135,8 @@ export function ExportTemplatesManager() {
       };
       if (newTemplateKind === "grid") {
         const targetEntity = entities.find((e) => e.id === newTemplateEntityId);
-        if (gridPreset === "executive" && targetEntity) {
-          payload.draft = buildExecutiveReportTemplate(targetEntity);
+        if (gridPreset !== "blank" && targetEntity) {
+          payload.draft = buildGridStarterTemplate(targetEntity, gridPreset);
         } else {
           payload.draft = {
             kind: "grid",
@@ -570,7 +572,7 @@ export function ExportTemplatesManager() {
                     fontSize: "var(--font-size-xs)",
                   }}
                 >
-                  <Sparkles size={13} style={{ color: "var(--accent)" }} />
+                  <FileSpreadsheet size={13} style={{ color: "var(--accent)" }} />
                   <span>Generate Starter Template</span>
                 </button>
               )}
@@ -809,7 +811,7 @@ export function ExportTemplatesManager() {
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                         gap: "var(--space-3)",
                       }}
                     >
@@ -838,7 +840,7 @@ export function ExportTemplatesManager() {
                             marginBottom: "var(--space-1)",
                           }}
                         >
-                          <Sparkles
+                          <FileSpreadsheet
                             size={16}
                             style={{ color: "var(--accent)" }}
                           />
@@ -860,11 +862,57 @@ export function ExportTemplatesManager() {
                             lineHeight: 1.4,
                           }}
                         >
-                          Pre-built KPI cards, dataset aggregation (Count,
-                          Total, Avg), and repeating table dynamically connected
-                          to your entity.
+                          Four live KPI cards, totals, and a formatted,
+                          entity-connected table with room for additional rows.
                         </p>
                       </div>
+
+                      {GRID_STARTER_TEMPLATES.filter((starter) => starter.id !== "executive").map((starter) => (
+                        <button
+                          key={starter.id}
+                          type="button"
+                          onClick={() => setGridPreset(starter.id)}
+                          aria-pressed={gridPreset === starter.id}
+                          style={{
+                            padding: "var(--space-3)",
+                            borderRadius: "var(--radius-control)",
+                            border: gridPreset === starter.id
+                              ? "2px solid var(--accent)"
+                              : "var(--border-width) solid var(--border)",
+                            backgroundColor: gridPreset === starter.id
+                              ? "var(--accent-subtle)"
+                              : "var(--surface-subtle)",
+                            color: "var(--text-main)",
+                            textAlign: "left",
+                            cursor: "pointer",
+                            transition: "all 0.15s ease",
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "var(--space-2)",
+                              marginBottom: "var(--space-1)",
+                              fontWeight: 600,
+                              fontSize: "var(--font-size-sm)",
+                            }}
+                          >
+                            <FileSpreadsheet size={16} style={{ color: "var(--accent)" }} />
+                            {starter.name}
+                          </span>
+                          <span
+                            style={{
+                              display: "block",
+                              fontSize: "var(--font-size-xs)",
+                              color: "var(--text-muted)",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            {starter.description}
+                          </span>
+                        </button>
+                      ))}
 
                       <div
                         onClick={() => setGridPreset("blank")}
@@ -995,7 +1043,7 @@ export function ExportTemplatesManager() {
                     margin: "0 auto",
                   }}
                 >
-                  <Sparkles size={16} />
+                  <FileSpreadsheet size={16} />
                   <span>Generate Executive Template for {entities[0]?.label || entities[0]?.name}</span>
                 </button>
               ) : (
