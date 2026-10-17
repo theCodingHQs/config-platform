@@ -626,7 +626,8 @@ export class DatasetQueryBuilder {
         }
 
         let aggSql = '';
-        switch (agg.fn) {
+        const aggFn = agg.fn || (agg as any).op;
+        switch (aggFn) {
           case 'sum':
             aggSql = `COALESCE(SUM(${aggColExpr}), 0)`;
             break;
@@ -751,7 +752,8 @@ export class DatasetQueryBuilder {
           }
 
           let aggSql = '';
-          switch (agg.fn) {
+          const aggFn = agg.fn || (agg as any).op;
+          switch (aggFn) {
             case 'sum':
               aggSql = `COALESCE(SUM(${aggColExpr}) OVER (), 0)`;
               break;

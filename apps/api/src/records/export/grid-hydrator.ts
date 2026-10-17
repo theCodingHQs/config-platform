@@ -23,6 +23,9 @@ import {
 } from './dataset-query-builder.js';
 import { migrationService } from '../../migrations/migration-service.js';
 import type { TenantRole } from '../../auth/auth-types.js';
+import { chartDataExtractor } from './chart-data-extractor.js';
+import { chartRenderer } from './chart-renderer.js';
+import { shiftRangeByRegion } from './chart-range-helper.js';
 
 export interface GridHydrationOptions {
   tenantId: string;
@@ -111,6 +114,7 @@ export class GridHydrator {
 
     const workspaceTimezone = await migrationService.getTenantTimezone(tenantId);
     const hydratedSheets: GridSheetDefinition[] = [];
+    const hydratedCharts = template.charts ? JSON.parse(JSON.stringify(template.charts)) : [];
 
     // Query counter per export
     let totalQueriesExecuted = 0;
@@ -339,7 +343,7 @@ export class GridHydrator {
                     val = record[dsField.id] ?? record[dsField.name];
                   }
                 }
-                if (val === undefined) {
+                if (val === undefined && fieldId) {
                   // Check groupBy fields
                   for (const [k, v] of Object.entries(record)) {
                     if (k.toLowerCase().includes(fieldId.toLowerCase())) {
@@ -432,6 +436,32 @@ export class GridHydrator {
           ...region,
           endRow: region.startRow + totalRenderRows - 1,
         });
+
+        // Shift chart anchors and range sources when regions expand
+        if (delta > 0) {
+          for (const ch of hydratedCharts) {
+            if (ch.anchor && (ch.anchor.sheetId === sheetDef.id || ch.anchor.sheetId === sheetDef.name)) {
+              if (ch.anchor.startRow > region.endRow) {
+                ch.anchor.startRow += delta;
+                ch.anchor.endRow += delta;
+              } else if (ch.anchor.startRow >= region.startRow && ch.anchor.startRow <= region.endRow) {
+                ch.anchor.endRow += delta;
+              }
+            }
+            if (ch.source && ch.source.kind === 'range' && (ch.source.sheetId === sheetDef.id || ch.source.sheetId === sheetDef.name)) {
+              if (ch.source.categoryRange) {
+                ch.source.categoryRange = shiftRangeByRegion(ch.source.categoryRange, region.startRow, region.endRow, delta);
+              }
+              if (Array.isArray(ch.source.series)) {
+                for (const s of ch.source.series) {
+                  if (s.range) {
+                    s.range = shiftRangeByRegion(s.range, region.startRow, region.endRow, delta);
+                  }
+                }
+              }
+            }
+          }
+        }
       } else {
         // No regions: copy cells as-is
         Object.assign(hydratedCells, sheetDef.cells);
@@ -538,6 +568,7 @@ export class GridHydrator {
     return {
       ...template,
       sheets: hydratedSheets,
+      charts: hydratedCharts,
     };
   }
 
@@ -548,8 +579,35 @@ export class GridHydrator {
     template: GridExportTemplateDefinition,
     options: GridHydrationOptions
   ): Promise<ExcelJS.Workbook> {
+    const datasetCache = new Map<string, { rows: any[]; totalCount: number }>();
     const hydratedTemplate = await this.hydrateGridDefinition(template, options);
-    return gridXlsxRenderer.renderToWorkbook(hydratedTemplate);
+
+    const chartImages = new Map<string, Buffer>();
+    if (hydratedTemplate.charts && hydratedTemplate.charts.length > 0) {
+      for (const chart of hydratedTemplate.charts) {
+        const chartData = await chartDataExtractor.extractChartData(
+          options.tenantId,
+          options.userRole,
+          chart,
+          hydratedTemplate,
+          hydratedTemplate.sheets,
+          datasetCache
+        );
+        const cols = Math.max(1, chart.anchor.endCol - chart.anchor.startCol + 1);
+        const rows = Math.max(1, chart.anchor.endRow - chart.anchor.startRow + 1);
+        const widthPx = Math.max(300, Math.min(cols * 75, 1200));
+        const heightPx = Math.max(200, Math.min(rows * 24, 800));
+
+        const pngBuffer = chartRenderer.renderToPng(
+          chart,
+          chartData,
+          { width: widthPx, height: heightPx }
+        );
+        chartImages.set(chart.id, pngBuffer);
+      }
+    }
+
+    return gridXlsxRenderer.renderToWorkbook(hydratedTemplate, chartImages);
   }
 
   public async renderHydratedToBuffer(

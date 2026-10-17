@@ -352,6 +352,66 @@ export class ExportTemplateService {
         }
       }
     }
+
+    if (Array.isArray(draft.charts)) {
+      if (draft.charts.length > 20) {
+        const err = new Error(`Template exceeds maximum limit of 20 charts (current: ${draft.charts.length})`);
+        (err as any).statusCode = 400;
+        throw err;
+      }
+
+      const sheetIds = new Set(draft.sheets.map((s: any) => s.id));
+      const sheetNames = new Set(draft.sheets.map((s: any) => s.name));
+
+      for (const ch of draft.charts) {
+        if (!ch.anchor || (!sheetIds.has(ch.anchor.sheetId) && !sheetNames.has(ch.anchor.sheetId))) {
+          const err = new Error(`Chart '${ch.title || ch.id}' references unknown sheet '${ch.anchor?.sheetId}'`);
+          (err as any).statusCode = 400;
+          throw err;
+        }
+
+        if (ch.source?.kind === 'dataset') {
+          const dsId = ch.source.datasetId;
+          if (!datasetsMap.has(dsId)) {
+            const err = new Error(`Chart '${ch.title || ch.id}' references unknown dataset '${dsId}'`);
+            (err as any).statusCode = 400;
+            throw err;
+          }
+          const fSet = datasetFieldSets.get(dsId) || new Set();
+          const aSet = datasetAggregateSets.get(dsId) || new Set();
+
+          const catField = typeof ch.source.category === 'string'
+            ? ch.source.category
+            : ch.source.category?.fieldId;
+
+          if (!catField || (!fSet.has(catField) && !aSet.has(catField))) {
+            const err = new Error(`Chart '${ch.title || ch.id}' category field '${catField}' not found in dataset '${dsId}'`);
+            (err as any).statusCode = 400;
+            throw err;
+          }
+
+          for (const s of ch.source.series || []) {
+            const targetId = s.aggregateId || s.fieldId;
+            if (!targetId || (!fSet.has(targetId) && !aSet.has(targetId))) {
+              const err = new Error(`Chart '${ch.title || ch.id}' series '${s.name || targetId}' field/aggregate '${targetId}' not found in dataset '${dsId}'`);
+              (err as any).statusCode = 400;
+              throw err;
+            }
+          }
+        } else if (ch.source?.kind === 'range') {
+          if (!sheetIds.has(ch.source.sheetId) && !sheetNames.has(ch.source.sheetId)) {
+            const err = new Error(`Chart '${ch.title || ch.id}' range source references unknown sheet '${ch.source.sheetId}'`);
+            (err as any).statusCode = 400;
+            throw err;
+          }
+          if (!ch.source.series || ch.source.series.length === 0) {
+            const err = new Error(`Chart '${ch.title || ch.id}' has no series defined`);
+            (err as any).statusCode = 400;
+            throw err;
+          }
+        }
+      }
+    }
   }
 
   async updateTemplate(

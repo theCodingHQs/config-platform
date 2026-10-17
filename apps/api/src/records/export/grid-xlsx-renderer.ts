@@ -88,7 +88,10 @@ export function applyStyleToExcelCell(cell: ExcelJS.Cell, style?: GridCellStyle)
  * Server-side ExcelJS Grid XLSX Renderer
  */
 export class GridXlsxRenderer {
-  public renderToWorkbook(template: GridExportTemplateDefinition): ExcelJS.Workbook {
+  public renderToWorkbook(
+    template: GridExportTemplateDefinition,
+    chartImages?: Map<string, Buffer>
+  ): ExcelJS.Workbook {
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'ConfigPlatform Grid Engine';
     workbook.created = new Date();
@@ -210,6 +213,31 @@ export class GridXlsxRenderer {
       }
     }
 
+    // 6. Embed Charts as PNG images at anchors
+    if (template.charts && template.charts.length > 0 && chartImages && chartImages.size > 0) {
+      for (const chart of template.charts) {
+        const targetSheetDef = template.sheets.find(
+          (s) => s.id === chart.anchor.sheetId || s.name === chart.anchor.sheetId
+        );
+        const sheetName = targetSheetDef ? targetSheetDef.name : chart.anchor.sheetId;
+        const ws = workbook.getWorksheet(sheetName);
+        if (!ws) continue;
+
+        const pngBuffer = chartImages.get(chart.id);
+        if (pngBuffer && pngBuffer.length > 0) {
+          const imageId = workbook.addImage({
+            buffer: pngBuffer as any,
+            extension: 'png',
+          });
+          ws.addImage(imageId, {
+            tl: { col: chart.anchor.startCol, row: chart.anchor.startRow } as any,
+            br: { col: chart.anchor.endCol + 1, row: chart.anchor.endRow + 1 } as any,
+            editAs: 'twoCell' as any,
+          });
+        }
+      }
+    }
+
     if (hasUncachedFormula) {
       workbook.calcProperties.fullCalcOnLoad = true;
     }
@@ -217,8 +245,11 @@ export class GridXlsxRenderer {
     return workbook;
   }
 
-  public async renderToBuffer(template: GridExportTemplateDefinition): Promise<Buffer> {
-    const workbook = this.renderToWorkbook(template);
+  public async renderToBuffer(
+    template: GridExportTemplateDefinition,
+    chartImages?: Map<string, Buffer>
+  ): Promise<Buffer> {
+    const workbook = this.renderToWorkbook(template, chartImages);
     return (await workbook.xlsx.writeBuffer()) as unknown as Buffer;
   }
 }

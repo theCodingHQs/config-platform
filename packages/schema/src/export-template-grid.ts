@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  GridChartDefinitionSchema,
+  type GridChartDefinition,
+  CHART_LIMITS,
+} from './chart-spec.js';
 
 export const GridBorderLineStyleSchema = z.enum([
   'thin',
@@ -172,6 +177,9 @@ export const GRID_LIMITS = {
   MAX_JOINS: 4,
   MAX_GROUPS: 10_000,
   MAX_QUERIES_PER_EXPORT: 50,
+  MAX_CHARTS: CHART_LIMITS.MAX_CHARTS_PER_TEMPLATE,
+  MAX_SERIES_PER_CHART: CHART_LIMITS.MAX_SERIES_PER_CHART,
+  MAX_POINTS_PER_SERIES: CHART_LIMITS.MAX_POINTS_PER_SERIES,
 };
 
 export const ALLOWED_FORMULA_FUNCTIONS = [
@@ -305,6 +313,17 @@ export function validateGridCaps(template: { sheets: Array<{ cells?: Record<stri
     for (const ds of tplAny.datasets) {
       if (ds?.source?.joins && Array.isArray(ds.source.joins) && ds.source.joins.length > GRID_LIMITS.MAX_JOINS) {
         errors.push(`Dataset '${ds.name || ds.id}' exceeds maximum limit of ${GRID_LIMITS.MAX_JOINS} joins (current: ${ds.source.joins.length}).`);
+      }
+    }
+  }
+
+  if (Array.isArray(tplAny.charts)) {
+    if (tplAny.charts.length > GRID_LIMITS.MAX_CHARTS) {
+      errors.push(`Template exceeds maximum limit of ${GRID_LIMITS.MAX_CHARTS} charts (current: ${tplAny.charts.length}).`);
+    }
+    for (const ch of tplAny.charts) {
+      if (ch?.source?.series && Array.isArray(ch.source.series) && ch.source.series.length > GRID_LIMITS.MAX_SERIES_PER_CHART) {
+        errors.push(`Chart '${ch.title || ch.id}' exceeds maximum limit of ${GRID_LIMITS.MAX_SERIES_PER_CHART} series (current: ${ch.source.series.length}).`);
       }
     }
   }
@@ -473,11 +492,16 @@ export type GridDatasetDefinition = z.infer<typeof GridDatasetDefinitionSchema>;
 export const BaseGridExportTemplateDefinitionSchema = z.object({
   kind: z.literal('grid'),
   version: z.number().int().default(1),
-  schemaVersion: z.number().int().default(2),
+  schemaVersion: z.number().int().default(3),
   parameters: z.array(GridParameterDefinitionSchema).optional().default([]),
   datasets: z
     .array(GridDatasetDefinitionSchema)
     .max(GRID_LIMITS.MAX_DATASETS, `Max ${GRID_LIMITS.MAX_DATASETS} datasets allowed per template`)
+    .optional()
+    .default([]),
+  charts: z
+    .array(GridChartDefinitionSchema)
+    .max(GRID_LIMITS.MAX_CHARTS, `Max ${GRID_LIMITS.MAX_CHARTS} charts allowed per template`)
     .optional()
     .default([]),
   sheets: z.array(GridSheetDefinitionSchema).min(1),
@@ -597,6 +621,21 @@ export function migrateGridTemplateToV2(template: any): GridExportTemplateDefini
     }
   }
 
+  return cloned as GridExportTemplateDefinition;
+}
+
+/**
+ * Migrates a Grid template (e.g. from schemaVersion 1 or 2) to schemaVersion 3 (Charts support).
+ * Defaults schemaVersion to 3 and charts to [] if undefined.
+ */
+export function migrateGridTemplateToV3(template: any): GridExportTemplateDefinition {
+  if (!template || typeof template !== 'object') {
+    throw new Error('Invalid grid template object');
+  }
+  const v2 = migrateGridTemplateToV2(template);
+  const cloned = JSON.parse(JSON.stringify(v2));
+  cloned.schemaVersion = 3;
+  cloned.charts = Array.isArray(cloned.charts) ? cloned.charts : [];
   return cloned as GridExportTemplateDefinition;
 }
 
@@ -1031,6 +1070,7 @@ export function buildPersonalMonthlyBudgetBenchmark(): GridExportTemplateDefinit
     schemaVersion: 2,
     parameters: [],
     datasets: [],
+    charts: [],
     sheets: [sheet],
     filenameExpression: '"personal_monthly_budget"',
     pdf: { mode: 'table' },
@@ -1447,6 +1487,7 @@ export function buildExecutiveReportTemplate(entity: ExecutiveReportEntityInput)
     schemaVersion: 2,
     parameters: [],
     datasets: [dataset],
+    charts: [],
     sheets: [sheet],
     filenameExpression: `"${entityName}_executive_report"`,
     pdf: { mode: 'table' },

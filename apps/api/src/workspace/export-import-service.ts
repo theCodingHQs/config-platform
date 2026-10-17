@@ -764,6 +764,16 @@ export class ExportImportService {
         usedTemplateIds.add(targetId);
         templateIdMap.set(tpl.id, targetId);
         idMap.set(tpl.id, targetId);
+
+        // Map dataset IDs to fresh IDs so all datasetId references across regions, bindings, and charts are deeply remapped
+        if (tpl.draft && tpl.draft.kind === 'grid' && Array.isArray(tpl.draft.datasets)) {
+          for (const ds of tpl.draft.datasets) {
+            if (ds?.id) {
+              const freshDsId = `ds_${crypto.randomBytes(4).toString('hex')}`;
+              idMap.set(ds.id, freshDsId);
+            }
+          }
+        }
       }
 
       // 4. Insert entities and fields, and create physical tables
@@ -803,9 +813,9 @@ export class ExportImportService {
               f.label,
               colName,
               f.type,
-              f.required,
-              f.isUnique,
-              f.position,
+              Boolean(f.required),
+              Boolean(f.isUnique),
+              f.position ?? 0,
               JSON.stringify(remappedConfig),
             ]
           );
@@ -980,6 +990,17 @@ export class ExportImportService {
       for (const tpl of validatedExportTemplates) {
         const newTemplateId = templateIdMap.get(tpl.id)!;
         const newEntityId = entityIdMap.get(tpl.entityId) || idMap.get(tpl.entityId)!;
+
+        // Remap grid template dataset IDs so no old dataset ID survives
+        if (tpl.draft && tpl.draft.kind === 'grid' && Array.isArray(tpl.draft.datasets)) {
+          for (const ds of tpl.draft.datasets) {
+            if (ds.id) {
+              const freshDsId = `ds_${crypto.randomBytes(4).toString('hex')}`;
+              idMap.set(ds.id, freshDsId);
+            }
+          }
+        }
+
         const remappedDraft = deepWalkRemap(tpl.draft, idMap);
         const remappedPublished = tpl.published ? deepWalkRemap(tpl.published, idMap) : null;
 

@@ -12,3 +12,5 @@ export * from './icons.js';
 export * from './import.js';
 export * from './export-template.js';
 export * from './export-template-grid.js';
+export * from './chart-spec.js';
+export * from './chart-option-builder.js';
