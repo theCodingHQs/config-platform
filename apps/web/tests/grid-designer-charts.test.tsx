@@ -353,4 +353,226 @@ describe('Phase B: Grid Designer Charts UI', () => {
     fireEvent.click(screen.getByTestId('delete-chart-c1'));
     expect(handleDelete).toHaveBeenCalledWith('c1');
   });
+
+  it('updates chart overlay position reactively when sheet is scrolled', () => {
+    const handleEdit = vi.fn();
+    const handleDelete = vi.fn();
+
+    const chartAtR16C16: GridChartDefinition[] = [
+      {
+        id: 'chart_executive',
+        title: 'Metric Overview',
+        type: 'area',
+        source: {
+          kind: 'dataset',
+          datasetId: 'ds_exec',
+          categoryField: 'month',
+          series: [{ fieldId: 'total', name: 'Total' }],
+        },
+        anchor: {
+          sheetId: 'sheet_0',
+          startCol: 16,
+          startRow: 16,
+          endCol: 21,
+          endRow: 21,
+        },
+        options: {},
+      },
+    ];
+
+    // Initial render with zero scroll
+    const { rerender } = render(
+      <ChartOverlayCanvas
+        charts={chartAtR16C16}
+        activeSheetId="sheet_0"
+        viewMode="design"
+        onEditChart={handleEdit}
+        onDeleteChart={handleDelete}
+        gridMetrics={{
+          scrollX: 0,
+          scrollY: 0,
+          gridLeft: 48,
+          gridTop: 52,
+          gridWidth: 1200,
+          gridHeight: 800,
+        }}
+      />
+    );
+
+    const overlayCard = screen.getByTestId('chart-overlay-chart_executive');
+    expect(overlayCard).toBeInTheDocument();
+    // Default 16 * 75 = 1200px, 16 * 24 = 384px
+    expect(overlayCard.style.left).toBe('1200px');
+    expect(overlayCard.style.top).toBe('384px');
+
+    // Simulate user scrolling horizontally by 300px and vertically by 150px
+    rerender(
+      <ChartOverlayCanvas
+        charts={chartAtR16C16}
+        activeSheetId="sheet_0"
+        viewMode="design"
+        onEditChart={handleEdit}
+        onDeleteChart={handleDelete}
+        gridMetrics={{
+          scrollX: 300,
+          scrollY: 150,
+          gridLeft: 48,
+          gridTop: 52,
+          gridWidth: 1200,
+          gridHeight: 800,
+        }}
+      />
+    );
+
+    // Left should now be 1200 - 300 = 900px, Top should be 384 - 150 = 234px
+    expect(overlayCard.style.left).toBe('900px');
+    expect(overlayCard.style.top).toBe('234px');
+  });
+
+  it('clips and hides chart overlay when scrolled completely past the visible sheet area', () => {
+    const handleEdit = vi.fn();
+    const handleDelete = vi.fn();
+
+    const chartAtR16: GridChartDefinition[] = [
+      {
+        id: 'chart_executive',
+        title: 'Metric Overview',
+        type: 'area',
+        source: {
+          kind: 'dataset',
+          datasetId: 'ds_exec',
+          categoryField: 'month',
+          series: [{ fieldId: 'total', name: 'Total' }],
+        },
+        anchor: {
+          sheetId: 'sheet_0',
+          startCol: 16,
+          startRow: 16,
+          endCol: 21,
+          endRow: 21,
+        },
+        options: {},
+      },
+    ];
+
+    // Scroll far down (e.g. scrollY: 672px, meaning user scrolled down to row 28+)
+    // startY is 384px. topPx becomes 384 - 672 = -288px. Height is 180px.
+    // top + height = -108px < 0, completely scrolled above visible grid!
+    render(
+      <ChartOverlayCanvas
+        charts={chartAtR16}
+        activeSheetId="sheet_0"
+        viewMode="design"
+        onEditChart={handleEdit}
+        onDeleteChart={handleDelete}
+        gridMetrics={{
+          scrollX: 0,
+          scrollY: 672,
+          gridLeft: 48,
+          gridTop: 52,
+          gridWidth: 1000,
+          gridHeight: 600,
+        }}
+      />
+    );
+
+    // Should NOT be rendered (clipped out of viewport)
+    expect(screen.queryByTestId('chart-overlay-chart_executive')).toBeNull();
+  });
+
+  it('supports custom getCellCoordinates resolver for exact skeleton alignment', () => {
+    const chart: GridChartDefinition[] = [
+      {
+        id: 'c_custom',
+        title: 'Custom Sized Sheet Chart',
+        type: 'bar',
+        source: {
+          kind: 'dataset',
+          datasetId: 'ds_1',
+          categoryField: 'm',
+          series: [{ fieldId: 'v', name: 'V' }],
+        },
+        anchor: {
+          sheetId: 'sheet_0',
+          startCol: 2,
+          startRow: 5,
+          endCol: 4,
+          endRow: 8,
+        },
+        options: {},
+      },
+    ];
+
+    // Provide custom cell resolver (e.g. non-standard column widths & row heights from skeleton)
+    const getCellCoordinates = (row: number, col: number) => ({
+      x: col * 120, // 120px wide columns
+      y: row * 40,  // 40px high rows
+    });
+
+    render(
+      <ChartOverlayCanvas
+        charts={chart}
+        activeSheetId="sheet_0"
+        viewMode="design"
+        onEditChart={vi.fn()}
+        onDeleteChart={vi.fn()}
+        gridMetrics={{
+          scrollX: 50,
+          scrollY: 30,
+          gridLeft: 48,
+          gridTop: 52,
+          gridWidth: 1000,
+          gridHeight: 600,
+          getCellCoordinates,
+        }}
+      />
+    );
+
+    const card = screen.getByTestId('chart-overlay-c_custom');
+    expect(card).toBeInTheDocument();
+    // startX = 2 * 120 = 240, startY = 5 * 40 = 200
+    // left = 240 - 50 = 190px, top = 200 - 30 = 170px
+    expect(card.style.left).toBe('190px');
+    expect(card.style.top).toBe('170px');
+  });
+
+  it('forwards wheel events on chart overlay canvas', () => {
+    const onForwardWheel = vi.fn();
+    const chart: GridChartDefinition[] = [
+      {
+        id: 'c_wheel',
+        title: 'Wheel Test',
+        type: 'bar',
+        source: {
+          kind: 'dataset',
+          datasetId: 'ds_1',
+          categoryField: 'm',
+          series: [{ fieldId: 'v', name: 'V' }],
+        },
+        anchor: {
+          sheetId: 'sheet_0',
+          startCol: 1,
+          startRow: 1,
+          endCol: 3,
+          endRow: 3,
+        },
+        options: {},
+      },
+    ];
+
+    render(
+      <ChartOverlayCanvas
+        charts={chart}
+        activeSheetId="sheet_0"
+        viewMode="design"
+        onEditChart={vi.fn()}
+        onDeleteChart={vi.fn()}
+        onForwardWheel={onForwardWheel}
+      />
+    );
+
+    const overlayCanvas = screen.getByTestId('chart-overlay-canvas');
+    fireEvent.wheel(overlayCanvas, { deltaY: 120 });
+    expect(onForwardWheel).toHaveBeenCalledTimes(1);
+  });
 });

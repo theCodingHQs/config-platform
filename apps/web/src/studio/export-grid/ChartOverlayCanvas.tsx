@@ -16,6 +16,16 @@ import {
   buildEChartsOption,
 } from '@config-platform/schema';
 
+export interface SpreadsheetGridMetrics {
+  scrollX: number;
+  scrollY: number;
+  gridLeft?: number;
+  gridTop?: number;
+  gridWidth?: number;
+  gridHeight?: number;
+  getCellCoordinates?: (row: number, col: number) => { x: number; y: number };
+}
+
 export interface ChartOverlayCanvasProps {
   charts: GridChartDefinition[];
   activeSheetId: string;
@@ -24,6 +34,8 @@ export interface ChartOverlayCanvasProps {
   onDeleteChart: (chartId: string) => void;
   themeTokens?: Record<string, string>;
   previewDataMap?: Map<string, ChartRenderData>;
+  gridMetrics?: SpreadsheetGridMetrics;
+  onForwardWheel?: (e: React.WheelEvent) => void;
 }
 
 function ChartTypeIcon({ type, size = 14 }: { type: string; size?: number }) {
@@ -89,6 +101,8 @@ export function ChartOverlayCanvas({
   onDeleteChart,
   themeTokens,
   previewDataMap,
+  gridMetrics,
+  onForwardWheel,
 }: ChartOverlayCanvasProps) {
   const visibleCharts = charts.filter(
     (c) => c.anchor.sheetId === activeSheetId || !c.anchor.sheetId
@@ -96,132 +110,236 @@ export function ChartOverlayCanvas({
 
   if (visibleCharts.length === 0) return null;
 
+  const {
+    scrollX = 0,
+    scrollY = 0,
+    gridLeft = 48,
+    gridTop = 52,
+    gridWidth,
+    gridHeight,
+    getCellCoordinates,
+  } = gridMetrics || {};
+
   return (
     <div
+      data-testid="chart-overlay-canvas"
+      onWheel={onForwardWheel}
       style={{
         position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
+        left: `${gridLeft}px`,
+        top: `${gridTop}px`,
+        width: gridWidth !== undefined && gridWidth > 0 ? `${gridWidth}px` : `calc(100% - ${gridLeft}px)`,
+        height: gridHeight !== undefined && gridHeight > 0 ? `${gridHeight}px` : `calc(100% - ${gridTop}px)`,
         pointerEvents: 'none',
         zIndex: 4,
         overflow: 'hidden',
       }}
     >
       {visibleCharts.map((chart) => {
-        // Approximate standard row and column widths for grid positioning
-        const leftPx = 50 + chart.anchor.startCol * 75;
-        const topPx = 28 + chart.anchor.startRow * 24;
-        const widthPx = Math.max(260, (chart.anchor.endCol - chart.anchor.startCol + 1) * 75);
-        const heightPx = Math.max(180, (chart.anchor.endRow - chart.anchor.startRow + 1) * 24);
+        let startX: number;
+        let startY: number;
+        let endX: number;
+        let endY: number;
 
-        const chartData: ChartRenderData = previewDataMap?.get(chart.id) || {
-          categories: ['Cat A', 'Cat B', 'Cat C', 'Cat D'],
-          series: chart.source.series.map((s, idx) => ({
-            name: s.name || `Series ${idx + 1}`,
-            data: [120 + idx * 25, 200 + idx * 30, 150 + idx * 20, 80 + idx * 10],
-            color: s.color,
-            type: s.type,
-          })),
-        };
+        if (getCellCoordinates) {
+          const start = getCellCoordinates(chart.anchor.startRow, chart.anchor.startCol);
+          const end = getCellCoordinates(chart.anchor.endRow + 1, chart.anchor.endCol + 1);
+          startX = start.x;
+          startY = start.y;
+          endX = end.x;
+          endY = end.y;
+        } else {
+          startX = chart.anchor.startCol * 75;
+          startY = chart.anchor.startRow * 24;
+          endX = (chart.anchor.endCol + 1) * 75;
+          endY = (chart.anchor.endRow + 1) * 24;
+        }
+
+        const widthPx = Math.max(260, endX - startX);
+        const heightPx = Math.max(180, endY - startY);
+
+        // Position relative to the scrolled viewport within the grid visible boundary
+        const leftPx = startX - scrollX;
+        const topPx = startY - scrollY;
+
+        // Skip rendering if completely offscreen outside the visible grid boundary
+        if (gridWidth !== undefined && gridWidth > 0 && leftPx + widthPx < 0) {
+          return null;
+        }
+        if (gridHeight !== undefined && gridHeight > 0 && topPx + heightPx < 0) {
+          return null;
+        }
+        if (gridWidth !== undefined && gridWidth > 0 && leftPx > gridWidth) {
+          return null;
+        }
+        if (gridHeight !== undefined && gridHeight > 0 && topPx > gridHeight) {
+          return null;
+        }
 
         return (
-          <div
+          <GridChartCardContent
             key={chart.id}
-            data-testid={`chart-overlay-${chart.id}`}
+            chart={chart}
+            viewMode={viewMode}
+            onEditChart={onEditChart}
+            onDeleteChart={onDeleteChart}
+            themeTokens={themeTokens}
+            previewDataMap={previewDataMap}
             style={{
               position: 'absolute',
               left: `${leftPx}px`,
               top: `${topPx}px`,
               width: `${widthPx}px`,
               height: `${heightPx}px`,
-              backgroundColor: 'var(--surface)',
-              border: viewMode === 'design' ? '2px dashed var(--accent)' : '1px solid var(--border)',
-              borderRadius: 'var(--radius-control)',
-              boxShadow: 'var(--shadow-md)',
-              display: 'flex',
-              flexDirection: 'column',
-              pointerEvents: 'auto',
-              overflow: 'hidden',
-              transition: 'box-shadow 0.15s ease',
             }}
-          >
-            {/* Header bar on chart card */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: 'var(--space-1) var(--space-2)',
-                backgroundColor: 'var(--surface-subtle)',
-                borderBottom: 'var(--border-width) solid var(--border)',
-                fontSize: 'var(--font-size-xs)',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', overflow: 'hidden' }}>
-                <span style={{ color: 'var(--accent)' }}>
-                  <ChartTypeIcon type={chart.type} size={13} />
-                </span>
-                <span
-                  style={{
-                    fontWeight: 600,
-                    whiteSpace: 'nowrap',
-                    textOverflow: 'ellipsis',
-                    overflow: 'hidden',
-                  }}
-                  title={chart.title}
-                >
-                  {chart.title}
-                </span>
-                <span
-                  style={{
-                    fontSize: 'var(--font-size-xs)',
-                    padding: 'var(--space-1) var(--space-2)',
-                    borderRadius: 'var(--radius-control)',
-                    backgroundColor: 'var(--accent-subtle)',
-                    color: 'var(--accent)',
-                    textTransform: 'uppercase',
-                    fontWeight: 700,
-                  }}
-                >
-                  {chart.type}
-                </span>
-              </div>
-
-              {viewMode === 'design' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => onEditChart(chart)}
-                    title="Edit Chart"
-                    data-testid={`edit-chart-${chart.id}`}
-                    style={{ padding: 'var(--space-1)', height: 'auto' }}
-                  >
-                    <Edit2 size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => onDeleteChart(chart.id)}
-                    title="Delete Chart"
-                    data-testid={`delete-chart-${chart.id}`}
-                    style={{ color: 'var(--danger)', padding: 'var(--space-1)', height: 'auto' }}
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Chart Body */}
-            <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-              <LiveChartInstance chart={chart} data={chartData} themeTokens={themeTokens} />
-            </div>
-          </div>
+          />
         );
       })}
     </div>
+  );
+}
+
+export function GridChartCardContent({
+  chart,
+  viewMode = 'design',
+  onEditChart,
+  onDeleteChart,
+  themeTokens,
+  previewDataMap,
+  style,
+}: {
+  chart: GridChartDefinition;
+  viewMode?: 'design' | 'preview';
+  onEditChart?: (chart: GridChartDefinition) => void;
+  onDeleteChart?: (chartId: string) => void;
+  themeTokens?: Record<string, string>;
+  previewDataMap?: Map<string, ChartRenderData>;
+  style?: React.CSSProperties;
+}) {
+  const chartData: ChartRenderData = previewDataMap?.get(chart.id) || {
+    categories: ['Cat A', 'Cat B', 'Cat C', 'Cat D'],
+    series: chart.source.series.map((s, idx) => ({
+      name: s.name || `Series ${idx + 1}`,
+      data: [120 + idx * 25, 200 + idx * 30, 150 + idx * 20, 80 + idx * 10],
+      color: s.color,
+      type: s.type,
+    })),
+  };
+
+  return (
+    <div
+      data-testid={`chart-overlay-${chart.id}`}
+      style={{
+        width: '100%',
+        height: '100%',
+        minWidth: '260px',
+        minHeight: '180px',
+        backgroundColor: 'var(--surface)',
+        border: viewMode === 'design' ? '2px dashed var(--accent)' : '1px solid var(--border)',
+        borderRadius: 'var(--radius-control)',
+        boxShadow: 'var(--shadow-md)',
+        display: 'flex',
+        flexDirection: 'column',
+        pointerEvents: 'auto',
+        overflow: 'hidden',
+        transition: 'box-shadow 0.15s ease',
+        ...style,
+      }}
+    >
+      {/* Header bar on chart card */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: 'var(--space-1) var(--space-2)',
+          backgroundColor: 'var(--surface-subtle)',
+          borderBottom: 'var(--border-width) solid var(--border)',
+          fontSize: 'var(--font-size-xs)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', overflow: 'hidden' }}>
+          <span style={{ color: 'var(--accent)' }}>
+            <ChartTypeIcon type={chart.type} size={13} />
+          </span>
+          <span
+            style={{
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              textOverflow: 'ellipsis',
+              overflow: 'hidden',
+            }}
+            title={chart.title}
+          >
+            {chart.title}
+          </span>
+          <span
+            style={{
+              fontSize: 'var(--font-size-xs)',
+              padding: 'var(--space-1) var(--space-2)',
+              borderRadius: 'var(--radius-control)',
+              backgroundColor: 'var(--accent-subtle)',
+              color: 'var(--accent)',
+              textTransform: 'uppercase',
+              fontWeight: 700,
+            }}
+          >
+            {chart.type}
+          </span>
+        </div>
+
+        {viewMode === 'design' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)' }}>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => onEditChart?.(chart)}
+              title="Edit Chart"
+              data-testid={`edit-chart-${chart.id}`}
+              style={{ padding: 'var(--space-1)', height: 'auto' }}
+            >
+              <Edit2 size={12} />
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => onDeleteChart?.(chart.id)}
+              title="Delete Chart"
+              data-testid={`delete-chart-${chart.id}`}
+              style={{ color: 'var(--danger)', padding: 'var(--space-1)', height: 'auto' }}
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Chart Body: opaque background ensures spreadsheet cells never bleed through */}
+      <div
+        style={{
+          flex: 1,
+          position: 'relative',
+          overflow: 'hidden',
+          backgroundColor: 'var(--surface)',
+        }}
+      >
+        <LiveChartInstance chart={chart} data={chartData} themeTokens={themeTokens} />
+      </div>
+    </div>
+  );
+}
+
+export function GridChartFloatDomCard(props: any) {
+  const data = props?.data || props;
+  if (!data?.chart) return null;
+  return (
+    <GridChartCardContent
+      chart={data.chart}
+      viewMode={data.viewMode}
+      onEditChart={data.onEditChart}
+      onDeleteChart={data.onDeleteChart}
+      themeTokens={data.themeTokens}
+      previewDataMap={data.previewDataMap}
+    />
   );
 }

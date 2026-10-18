@@ -58,7 +58,7 @@ import {
 } from '@config-platform/schema';
 import { gridTemplateToUniver, univerToGridTemplate } from './export-grid/univer-adapter';
 import { ChartEditorModal } from './export-grid/ChartEditorModal';
-import { ChartOverlayCanvas } from './export-grid/ChartOverlayCanvas';
+import { ChartOverlayCanvas, GridChartFloatDomCard } from './export-grid/ChartOverlayCanvas';
 import { useOptionalMetadata } from '../context/metadata-context';
 import { useTheme } from '../context/theme-context';
 import { useOptionalAppBar } from '../context/app-bar-context';
@@ -70,6 +70,15 @@ import '@univerjs/docs-ui/lib/index.css';
 import '@univerjs/sheets-ui/lib/index.css';
 import '@univerjs/sheets-formula-ui/lib/index.css';
 import '@univerjs/sheets-numfmt-ui/lib/index.css';
+import '@univerjs/drawing-ui/lib/index.css';
+import '@univerjs/sheets-drawing-ui/lib/index.css';
+
+// Univer Facade
+import '@univerjs/core/facade';
+import '@univerjs/ui/facade';
+import '@univerjs/sheets/facade';
+import '@univerjs/sheets-drawing-ui/facade';
+import { FUniver } from '@univerjs/core/facade';
 
 // Univer core classes
 import {
@@ -85,17 +94,21 @@ import {
   ThemeService,
 } from '@univerjs/core';
 import { defaultTheme } from '@univerjs/presets';
-import { UniverRenderEnginePlugin } from '@univerjs/engine-render';
+import { UniverRenderEnginePlugin, IRenderManagerService } from '@univerjs/engine-render';
 import { UniverFormulaEnginePlugin, FUNCTION_LIST } from '@univerjs/engine-formula';
 import { UniverDocsPlugin } from '@univerjs/docs';
 import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
 import { UniverSheetsPlugin } from '@univerjs/sheets';
 import { UniverSheetsFormulaPlugin } from '@univerjs/sheets-formula';
 import { UniverSheetsNumfmtPlugin } from '@univerjs/sheets-numfmt';
-import { IMenuManagerService, MenuItemType, UniverUIPlugin, type MenuSchemaType } from '@univerjs/ui';
-import { UniverSheetsUIPlugin } from '@univerjs/sheets-ui';
+import { IMenuManagerService, MenuItemType, UniverUIPlugin, CanvasFloatDomService, type MenuSchemaType } from '@univerjs/ui';
+import { UniverSheetsUIPlugin, SheetScrollManagerService, SheetSkeletonManagerService } from '@univerjs/sheets-ui';
 import { UniverSheetsFormulaUIPlugin } from '@univerjs/sheets-formula-ui';
 import { UniverSheetsNumfmtUIPlugin } from '@univerjs/sheets-numfmt-ui';
+import { UniverDrawingPlugin } from '@univerjs/drawing';
+import { UniverDrawingUIPlugin } from '@univerjs/drawing-ui';
+import { UniverSheetsDrawingPlugin } from '@univerjs/sheets-drawing';
+import { UniverSheetsDrawingUIPlugin } from '@univerjs/sheets-drawing-ui';
 import SheetsEnUS from '@univerjs/sheets/locale/en-US';
 import SheetsUIEnUS from '@univerjs/sheets-ui/locale/en-US';
 import UIEnUS from '@univerjs/ui/locale/en-US';
@@ -105,6 +118,8 @@ import DesignEnUS from '@univerjs/design/locale/en-US';
 import SheetsFormulaEnUS from '@univerjs/sheets-formula/locale/en-US';
 import SheetsFormulaUIEnUS from '@univerjs/sheets-formula-ui/locale/en-US';
 import SheetsNumfmtUIEnUS from '@univerjs/sheets-numfmt-ui/locale/en-US';
+import DrawingUIEnUS from '@univerjs/drawing-ui/locale/en-US';
+import SheetsDrawingUIEnUS from '@univerjs/sheets-drawing-ui/locale/en-US';
 
 const CUSTOM_RIBBON_TABS = [
   {
@@ -200,9 +215,67 @@ export function GridTemplateDesigner() {
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const univerRef = useRef<Univer | null>(null);
+  const univerAPIRef = useRef<FUniver | null>(null);
   const workbookRef = useRef<any>(null);
   const commandServiceRef = useRef<any>(null);
   const ribbonActionsRef = useRef<Record<string, () => void>>({});
+  const scrollManagerRef = useRef<any>(null);
+  const skeletonManagerRef = useRef<any>(null);
+  const scrollSubRef = useRef<any>(null);
+  const floatDomsRef = useRef<Map<string, { id: string; dispose: () => void }>>(new Map());
+
+  const [nativeFloatDomActive, setNativeFloatDomActive] = useState<boolean>(false);
+  const [univerReadyCount, setUniverReadyCount] = useState<number>(0);
+
+  const [sheetScroll, setSheetScroll] = useState<{ scrollX: number; scrollY: number }>({
+    scrollX: 0,
+    scrollY: 0,
+  });
+
+  const [gridBounds, setGridBounds] = useState<{
+    gridLeft: number;
+    gridTop: number;
+    gridWidth?: number;
+    gridHeight?: number;
+  }>({
+    gridLeft: 48,
+    gridTop: 52,
+  });
+
+  const getCellCoordinates = useCallback((row: number, col: number) => {
+    const skeleton = skeletonManagerRef.current?.getCurrentSkeleton?.();
+    if (skeleton) {
+      try {
+        const x = skeleton.colStartX?.(col);
+        const y = skeleton.rowStartY?.(row);
+        if (typeof x === 'number' && !isNaN(x) && typeof y === 'number' && !isNaN(y)) {
+          return { x, y };
+        }
+      } catch {
+        // Fallback below
+      }
+    }
+    return { x: col * 75, y: row * 24 };
+  }, []);
+
+  const handleForwardWheel = useCallback((e: React.WheelEvent) => {
+    const container = containerRef.current;
+    if (!container) return;
+    const canvas = container.querySelector('canvas');
+    if (canvas) {
+      canvas.dispatchEvent(
+        new WheelEvent('wheel', {
+          bubbles: true,
+          cancelable: true,
+          deltaX: e.deltaX,
+          deltaY: e.deltaY,
+          deltaMode: e.deltaMode,
+          clientX: e.clientX,
+          clientY: e.clientY,
+        })
+      );
+    }
+  }, []);
 
   const [template, setTemplate] = useState<ExportTemplateItem | null>(null);
   const [loading, setLoading] = useState(true);
@@ -389,6 +462,7 @@ export function GridTemplateDesigner() {
           const newWorkbook = univerRef.current.createUnit(UniverInstanceType.UNIVER_SHEET, unitData);
           workbookRef.current = newWorkbook;
           instanceService.focusUnit(newWorkbook.getUnitId());
+          setUniverReadyCount((c) => c + 1);
           return;
         }
       } catch (err) {
@@ -402,6 +476,14 @@ export function GridTemplateDesigner() {
       } catch (e) {
         console.warn('Error during Univer dispose:', e);
       }
+      if (univerAPIRef.current) {
+        univerAPIRef.current = null;
+      }
+      floatDomsRef.current.forEach((d) => {
+        try { d.dispose?.(); } catch {}
+      });
+      floatDomsRef.current.clear();
+      setNativeFloatDomActive(false);
       univerRef.current = null;
       workbookRef.current = null;
       commandServiceRef.current = null;
@@ -425,7 +507,9 @@ export function GridTemplateDesigner() {
             DesignEnUS,
             SheetsFormulaEnUS,
             SheetsFormulaUIEnUS,
-            SheetsNumfmtUIEnUS
+            SheetsNumfmtUIEnUS,
+            DrawingUIEnUS,
+            SheetsDrawingUIEnUS
           ),
         },
         ...({ telemetry: false } as any),
@@ -460,13 +544,86 @@ export function GridTemplateDesigner() {
         univer.registerPlugin(UniverSheetsNumfmtUIPlugin);
         univer.registerPlugin(UniverSheetsFormulaPlugin, { description: FUNCTION_LIST });
         univer.registerPlugin(UniverSheetsFormulaUIPlugin);
+        univer.registerPlugin(UniverDrawingPlugin);
+        univer.registerPlugin(UniverDrawingUIPlugin);
+        univer.registerPlugin(UniverSheetsDrawingPlugin);
+        univer.registerPlugin(UniverSheetsDrawingUIPlugin);
       }
 
       const workbook = univer.createUnit(UniverInstanceType.UNIVER_SHEET, data);
       univerRef.current = univer;
       workbookRef.current = workbook;
 
-      const commandService = (univer as any).__getInjector?.().get(ICommandService);
+      if (typeof process === 'undefined' || process.env.NODE_ENV !== 'test') {
+        try {
+          const univerAPI = FUniver.newAPI(univer);
+          univerAPIRef.current = univerAPI;
+          univerAPI.registerComponent('GridChartCard', GridChartFloatDomCard);
+          setUniverReadyCount((c) => c + 1);
+        } catch (apiErr) {
+          console.warn('Could not initialize Univer Facade API:', apiErr);
+        }
+      }
+
+      const injector = (univer as any).__getInjector?.();
+      if (injector) {
+        try {
+          const instanceService = injector.get(IUniverInstanceService);
+          const unitId = workbook.getUnitId();
+          instanceService?.focusUnit(unitId);
+          const renderManagerService = injector.get(IRenderManagerService);
+
+          const attachScrollListener = (renderUnit: any) => {
+            if (!renderUnit) return;
+            try {
+              const skeletonManager = renderUnit.with?.(SheetSkeletonManagerService);
+              if (skeletonManager) {
+                skeletonManagerRef.current = skeletonManager;
+              }
+            } catch (skelErr) {
+              console.warn('Could not attach SheetSkeletonManagerService:', skelErr);
+            }
+
+            try {
+              const scrollManager = renderUnit.with?.(SheetScrollManagerService);
+              if (scrollManager) {
+                scrollManagerRef.current = scrollManager;
+                if (scrollSubRef.current) {
+                  scrollSubRef.current.unsubscribe();
+                }
+                scrollSubRef.current = scrollManager.validViewportScrollInfo$?.subscribe?.((info: any) => {
+                  if (info) {
+                    const calc = scrollManager.calcViewportScrollFromRowColOffset?.(info);
+                    const sX = calc?.viewportScrollX ?? info.viewportScrollX ?? info.scrollX ?? 0;
+                    const sY = calc?.viewportScrollY ?? info.viewportScrollY ?? info.scrollY ?? 0;
+                    setSheetScroll({ scrollX: Math.round(sX), scrollY: Math.round(sY) });
+                  }
+                });
+              }
+            } catch (scrollErr) {
+              console.warn('Could not attach SheetScrollManagerService:', scrollErr);
+            }
+
+            setUniverReadyCount((c) => c + 1);
+          };
+
+          const existingUnit = renderManagerService?.getRenderUnitById?.(unitId);
+          if (existingUnit) {
+            attachScrollListener(existingUnit);
+          } else if (renderManagerService?.created$) {
+            const createSub = renderManagerService.created$.subscribe?.((ru: any) => {
+              if (ru && ru.unitId === unitId) {
+                attachScrollListener(ru);
+                createSub?.unsubscribe?.();
+              }
+            });
+          }
+        } catch {
+          // Render engine service not active
+        }
+      }
+
+      const commandService = injector?.get(ICommandService);
       if (commandService) {
         commandServiceRef.current = commandService;
         if (typeof process === 'undefined' || process.env.NODE_ENV !== 'test') {
@@ -486,7 +643,6 @@ export function GridTemplateDesigner() {
               }
             }
           }
-          const injector = (univer as any).__getInjector?.();
           injector?.get(IMenuManagerService).appendRootMenu(buildCustomRibbonMenu());
         }
         commandService.onCommandExecuted((cmdInfo: any) => {
@@ -518,6 +674,38 @@ export function GridTemplateDesigner() {
             const endCol = r.endColumn !== undefined ? r.endColumn : startCol;
             handleSelectionChange(startRow, startCol, endRow, endCol);
           }
+
+          // Also track scroll commands directly from commandService
+          if (
+            cmdInfo.id === 'sheet.operation.set-scroll' ||
+            cmdInfo.id === 'sheet.command.scroll-view' ||
+            cmdInfo.id === 'sheet.command.set-scroll-relative'
+          ) {
+            const scrollManager = scrollManagerRef.current;
+            if (scrollManager) {
+              try {
+                const cur = scrollManager.getCurrentScrollState?.();
+                if (cur) {
+                  const calc = scrollManager.calcViewportScrollFromRowColOffset?.(cur);
+                  if (calc) {
+                    setSheetScroll({
+                      scrollX: Math.round(calc.viewportScrollX),
+                      scrollY: Math.round(calc.viewportScrollY),
+                    });
+                  }
+                }
+              } catch {
+                // Ignore
+              }
+            } else if (cmdInfo.params) {
+              const p = cmdInfo.params;
+              if (typeof p.sheetViewStartColumn === 'number' || typeof p.sheetViewStartRow === 'number') {
+                const approxX = (p.sheetViewStartColumn ?? 0) * 75 + (p.offsetX ?? 0);
+                const approxY = (p.sheetViewStartRow ?? 0) * 24 + (p.offsetY ?? 0);
+                setSheetScroll({ scrollX: Math.round(approxX), scrollY: Math.round(approxY) });
+              }
+            }
+          }
         });
       }
     } catch (err) {
@@ -542,9 +730,91 @@ export function GridTemplateDesigner() {
     }
   }, [templateId, template?.draft, initUniverWithData]);
 
+  // Monitor container and canvas dimensions for precise overlay boundary clipping
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const updateBounds = () => {
+      const canvas = container.querySelector('canvas');
+      const containerRect = container.getBoundingClientRect();
+      const canvasRect = canvas ? canvas.getBoundingClientRect() : null;
+
+      const skeleton = skeletonManagerRef.current?.getCurrentSkeleton?.();
+      const rowHeaderWidth = skeleton?.rowHeaderWidth ?? 48;
+      const columnHeaderHeight = skeleton?.columnHeaderHeight ?? 24;
+
+      const canvasLeft = canvasRect ? canvasRect.left - containerRect.left : 0;
+      const canvasTop = canvasRect ? canvasRect.top - containerRect.top : 28;
+      const canvasWidth = canvasRect ? canvasRect.width : containerRect.width;
+      const canvasHeight = canvasRect ? canvasRect.height : containerRect.height;
+
+      const gridLeft = Math.round(canvasLeft + rowHeaderWidth);
+      const gridTop = Math.round(canvasTop + columnHeaderHeight);
+      const gridWidth = Math.max(0, Math.round(canvasWidth - rowHeaderWidth - 14));
+      const gridHeight = Math.max(0, Math.round(canvasHeight - columnHeaderHeight - 14));
+
+      setGridBounds({ gridLeft, gridTop, gridWidth, gridHeight });
+    };
+
+    updateBounds();
+    let observer: any = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => {
+        updateBounds();
+      });
+      observer.observe(container);
+    }
+
+    let rafId: number | null = null;
+    const handleScrollOrWheel = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const scrollManager = scrollManagerRef.current;
+        if (scrollManager) {
+          try {
+            const cur = scrollManager.getCurrentScrollState?.();
+            if (cur) {
+              const calc = scrollManager.calcViewportScrollFromRowColOffset?.(cur);
+              if (calc) {
+                setSheetScroll({
+                  scrollX: Math.round(calc.viewportScrollX),
+                  scrollY: Math.round(calc.viewportScrollY),
+                });
+              }
+            }
+          } catch {
+            // Ignore
+          }
+        }
+      });
+    };
+
+    container.addEventListener('wheel', handleScrollOrWheel, { passive: true });
+    container.addEventListener('scroll', handleScrollOrWheel, { passive: true });
+
+    return () => {
+      if (observer) observer.disconnect();
+      if (rafId) cancelAnimationFrame(rafId);
+      container.removeEventListener('wheel', handleScrollOrWheel);
+      container.removeEventListener('scroll', handleScrollOrWheel);
+    };
+  }, [loading]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      if (scrollSubRef.current) {
+        try {
+          scrollSubRef.current.unsubscribe();
+        } catch {
+          // ignore
+        }
+        scrollSubRef.current = null;
+      }
+      scrollManagerRef.current = null;
+      skeletonManagerRef.current = null;
       if (univerRef.current) {
         try {
           univerRef.current.dispose();
@@ -917,6 +1187,111 @@ export function GridTemplateDesigner() {
     updateChartsInDraft(updated);
     showNotification('success', 'Chart removed');
   };
+
+  // ─── Native Univer Float DOM Chart Synchronization ────────────────────────
+  useEffect(() => {
+    console.log('[FloatDOM Debug] effect triggered. univerAPI:', Boolean(univerAPIRef.current), 'readyCount:', univerReadyCount, 'charts:', currentCharts.length, 'activeSheetId:', activeSheetId);
+    if (!univerAPIRef.current) {
+      setNativeFloatDomActive(false);
+      return;
+    }
+
+    let fWorkbook: any = null;
+    try {
+      fWorkbook = univerAPIRef.current.getActiveWorkbook();
+    } catch (e) {
+      console.warn('[FloatDOM Debug] getActiveWorkbook failed:', e);
+    }
+    if (!fWorkbook) {
+      console.warn('[FloatDOM Debug] no active workbook');
+      setNativeFloatDomActive(false);
+      return;
+    }
+
+    const fWorksheet = (activeSheetId ? fWorkbook.getSheetBySheetId(activeSheetId) : null) ?? fWorkbook.getActiveSheet();
+    console.log('[FloatDOM Debug] worksheet:', Boolean(fWorksheet), 'sheetId:', fWorksheet?.getSheetId?.(), 'has addFloatDomToRange:', typeof (fWorksheet as any)?.addFloatDomToRange);
+    if (!fWorksheet || typeof (fWorksheet as any).addFloatDomToRange !== 'function') {
+      setNativeFloatDomActive(false);
+      return;
+    }
+
+    // Clean up previously registered float doms
+    floatDomsRef.current.forEach((disposable) => {
+      try {
+        disposable.dispose?.();
+      } catch (err) {
+        console.warn('Error disposing float dom:', err);
+      }
+    });
+    floatDomsRef.current.clear();
+
+    const sheetCharts = currentCharts.filter((c) => !c.sheetId || c.sheetId === activeSheetId);
+    console.log('[FloatDOM Debug] sheetCharts to mount:', sheetCharts.length, 'total currentCharts:', currentCharts.length);
+    let anyMounted = false;
+
+    for (const chart of sheetCharts) {
+      try {
+        const startRow = chart.anchor.startRow;
+        const startCol = chart.anchor.startCol;
+        const rowCount = Math.max(1, chart.anchor.endRow - chart.anchor.startRow + 1);
+        const colCount = Math.max(1, chart.anchor.endCol - chart.anchor.startCol + 1);
+        const range = fWorksheet.getRange(startRow, startCol, rowCount, colCount);
+
+        const chartWidth = Math.max(280, (chart.anchor.endCol - chart.anchor.startCol + 1) * 75);
+        const chartHeight = Math.max(180, (chart.anchor.endRow - chart.anchor.startRow + 1) * 24);
+        const domLayout = { width: chartWidth, height: chartHeight };
+
+        console.log('[FloatDOM Debug] calling addFloatDomToRange for chart:', chart.id, 'range:', { startRow, startCol, rowCount, colCount }, 'domLayout:', domLayout);
+        const res = fWorksheet.addFloatDomToRange(
+          range,
+          {
+            componentKey: 'GridChartCard',
+            data: {
+              chart,
+              viewMode,
+              onEditChart: (c: GridChartDefinition) => {
+                setEditingChart(c);
+                setShowChartEditor(true);
+              },
+              onDeleteChart: handleDeleteChart,
+              themeTokens: undefined,
+            },
+            allowTransform: false,
+          },
+          domLayout,
+          `chart_${chart.id}`
+        );
+
+        console.log('[FloatDOM Debug] addFloatDomToRange returned:', res);
+        if (res) {
+          floatDomsRef.current.set(chart.id, res);
+          try {
+            const canvasFloatDomService = (univerRef.current as any)?.__getInjector?.()?.get(CanvasFloatDomService);
+            canvasFloatDomService?.updateFloatDom?.(res.id, { preserveOnFocusChange: true });
+          } catch (updateErr) {
+            console.warn('Could not set preserveOnFocusChange on float DOM:', updateErr);
+          }
+          anyMounted = true;
+        }
+      } catch (err) {
+        console.error('[FloatDOM Debug] Failed to add float dom for chart:', chart.id, err);
+      }
+    }
+
+    setNativeFloatDomActive(anyMounted);
+
+    return () => {
+      floatDomsRef.current.forEach((disposable) => {
+        try {
+          disposable.dispose?.();
+        } catch (err) {
+          console.warn('Error disposing float dom:', err);
+        }
+      });
+      floatDomsRef.current.clear();
+      setNativeFloatDomActive(false);
+    };
+  }, [univerReadyCount, currentCharts, activeSheetId, viewMode, handleDeleteChart]);
 
   const handleSheetCellReader = (sheetId: string, rangeA1: string): (string | number | null)[] => {
     if (!workbookRef.current) return [];
@@ -1530,17 +1905,29 @@ export function GridTemplateDesigner() {
               left: 0,
             }}
           />
-          <ChartOverlayCanvas
-            charts={currentCharts}
-            activeSheetId={activeSheetId}
-            viewMode={viewMode}
-            onEditChart={(chart) => {
-              setEditingChart(chart);
-              setShowChartEditor(true);
-            }}
-            onDeleteChart={handleDeleteChart}
-            themeTokens={undefined}
-          />
+          {!nativeFloatDomActive && (
+            <ChartOverlayCanvas
+              charts={currentCharts}
+              activeSheetId={activeSheetId}
+              viewMode={viewMode}
+              onEditChart={(chart) => {
+                setEditingChart(chart);
+                setShowChartEditor(true);
+              }}
+              onDeleteChart={handleDeleteChart}
+              themeTokens={undefined}
+              gridMetrics={{
+                scrollX: sheetScroll.scrollX,
+                scrollY: sheetScroll.scrollY,
+                gridLeft: gridBounds.gridLeft,
+                gridTop: gridBounds.gridTop,
+                gridWidth: gridBounds.gridWidth,
+                gridHeight: gridBounds.gridHeight,
+                getCellCoordinates,
+              }}
+              onForwardWheel={handleForwardWheel}
+            />
+          )}
         </div>
 
         {/* Right: Side Panel (Datasets, Fields, Regions) */}
