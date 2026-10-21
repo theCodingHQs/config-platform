@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { SESSION_COOKIE } from '../src/auth/auth-service.js';
 import { buildServer } from '../src/server.js';
 import { pool, directPool, assertDestructiveTestDbResetAllowed, DEFAULT_TEST_DATABASE_URL } from '../src/db/pool.js';
 import { initializeMetadataCatalog } from '../src/db/catalog-init.js';
@@ -41,16 +42,20 @@ describe('Catalog Auto-Init & Bootstrap Protection Tests', () => {
       );
       const tableNames = tablesRes.rows.map((r) => r.table_name);
 
+      // schema_migrations records applied catalog migrations; invites live in invite_token
       const requiredTables = [
-        '_catalog_migrations',
+        'schema_migrations',
+        'app_session',
         'app_user',
         'audit_log',
         'entity_def',
         'entity_permission',
+        'export_template',
         'field_def',
         'field_permission',
-        'invitation',
+        'invite_token',
         'page_def',
+        'page_nav_folder',
         'tenant',
         'tenant_member',
       ];
@@ -143,14 +148,14 @@ describe('Catalog Auto-Init & Bootstrap Protection Tests', () => {
         expect(loginData.tenantName).toBe(tenantName);
 
         // Verify authenticated session allows accessing /api/auth/me
-        const sessionCookie = loginRes.cookies.find((c) => c.name === 'config_platform_session');
+        const sessionCookie = loginRes.cookies.find((c) => c.name === SESSION_COOKIE);
         expect(sessionCookie).toBeDefined();
 
         const meRes = await server.inject({
           method: 'GET',
           url: '/api/auth/me',
           headers: {
-            cookie: `config_platform_session=${sessionCookie?.value}`,
+            cookie: `${SESSION_COOKIE}=${sessionCookie?.value}`,
           },
         });
 

@@ -353,6 +353,8 @@ describe('Phase B: Grid Designer Charts UI', () => {
             filters: [],
             sort: [],
             aggregates: [],
+            groupBy: [],
+            having: [],
           },
         ]}
         sheets={[
@@ -444,7 +446,7 @@ describe('Phase B: Grid Designer Charts UI', () => {
         source: {
           kind: 'dataset',
           datasetId: 'ds_exec',
-          categoryField: 'month',
+          category: 'month',
           series: [{ fieldId: 'total', name: 'Total' }],
         },
         anchor: {
@@ -519,7 +521,7 @@ describe('Phase B: Grid Designer Charts UI', () => {
         source: {
           kind: 'dataset',
           datasetId: 'ds_exec',
-          categoryField: 'month',
+          category: 'month',
           series: [{ fieldId: 'total', name: 'Total' }],
         },
         anchor: {
@@ -567,7 +569,7 @@ describe('Phase B: Grid Designer Charts UI', () => {
         source: {
           kind: 'dataset',
           datasetId: 'ds_1',
-          categoryField: 'm',
+          category: 'm',
           series: [{ fieldId: 'v', name: 'V' }],
         },
         anchor: {
@@ -624,7 +626,7 @@ describe('Phase B: Grid Designer Charts UI', () => {
         source: {
           kind: 'dataset',
           datasetId: 'ds_1',
-          categoryField: 'm',
+          category: 'm',
           series: [{ fieldId: 'v', name: 'V' }],
         },
         anchor: {

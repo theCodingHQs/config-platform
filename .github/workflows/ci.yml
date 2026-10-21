@@ -1,0 +1,69 @@
+name: CI
+
+# Every push and pull request: theme lint, all test suites and a full build.
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      # Same image as docker-compose.yml. The API tests reset this database, which the test
+      # setup only allows for a local database whose name ends in "_test".
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: config_platform_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d config_platform_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/config_platform_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The API and web app import the schema package's build output
+      - name: Build schema package
+        run: pnpm --filter @config-platform/schema build
+
+      - name: Theme lint
+        run: pnpm lint:theme
+
+      - name: Schema tests (dates run in four time zones)
+        run: pnpm --filter @config-platform/schema test
+
+      - name: API tests
+        run: pnpm --filter @config-platform/api test
+
+      - name: Web tests
+        run: pnpm --filter @config-platform/web test
+
+      - name: Build (type-checks every package)
+        run: pnpm build

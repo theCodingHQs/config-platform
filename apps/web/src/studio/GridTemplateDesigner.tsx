@@ -2121,7 +2121,7 @@ export function GridTemplateDesigner() {
                 justifyContent: 'center',
                 gap: 'var(--space-1)',
                 padding: 'var(--space-2)',
-                borderRadius: 0,
+                borderRadius: 'var(--radius-none)',
               }}
             >
               <Database size={14} />

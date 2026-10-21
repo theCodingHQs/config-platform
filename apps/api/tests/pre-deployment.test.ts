@@ -253,11 +253,15 @@ describe('Pre-Deployment Hardening & Production Guards', () => {
         url: '/api/workspace/import',
         headers: admin.headers,
         payload: {
+          // A consistent bundle: with no entities, nothing may reference them (import rejects
+          // permissions or templates that point at entities missing from the bundle)
           bundle: {
             ...exportData,
             entities: [],
             relations: [],
             pages: [],
+            exportTemplates: [],
+            permissions: { entities: [], fields: [] },
           },
           dryRun: false,
         },
@@ -297,8 +301,13 @@ describe('Pre-Deployment Hardening & Production Guards', () => {
     it('honors plan limits during import and reports limit conflicts', async () => {
       const bundle = await exportImportService.exportBundle(tenant);
       // Fabricate bundle exceeding maxEntities (free plan allows 10)
+      // Only the fabricated entities: nothing in the bundle refers to the workspace's real ones
       const hugeBundle = {
         ...bundle,
+        relations: [],
+        pages: [],
+        exportTemplates: [],
+        permissions: { entities: [], fields: [] },
         entities: Array.from({ length: 15 }, (_, i) => ({
           id: `fake_e_${i}`,
           name: `fake_entity_${i}`,
