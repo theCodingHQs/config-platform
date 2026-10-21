@@ -71,7 +71,13 @@
   --control-height-sm: 28px;
   --control-height-md: 36px;
   --control-height-lg: 44px;
-  --navbar-height: 60px;
+  --navbar-height: 50px;
+
+  /* Layout (standard screens; full-bleed workspaces opt out) */
+  --layout-content-max-width: 1280px;
+  --layout-content-margin-inline: auto;
+  --layout-page-padding: 24px;
+  --layout-sidebar-width: 240px;
 
   /* Shadows */
   --shadow-none: none;

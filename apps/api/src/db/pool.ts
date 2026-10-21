@@ -12,6 +12,12 @@ dotenv.config(); // fallback to default
 
 const { Pool } = pg;
 
+// A DATE column is a calendar day, not a moment: return it exactly as stored ("2026-10-01").
+// The driver default turns it into a JS Date at the server's local midnight, which shifts the
+// day for anyone in another time zone (e.g. "2026-09-30T18:30:00Z" for 1 Oct in India).
+const PG_DATE_OID = 1082;
+pg.types.setTypeParser(PG_DATE_OID, (value: string) => value);
+
 export const DEFAULT_TEST_DATABASE_URL =
   'postgresql://postgres:postgres@localhost:5432/config_platform_test';
 

@@ -29,6 +29,7 @@ import {
   PieChart,
   LineChart,
   AreaChart,
+  CheckSquare,
 } from 'lucide-react';
 import {
   getExportTemplate,
@@ -54,11 +55,12 @@ import {
   type GridDatasetAggregate,
   type GridParameterDefinition,
   type GridChartDefinition,
+  type ChartRenderData,
   CHART_LIMITS,
 } from '@config-platform/schema';
 import { gridTemplateToUniver, univerToGridTemplate } from './export-grid/univer-adapter';
 import { ChartEditorModal } from './export-grid/ChartEditorModal';
-import { ChartOverlayCanvas, GridChartFloatDomCard } from './export-grid/ChartOverlayCanvas';
+import { ChartOverlayCanvas, GridChartFloatDomCard, createChartDataStore } from './export-grid/ChartOverlayCanvas';
 import { useOptionalMetadata } from '../context/metadata-context';
 import { useTheme } from '../context/theme-context';
 import { useOptionalAppBar } from '../context/app-bar-context';
@@ -72,6 +74,7 @@ import '@univerjs/sheets-formula-ui/lib/index.css';
 import '@univerjs/sheets-numfmt-ui/lib/index.css';
 import '@univerjs/drawing-ui/lib/index.css';
 import '@univerjs/sheets-drawing-ui/lib/index.css';
+import '@univerjs/sheets-data-validation-ui/lib/index.css';
 
 // Univer Facade
 import '@univerjs/core/facade';
@@ -99,7 +102,7 @@ import { UniverFormulaEnginePlugin, FUNCTION_LIST } from '@univerjs/engine-formu
 import { UniverDocsPlugin } from '@univerjs/docs';
 import { UniverDocsUIPlugin } from '@univerjs/docs-ui';
 import { UniverSheetsPlugin } from '@univerjs/sheets';
-import { UniverSheetsFormulaPlugin } from '@univerjs/sheets-formula';
+import { UniverSheetsFormulaPlugin, CalculationMode } from '@univerjs/sheets-formula';
 import { UniverSheetsNumfmtPlugin } from '@univerjs/sheets-numfmt';
 import { IMenuManagerService, MenuItemType, UniverUIPlugin, CanvasFloatDomService, type MenuSchemaType } from '@univerjs/ui';
 import { UniverSheetsUIPlugin, SheetScrollManagerService, SheetSkeletonManagerService } from '@univerjs/sheets-ui';
@@ -109,6 +112,15 @@ import { UniverDrawingPlugin } from '@univerjs/drawing';
 import { UniverDrawingUIPlugin } from '@univerjs/drawing-ui';
 import { UniverSheetsDrawingPlugin } from '@univerjs/sheets-drawing';
 import { UniverSheetsDrawingUIPlugin } from '@univerjs/sheets-drawing-ui';
+import { UniverDataValidationPlugin } from '@univerjs/data-validation';
+import {
+  UniverSheetsDataValidationPlugin,
+  SheetDataValidationModel,
+  AddSheetDataValidationCommand,
+} from '@univerjs/sheets-data-validation';
+import { UniverSheetsDataValidationUIPlugin } from '@univerjs/sheets-data-validation-ui';
+import SheetsDataValidationEnUS from '@univerjs/sheets-data-validation/locale/en-US';
+import SheetsDataValidationUIEnUS from '@univerjs/sheets-data-validation-ui/locale/en-US';
 import SheetsEnUS from '@univerjs/sheets/locale/en-US';
 import SheetsUIEnUS from '@univerjs/sheets-ui/locale/en-US';
 import UIEnUS from '@univerjs/ui/locale/en-US';
@@ -129,6 +141,7 @@ const CUSTOM_RIBBON_TABS = [
       key: 'ribbon.insert.edit',
       items: [
         { id: 'config-platform.command.ribbon.insert-chart', title: 'Insert Chart', action: 'charts' },
+        { id: 'config-platform.command.ribbon.insert-checkbox', title: 'Insert Checkboxes', action: 'checkboxes' },
         { id: 'config-platform.command.ribbon.insert-starter', title: 'Starter Templates', action: 'starterTemplates' },
         { id: 'config-platform.command.ribbon.insert-datasets', title: 'Add or Edit Datasets', action: 'datasets' },
         { id: 'config-platform.command.ribbon.insert-regions', title: 'Repeating Regions', action: 'regions' },
@@ -183,6 +196,8 @@ const CUSTOM_RIBBON_TABS = [
   },
 ] as const;
 
+const NO_CHARTS: GridChartDefinition[] = [];
+
 function buildCustomRibbonMenu(): MenuSchemaType {
   const ribbon: Record<string, MenuSchemaType> = {};
   CUSTOM_RIBBON_TABS.forEach((tab, tabIndex) => {
@@ -226,6 +241,18 @@ export function GridTemplateDesigner() {
 
   const [nativeFloatDomActive, setNativeFloatDomActive] = useState<boolean>(false);
   const [univerReadyCount, setUniverReadyCount] = useState<number>(0);
+
+  // Live values for range-sourced charts, refreshed after every sheet mutation
+  const chartDataStoreRef = useRef(createChartDataStore());
+  const refreshLiveChartDataRef = useRef<() => void>(() => {});
+  const liveChartRafRef = useRef<number | null>(null);
+  const scheduleLiveChartRefresh = useCallback(() => {
+    if (liveChartRafRef.current !== null) return;
+    liveChartRafRef.current = requestAnimationFrame(() => {
+      liveChartRafRef.current = null;
+      refreshLiveChartDataRef.current();
+    });
+  }, []);
 
   const [sheetScroll, setSheetScroll] = useState<{ scrollX: number; scrollY: number }>({
     scrollX: 0,
@@ -286,7 +313,11 @@ export function GridTemplateDesigner() {
 
   // View Mode: 'design' vs 'preview' (live tenant data preview)
   const [viewMode, setViewMode] = useState<'design' | 'preview'>('design');
+  // Read by Univer callbacks and draft extraction, which outlive a render; set at each switch
+  const viewModeRef = useRef<'design' | 'preview'>('design');
   const [loadingPreviewData, setLoadingPreviewData] = useState(false);
+  // Charts of the hydrated preview: anchors and ranges shifted for the expanded data rows
+  const [previewCharts, setPreviewCharts] = useState<GridChartDefinition[] | null>(null);
 
   // Side panel state: 'datasets' vs 'fields' vs 'regions' vs 'charts'
   const [sidePanelTab, setSidePanelTab] = useState<'datasets' | 'fields' | 'regions' | 'charts'>('datasets');
@@ -446,6 +477,58 @@ export function GridTemplateDesigner() {
   const initUniverWithData = useCallback((data: any) => {
     if (!containerRef.current) return;
 
+    // Binds skeleton + scroll tracking to the render unit of the given workbook, waiting for it
+    // to be created if needed. Bumps univerReadyCount once bound so chart float DOMs re-sync.
+    const bindRenderUnit = (injector: any, unitId: string) => {
+      const renderManagerService = injector.get(IRenderManagerService);
+
+      const attachScrollListener = (renderUnit: any) => {
+        if (!renderUnit) return;
+        try {
+          const skeletonManager = renderUnit.with?.(SheetSkeletonManagerService);
+          if (skeletonManager) {
+            skeletonManagerRef.current = skeletonManager;
+          }
+        } catch (skelErr) {
+          console.warn('Could not attach SheetSkeletonManagerService:', skelErr);
+        }
+
+        try {
+          const scrollManager = renderUnit.with?.(SheetScrollManagerService);
+          if (scrollManager) {
+            scrollManagerRef.current = scrollManager;
+            if (scrollSubRef.current) {
+              scrollSubRef.current.unsubscribe();
+            }
+            scrollSubRef.current = scrollManager.validViewportScrollInfo$?.subscribe?.((info: any) => {
+              if (info) {
+                const calc = scrollManager.calcViewportScrollFromRowColOffset?.(info);
+                const sX = calc?.viewportScrollX ?? info.viewportScrollX ?? info.scrollX ?? 0;
+                const sY = calc?.viewportScrollY ?? info.viewportScrollY ?? info.scrollY ?? 0;
+                setSheetScroll({ scrollX: Math.round(sX), scrollY: Math.round(sY) });
+              }
+            });
+          }
+        } catch (scrollErr) {
+          console.warn('Could not attach SheetScrollManagerService:', scrollErr);
+        }
+
+        setUniverReadyCount((c) => c + 1);
+      };
+
+      const existingUnit = renderManagerService?.getRenderUnitById?.(unitId);
+      if (existingUnit) {
+        attachScrollListener(existingUnit);
+      } else if (renderManagerService?.created$) {
+        const createSub = renderManagerService.created$.subscribe?.((ru: any) => {
+          if (ru && ru.unitId === unitId) {
+            attachScrollListener(ru);
+            createSub?.unsubscribe?.();
+          }
+        });
+      }
+    };
+
     // If Univer instance is already running, hot-swap the workbook unit cleanly without destroying UI/plugins
     if (univerRef.current) {
       try {
@@ -462,7 +545,13 @@ export function GridTemplateDesigner() {
           const newWorkbook = univerRef.current.createUnit(UniverInstanceType.UNIVER_SHEET, unitData);
           workbookRef.current = newWorkbook;
           instanceService.focusUnit(newWorkbook.getUnitId());
+          setSheetScroll({ scrollX: 0, scrollY: 0 });
           setUniverReadyCount((c) => c + 1);
+          try {
+            bindRenderUnit((univerRef.current as any).__getInjector?.(), newWorkbook.getUnitId());
+          } catch {
+            // Render engine service not active
+          }
           return;
         }
       } catch (err) {
@@ -509,7 +598,9 @@ export function GridTemplateDesigner() {
             SheetsFormulaUIEnUS,
             SheetsNumfmtUIEnUS,
             DrawingUIEnUS,
-            SheetsDrawingUIEnUS
+            SheetsDrawingUIEnUS,
+            SheetsDataValidationEnUS,
+            SheetsDataValidationUIEnUS
           ),
         },
         ...({ telemetry: false } as any),
@@ -542,12 +633,21 @@ export function GridTemplateDesigner() {
         univer.registerPlugin(UniverSheetsUIPlugin, { menu: hiddenMenuConfig });
         univer.registerPlugin(UniverSheetsNumfmtPlugin);
         univer.registerPlugin(UniverSheetsNumfmtUIPlugin);
-        univer.registerPlugin(UniverSheetsFormulaPlugin, { description: FUNCTION_LIST });
+        // FORCED: templates store placeholder results (e.g. 0) on formula cells; the default
+        // WHEN_EMPTY mode would treat those as computed and show 0 until a cell is edited.
+        univer.registerPlugin(UniverSheetsFormulaPlugin, {
+          description: FUNCTION_LIST,
+          initialFormulaComputing: CalculationMode.FORCED,
+        });
         univer.registerPlugin(UniverSheetsFormulaUIPlugin);
         univer.registerPlugin(UniverDrawingPlugin);
         univer.registerPlugin(UniverDrawingUIPlugin);
         univer.registerPlugin(UniverSheetsDrawingPlugin);
         univer.registerPlugin(UniverSheetsDrawingUIPlugin);
+        // Checkbox cells (and the rest of data validation, whose menu stays hidden)
+        univer.registerPlugin(UniverDataValidationPlugin);
+        univer.registerPlugin(UniverSheetsDataValidationPlugin);
+        univer.registerPlugin(UniverSheetsDataValidationUIPlugin);
       }
 
       const workbook = univer.createUnit(UniverInstanceType.UNIVER_SHEET, data);
@@ -571,53 +671,7 @@ export function GridTemplateDesigner() {
           const instanceService = injector.get(IUniverInstanceService);
           const unitId = workbook.getUnitId();
           instanceService?.focusUnit(unitId);
-          const renderManagerService = injector.get(IRenderManagerService);
-
-          const attachScrollListener = (renderUnit: any) => {
-            if (!renderUnit) return;
-            try {
-              const skeletonManager = renderUnit.with?.(SheetSkeletonManagerService);
-              if (skeletonManager) {
-                skeletonManagerRef.current = skeletonManager;
-              }
-            } catch (skelErr) {
-              console.warn('Could not attach SheetSkeletonManagerService:', skelErr);
-            }
-
-            try {
-              const scrollManager = renderUnit.with?.(SheetScrollManagerService);
-              if (scrollManager) {
-                scrollManagerRef.current = scrollManager;
-                if (scrollSubRef.current) {
-                  scrollSubRef.current.unsubscribe();
-                }
-                scrollSubRef.current = scrollManager.validViewportScrollInfo$?.subscribe?.((info: any) => {
-                  if (info) {
-                    const calc = scrollManager.calcViewportScrollFromRowColOffset?.(info);
-                    const sX = calc?.viewportScrollX ?? info.viewportScrollX ?? info.scrollX ?? 0;
-                    const sY = calc?.viewportScrollY ?? info.viewportScrollY ?? info.scrollY ?? 0;
-                    setSheetScroll({ scrollX: Math.round(sX), scrollY: Math.round(sY) });
-                  }
-                });
-              }
-            } catch (scrollErr) {
-              console.warn('Could not attach SheetScrollManagerService:', scrollErr);
-            }
-
-            setUniverReadyCount((c) => c + 1);
-          };
-
-          const existingUnit = renderManagerService?.getRenderUnitById?.(unitId);
-          if (existingUnit) {
-            attachScrollListener(existingUnit);
-          } else if (renderManagerService?.created$) {
-            const createSub = renderManagerService.created$.subscribe?.((ru: any) => {
-              if (ru && ru.unitId === unitId) {
-                attachScrollListener(ru);
-                createSub?.unsubscribe?.();
-              }
-            });
-          }
+          bindRenderUnit(injector, unitId);
         } catch {
           // Render engine service not active
         }
@@ -645,10 +699,14 @@ export function GridTemplateDesigner() {
           }
           injector?.get(IMenuManagerService).appendRootMenu(buildCustomRibbonMenu());
         }
-        commandService.onCommandExecuted((cmdInfo: any) => {
+        commandService.onCommandExecuted((cmdInfo: any, execOptions?: { onlyLocal?: boolean }) => {
           if (!cmdInfo) return;
           if (cmdInfo.type === CommandType.MUTATION) {
-            setHasUnsavedChanges(true);
+            // onlyLocal mutations are derived state Univer never persists (e.g. formula results from
+            // the load-time recalculation); they still feed live charts but aren't user edits.
+            // Edits in preview (e.g. ticking boxes on live data) are scratch changes, not template edits
+            if (!execOptions?.onlyLocal && viewModeRef.current === 'design') setHasUnsavedChanges(true);
+            scheduleLiveChartRefresh();
 
             if (workbookRef.current) {
               const snapshot = workbookRef.current.getSnapshot();
@@ -711,7 +769,7 @@ export function GridTemplateDesigner() {
     } catch (err) {
       console.error('Failed to initialize Univer:', err);
     }
-  }, [handleSelectionChange, resolvedTheme]);
+  }, [handleSelectionChange, resolvedTheme, scheduleLiveChartRefresh]);
 
   useEffect(() => {
     if (!univerRef.current) return;
@@ -828,19 +886,38 @@ export function GridTemplateDesigner() {
     };
   }, []);
 
+  /** Current data-validation rules per sheet, or undefined when the plugin isn't running (tests). */
+  const readLiveValidationRules = (snapshot: any): Record<string, any[]> | undefined => {
+    try {
+      const injector = (univerRef.current as any)?.__getInjector?.();
+      const model = injector?.get(SheetDataValidationModel);
+      if (!model || !workbookRef.current) return undefined;
+      const unitId = workbookRef.current.getUnitId();
+      const rules: Record<string, any[]> = {};
+      for (const sheetId of snapshot.sheetOrder || Object.keys(snapshot.sheets || {})) {
+        rules[sheetId] = model.getRules(unitId, sheetId);
+      }
+      return rules;
+    } catch {
+      return undefined;
+    }
+  };
+
   // ─── Extract & Validate Grid Draft ─────────────────────────────────────────
   const extractAndValidateGridDraft = (): {
     draft: GridExportTemplateDefinition | null;
     errors: string[];
   } => {
     let gridDraft: GridExportTemplateDefinition;
-    if (workbookRef.current) {
+    // In preview the sheet shows hydrated live data (expanded regions, moved rows); it must never
+    // be read back as the template, or saving would store that data with unshifted chart ranges.
+    if (workbookRef.current && viewModeRef.current === 'design') {
       const snapshot = workbookRef.current.getSnapshot();
       const unsupported = detectUnsupportedContent(snapshot);
       if (unsupported.length > 0) {
         setUnsupportedWarnings(unsupported);
       }
-      gridDraft = univerToGridTemplate(snapshot);
+      gridDraft = univerToGridTemplate(snapshot, readLiveValidationRules(snapshot));
     } else if (template?.draft?.kind === 'grid') {
       gridDraft = template.draft as GridExportTemplateDefinition;
     } else {
@@ -1089,6 +1166,8 @@ export function GridTemplateDesigner() {
         }
         try {
           await updateExportTemplate(id, { name: template.name, draft });
+          // Keep the in-memory draft current: returning to design reloads from it
+          setTemplate((prev) => (prev ? { ...prev, draft } : prev));
           setHasUnsavedChanges(false);
         } catch (e: any) {
           showNotification('error', `Failed to save draft: ${e.message}`);
@@ -1101,6 +1180,10 @@ export function GridTemplateDesigner() {
         const res = await fetchExportTemplatePreviewData(id);
         if (res.draft) {
           const univerData = gridTemplateToUniver(res.draft, { designView: false });
+          // Draw the server's hydrated charts with the hydrated cells; the design charts point at
+          // template rows, which move when repeating regions expand
+          setPreviewCharts(((res.draft as any).charts as GridChartDefinition[]) || []);
+          viewModeRef.current = 'preview';
           initUniverWithData(univerData);
           setViewMode('preview');
           showNotification('success', 'Previewing with live tenant data (first 50 rows)');
@@ -1111,7 +1194,11 @@ export function GridTemplateDesigner() {
         setLoadingPreviewData(false);
       }
     } else {
+      viewModeRef.current = 'design';
       setViewMode('design');
+      setPreviewCharts(null);
+      // Scratch edits made on preview data are discarded with it
+      setHasUnsavedChanges(false);
       const draftDef = (template.draft || {}) as GridExportTemplateDefinition;
       const univerData = gridTemplateToUniver(draftDef, { designView: true });
       initUniverWithData(univerData);
@@ -1140,6 +1227,7 @@ export function GridTemplateDesigner() {
       setEditingChart(null);
       setShowChartEditor(true);
     },
+    checkboxes: () => handleInsertCheckboxes(),
     downloadPreview: () => { void handleDownloadPreview(); },
     publish: () => { void handlePublish(); },
   };
@@ -1150,7 +1238,11 @@ export function GridTemplateDesigner() {
   const currentParameters: GridParameterDefinition[] =
     template?.draft?.kind === 'grid' ? (template.draft as any).parameters || [] : [];
   const currentCharts: GridChartDefinition[] =
-    template?.draft?.kind === 'grid' ? (template.draft as any).charts || [] : [];
+    (template?.draft?.kind === 'grid' ? (template.draft as any).charts : undefined) || NO_CHARTS;
+  // What the sheet draws: the hydrated charts in preview, the template's charts in design.
+  // Editing (charts panel) always works on currentCharts.
+  const displayCharts: GridChartDefinition[] =
+    viewMode === 'preview' && previewCharts ? previewCharts : currentCharts;
   const activeSheetId =
     (template?.draft?.kind === 'grid' ? (template.draft as any).sheets?.[0]?.id : undefined) ||
     'sheet_0';
@@ -1187,10 +1279,13 @@ export function GridTemplateDesigner() {
     updateChartsInDraft(updated);
     showNotification('success', 'Chart removed');
   };
+  // Float DOM cards call through this ref so the sync effect below doesn't depend on a function
+  // that changes every render (that remounted every chart on each scroll or cell click).
+  const handleDeleteChartRef = useRef(handleDeleteChart);
+  handleDeleteChartRef.current = handleDeleteChart;
 
   // ─── Native Univer Float DOM Chart Synchronization ────────────────────────
   useEffect(() => {
-    console.log('[FloatDOM Debug] effect triggered. univerAPI:', Boolean(univerAPIRef.current), 'readyCount:', univerReadyCount, 'charts:', currentCharts.length, 'activeSheetId:', activeSheetId);
     if (!univerAPIRef.current) {
       setNativeFloatDomActive(false);
       return;
@@ -1199,17 +1294,15 @@ export function GridTemplateDesigner() {
     let fWorkbook: any = null;
     try {
       fWorkbook = univerAPIRef.current.getActiveWorkbook();
-    } catch (e) {
-      console.warn('[FloatDOM Debug] getActiveWorkbook failed:', e);
+    } catch {
+      // Workbook not yet active
     }
     if (!fWorkbook) {
-      console.warn('[FloatDOM Debug] no active workbook');
       setNativeFloatDomActive(false);
       return;
     }
 
     const fWorksheet = (activeSheetId ? fWorkbook.getSheetBySheetId(activeSheetId) : null) ?? fWorkbook.getActiveSheet();
-    console.log('[FloatDOM Debug] worksheet:', Boolean(fWorksheet), 'sheetId:', fWorksheet?.getSheetId?.(), 'has addFloatDomToRange:', typeof (fWorksheet as any)?.addFloatDomToRange);
     if (!fWorksheet || typeof (fWorksheet as any).addFloatDomToRange !== 'function') {
       setNativeFloatDomActive(false);
       return;
@@ -1225,8 +1318,7 @@ export function GridTemplateDesigner() {
     });
     floatDomsRef.current.clear();
 
-    const sheetCharts = currentCharts.filter((c) => !c.sheetId || c.sheetId === activeSheetId);
-    console.log('[FloatDOM Debug] sheetCharts to mount:', sheetCharts.length, 'total currentCharts:', currentCharts.length);
+    const sheetCharts = displayCharts.filter((c) => !c.anchor.sheetId || c.anchor.sheetId === activeSheetId);
     let anyMounted = false;
 
     for (const chart of sheetCharts) {
@@ -1237,11 +1329,11 @@ export function GridTemplateDesigner() {
         const colCount = Math.max(1, chart.anchor.endCol - chart.anchor.startCol + 1);
         const range = fWorksheet.getRange(startRow, startCol, rowCount, colCount);
 
-        const chartWidth = Math.max(280, (chart.anchor.endCol - chart.anchor.startCol + 1) * 75);
-        const chartHeight = Math.max(180, (chart.anchor.endRow - chart.anchor.startRow + 1) * 24);
-        const domLayout = { width: chartWidth, height: chartHeight };
+        // Empty anchor (not undefined): Univer only positions the card at the range start when an
+        // anchor object is passed, and with no width/height it uses the range's real pixel size.
+        // A columns×75 / rows×24 estimate overflowed sheets with narrow or tall cells.
+        const domLayout = {};
 
-        console.log('[FloatDOM Debug] calling addFloatDomToRange for chart:', chart.id, 'range:', { startRow, startCol, rowCount, colCount }, 'domLayout:', domLayout);
         const res = fWorksheet.addFloatDomToRange(
           range,
           {
@@ -1253,8 +1345,9 @@ export function GridTemplateDesigner() {
                 setEditingChart(c);
                 setShowChartEditor(true);
               },
-              onDeleteChart: handleDeleteChart,
+              onDeleteChart: (chartId: string) => handleDeleteChartRef.current(chartId),
               themeTokens: undefined,
+              dataStore: chartDataStoreRef.current,
             },
             allowTransform: false,
           },
@@ -1262,7 +1355,6 @@ export function GridTemplateDesigner() {
           `chart_${chart.id}`
         );
 
-        console.log('[FloatDOM Debug] addFloatDomToRange returned:', res);
         if (res) {
           floatDomsRef.current.set(chart.id, res);
           try {
@@ -1274,7 +1366,7 @@ export function GridTemplateDesigner() {
           anyMounted = true;
         }
       } catch (err) {
-        console.error('[FloatDOM Debug] Failed to add float dom for chart:', chart.id, err);
+        console.error('Failed to add float dom for chart:', chart.id, err);
       }
     }
 
@@ -1291,7 +1383,7 @@ export function GridTemplateDesigner() {
       floatDomsRef.current.clear();
       setNativeFloatDomActive(false);
     };
-  }, [univerReadyCount, currentCharts, activeSheetId, viewMode, handleDeleteChart]);
+  }, [univerReadyCount, displayCharts, activeSheetId, viewMode]);
 
   const handleSheetCellReader = (sheetId: string, rangeA1: string): (string | number | null)[] => {
     if (!workbookRef.current) return [];
@@ -1326,6 +1418,71 @@ export function GridTemplateDesigner() {
     } catch {
       return [];
     }
+  };
+
+  // Recompute range-chart data from the live sheet (cell values include formula results), so
+  // charts follow edits and checkbox clicks the same way the exported native Excel charts do.
+  refreshLiveChartDataRef.current = () => {
+    const next = new Map<string, ChartRenderData>();
+    for (const chart of displayCharts) {
+      if (chart.source.kind !== 'range') continue;
+      const { sheetId, categoryRange, series } = chart.source;
+      const categories = categoryRange
+        ? handleSheetCellReader(sheetId, categoryRange).map((v) => (v === null || v === undefined ? '' : String(v)))
+        : [];
+      const seriesData = series.map((s) => ({
+        name: s.name,
+        color: s.color,
+        type: s.type,
+        data: handleSheetCellReader(sheetId, s.range).map((v) => {
+          const n = Number(v);
+          return Number.isFinite(n) ? n : 0;
+        }),
+      }));
+      const pointCount = Math.max(0, ...seriesData.map((s) => s.data.length));
+      const data: ChartRenderData = {
+        categories: categories.length > 0 ? categories : Array.from({ length: pointCount }, (_, i) => String(i + 1)),
+        series: seriesData,
+      };
+      // Keep the previous object when values are unchanged so only charts whose cells changed re-render
+      const previous = chartDataStoreRef.current.get(chart.id);
+      next.set(chart.id, previous && JSON.stringify(previous) === JSON.stringify(data) ? previous : data);
+    }
+    const store = chartDataStoreRef.current;
+    if (![...next].every(([id, data]) => store.get(id) === data)) store.set(next);
+  };
+
+  useEffect(() => {
+    scheduleLiveChartRefresh();
+  }, [univerReadyCount, displayCharts, scheduleLiveChartRefresh]);
+
+  // Ribbon: turn the selected range into checkbox cells (1 = checked, 0 = unchecked)
+  const handleInsertCheckboxes = () => {
+    const commandService = commandServiceRef.current;
+    const workbook = workbookRef.current;
+    if (!commandService || !workbook || viewMode !== 'design') return;
+    const sheetId = workbook.getActiveSheet?.()?.getSheetId?.() || activeSheetId;
+    const range = {
+      startRow: selectedRange.startRow,
+      endRow: selectedRange.endRow,
+      startColumn: selectedRange.startCol,
+      endColumn: selectedRange.endCol,
+    };
+    void commandService.executeCommand(AddSheetDataValidationCommand.id, {
+      unitId: workbook.getUnitId(),
+      subUnitId: sheetId,
+      rule: {
+        uid: `dv_checkbox_${Date.now()}`,
+        type: 'checkbox',
+        ranges: [range],
+        formula1: 1,
+        formula2: 0,
+        showErrorMessage: false,
+      },
+    });
+    const rowCount = range.endRow - range.startRow + 1;
+    const colCount = range.endColumn - range.startColumn + 1;
+    showNotification('success', `Added ${rowCount * colCount} checkbox cell${rowCount * colCount === 1 ? '' : 's'} (checked = 1, unchecked = 0)`);
   };
 
   // ─── Dataset Manipulation Actions ──────────────────────────────────────────
@@ -1907,7 +2064,7 @@ export function GridTemplateDesigner() {
           />
           {!nativeFloatDomActive && (
             <ChartOverlayCanvas
-              charts={currentCharts}
+              charts={displayCharts}
               activeSheetId={activeSheetId}
               viewMode={viewMode}
               onEditChart={(chart) => {
@@ -1916,6 +2073,7 @@ export function GridTemplateDesigner() {
               }}
               onDeleteChart={handleDeleteChart}
               themeTokens={undefined}
+              dataStore={chartDataStoreRef.current}
               gridMetrics={{
                 scrollX: sheetScroll.scrollX,
                 scrollY: sheetScroll.scrollY,
@@ -1933,7 +2091,7 @@ export function GridTemplateDesigner() {
         {/* Right: Side Panel (Datasets, Fields, Regions) */}
         <aside
           style={{
-            width: '360px',
+            width: '400px',
             backgroundColor: 'var(--surface)',
             borderLeft: 'var(--border-width) solid var(--border)',
             display: 'flex',
@@ -1963,6 +2121,7 @@ export function GridTemplateDesigner() {
                 justifyContent: 'center',
                 gap: 'var(--space-1)',
                 padding: 'var(--space-2)',
+                borderRadius: 0,
               }}
             >
               <Database size={14} />
@@ -3105,8 +3264,14 @@ export function GridTemplateDesigner() {
                 padding: 'var(--space-5)',
               }}
             >
-              {GRID_STARTER_TEMPLATES.map((starter, index) => {
-                const Icon = [FileSpreadsheet, Sliders, Calculator, Table][index];
+              {GRID_STARTER_TEMPLATES.map((starter) => {
+                const Icon = {
+                  executive: FileSpreadsheet,
+                  operations: Sliders,
+                  financial: Calculator,
+                  audit: Table,
+                  production: CheckSquare,
+                }[starter.id];
                 return (
                   <button
                     key={starter.id}
@@ -3126,7 +3291,23 @@ export function GridTemplateDesigner() {
                   >
                     <Icon size={18} style={{ flexShrink: 0, color: 'var(--accent)' }} />
                     <span style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
-                      <strong>{starter.name}</strong>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+                        <strong>{starter.name}</strong>
+                        {starter.category === 'interactive' && (
+                          <span
+                            style={{
+                              fontSize: 'var(--font-size-xs)',
+                              padding: '0 var(--space-2)',
+                              borderRadius: 'var(--radius-control)',
+                              backgroundColor: 'var(--accent-subtle)',
+                              color: 'var(--accent)',
+                              fontWeight: 600,
+                            }}
+                          >
+                            Interactive
+                          </span>
+                        )}
+                      </span>
                       <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)', lineHeight: 1.5 }}>
                         {starter.description}
                       </span>

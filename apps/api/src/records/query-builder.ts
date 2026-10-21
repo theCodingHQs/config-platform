@@ -1,5 +1,5 @@
 import type { ResolvedEntity } from './entity-cache.js';
-import type { FieldType } from '@config-platform/schema';
+import { FILTER_OPS_BY_FIELD_TYPE, type FieldType, type FilterOp } from '@config-platform/schema';
 
 export class QueryError extends Error {
   constructor(message: string) {
@@ -8,29 +8,10 @@ export class QueryError extends Error {
   }
 }
 
-export type FilterOp =
-  | 'eq'
-  | 'neq'
-  | 'gt'
-  | 'gte'
-  | 'lt'
-  | 'lte'
-  | 'contains'
-  | 'in'
-  | 'isNull';
+export type { FilterOp };
 
-const ALLOWED_OPS_BY_TYPE: Record<string, FilterOp[]> = {
-  text: ['eq', 'neq', 'contains', 'in', 'isNull'],
-  number: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in', 'isNull'],
-  boolean: ['eq', 'neq', 'isNull'],
-  date: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'isNull'],
-  select: ['eq', 'neq', 'in', 'isNull'],
-  reference: ['eq', 'neq', 'in', 'isNull'],
-  // System fields
-  id: ['eq', 'neq', 'in'],
-  created_at: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'],
-  updated_at: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'],
-};
+// Shared with the page builder so it only offers operators the API accepts
+const ALLOWED_OPS_BY_TYPE = FILTER_OPS_BY_FIELD_TYPE;
 
 export interface SortClause {
   fieldName: string;
@@ -45,7 +26,12 @@ export interface ParsedFilter {
   op: FilterOp;
   value: any;
   type: FieldType | 'text' | 'date';
+  /** Any-of group (`filter[a,b][op]=v`): matches when at least one member matches. */
+  anyOf?: ParsedFilter[];
 }
+
+/** Separates the fields of an any-of filter key: `filter[machine_name,work_center][contains]`. */
+export const FILTER_ANY_OF_SEPARATOR = ',';
 
 export interface QueryOptions {
   filters: ParsedFilter[];
@@ -92,7 +78,27 @@ export class QueryBuilder {
     }
 
     // Validate and build filter clauses
-    for (const [fieldName, ops] of Object.entries(rawFilterMap)) {
+    for (const [fieldKey, ops] of Object.entries(rawFilterMap)) {
+      if (fieldKey.includes(FILTER_ANY_OF_SEPARATOR)) {
+        // One condition over several fields, matched if any field matches
+        const fieldNames = [...new Set(fieldKey.split(FILTER_ANY_OF_SEPARATOR).map((n) => n.trim()).filter(Boolean))];
+        for (const [opStr, val] of Object.entries(ops)) {
+          const anyOf = fieldNames.flatMap((name) =>
+            this.parseFilters(resolvedEntity, { filter: { [name]: { [opStr]: val } } })
+          );
+          if (anyOf.length === 0) continue;
+          filters.push({
+            fieldName: anyOf.map((m) => m.fieldName).join(FILTER_ANY_OF_SEPARATOR),
+            physicalColumn: anyOf[0].physicalColumn,
+            op: opStr as FilterOp,
+            value: val,
+            type: anyOf[0].type,
+            anyOf,
+          });
+        }
+        continue;
+      }
+      const fieldName = fieldKey;
       const fieldDef = resolvedEntity.fieldByName.get(fieldName) || resolvedEntity.fieldById.get(fieldName);
       const isSystem = resolvedEntity.systemFields.has(fieldName);
 
@@ -243,6 +249,62 @@ export class QueryBuilder {
     };
   }
 
+  /** Adds one WHERE condition per filter (an any-of group becomes one OR'ed condition). */
+  private appendFilterClauses(filters: ParsedFilter[], params: any[], whereClauses: string[]): void {
+    for (const f of filters) {
+      const condition = f.anyOf
+        ? `(${f.anyOf.map((member) => this.buildFilterCondition(member, params)).join(' OR ')})`
+        : this.buildFilterCondition(f, params);
+      whereClauses.push(condition);
+    }
+  }
+
+  private buildFilterCondition(f: ParsedFilter, params: any[]): string {
+    const col = `"${f.physicalColumn}"`;
+    switch (f.op) {
+      case 'eq':
+        params.push(f.value);
+        return `${col} = $${params.length}`;
+      case 'neq':
+        params.push(f.value);
+        return `${col} != $${params.length}`;
+      case 'gt':
+        params.push(f.value);
+        return `${col} > $${params.length}`;
+      case 'gte':
+        params.push(f.value);
+        return `${col} >= $${params.length}`;
+      case 'lt':
+        params.push(f.value);
+        return `${col} < $${params.length}`;
+      case 'lte':
+        params.push(f.value);
+        return `${col} <= $${params.length}`;
+      case 'contains': {
+        // Escape wildcard chars to prevent injection
+        const escaped = String(f.value).replace(/[%_]/g, '\\$&');
+        params.push(`%${escaped}%`);
+        return `${col}::text ILIKE $${params.length}`;
+      }
+      case 'in': {
+        let list: any[];
+        if (Array.isArray(f.value)) {
+          list = f.value;
+        } else if (typeof f.value === 'string') {
+          list = f.value.split(',').map((s) => s.trim());
+        } else {
+          list = [f.value];
+        }
+        params.push(list);
+        return `${col}::text = ANY($${params.length}::text[])`;
+      }
+      case 'isNull': {
+        const isTrue = f.value === true || f.value === 'true' || f.value === 1 || f.value === '1';
+        return isTrue ? `${col} IS NULL` : `${col} IS NOT NULL`;
+      }
+    }
+  }
+
   /**
    * Builds SQL for filters and keyset pagination
    */
@@ -255,60 +317,7 @@ export class QueryBuilder {
     const whereClauses: string[] = [];
 
     // 1. Build filter WHERE clauses
-    for (const f of options.filters) {
-      const col = `"${f.physicalColumn}"`;
-      switch (f.op) {
-        case 'eq':
-          params.push(f.value);
-          whereClauses.push(`${col} = $${params.length}`);
-          break;
-        case 'neq':
-          params.push(f.value);
-          whereClauses.push(`${col} != $${params.length}`);
-          break;
-        case 'gt':
-          params.push(f.value);
-          whereClauses.push(`${col} > $${params.length}`);
-          break;
-        case 'gte':
-          params.push(f.value);
-          whereClauses.push(`${col} >= $${params.length}`);
-          break;
-        case 'lt':
-          params.push(f.value);
-          whereClauses.push(`${col} < $${params.length}`);
-          break;
-        case 'lte':
-          params.push(f.value);
-          whereClauses.push(`${col} <= $${params.length}`);
-          break;
-        case 'contains': {
-          // Escape wildcard chars to prevent injection
-          const escaped = String(f.value).replace(/[%_]/g, '\\$&');
-          params.push(`%${escaped}%`);
-          whereClauses.push(`${col}::text ILIKE $${params.length}`);
-          break;
-        }
-        case 'in': {
-          let list: any[] = [];
-          if (Array.isArray(f.value)) {
-            list = f.value;
-          } else if (typeof f.value === 'string') {
-            list = f.value.split(',').map((s) => s.trim());
-          } else {
-            list = [f.value];
-          }
-          params.push(list);
-          whereClauses.push(`${col}::text = ANY($${params.length}::text[])`);
-          break;
-        }
-        case 'isNull': {
-          const isTrue = f.value === true || f.value === 'true' || f.value === 1 || f.value === '1';
-          whereClauses.push(isTrue ? `${col} IS NULL` : `${col} IS NOT NULL`);
-          break;
-        }
-      }
-    }
+    this.appendFilterClauses(options.filters, params, whereClauses);
 
     // 2. Keyset pagination clause
     if (options.cursor && Array.isArray(options.cursor.values)) {
@@ -368,59 +377,7 @@ export class QueryBuilder {
     const params: any[] = [];
     const whereClauses: string[] = [];
 
-    for (const f of filters) {
-      const col = `"${f.physicalColumn}"`;
-      switch (f.op) {
-        case 'eq':
-          params.push(f.value);
-          whereClauses.push(`${col} = $${params.length}`);
-          break;
-        case 'neq':
-          params.push(f.value);
-          whereClauses.push(`${col} != $${params.length}`);
-          break;
-        case 'gt':
-          params.push(f.value);
-          whereClauses.push(`${col} > $${params.length}`);
-          break;
-        case 'gte':
-          params.push(f.value);
-          whereClauses.push(`${col} >= $${params.length}`);
-          break;
-        case 'lt':
-          params.push(f.value);
-          whereClauses.push(`${col} < $${params.length}`);
-          break;
-        case 'lte':
-          params.push(f.value);
-          whereClauses.push(`${col} <= $${params.length}`);
-          break;
-        case 'contains': {
-          const escaped = String(f.value).replace(/[%_]/g, '\\$&');
-          params.push(`%${escaped}%`);
-          whereClauses.push(`${col}::text ILIKE $${params.length}`);
-          break;
-        }
-        case 'in': {
-          let list: any[] = [];
-          if (Array.isArray(f.value)) {
-            list = f.value;
-          } else if (typeof f.value === 'string') {
-            list = f.value.split(',').map((s) => s.trim());
-          } else {
-            list = [f.value];
-          }
-          params.push(list);
-          whereClauses.push(`${col}::text = ANY($${params.length}::text[])`);
-          break;
-        }
-        case 'isNull': {
-          const isTrue = f.value === true || f.value === 'true' || f.value === 1 || f.value === '1';
-          whereClauses.push(isTrue ? `${col} IS NULL` : `${col} IS NOT NULL`);
-          break;
-        }
-      }
-    }
+    this.appendFilterClauses(filters, params, whereClauses);
 
     const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
     const sql = `SELECT COUNT(*)::int AS total FROM "${schemaName}"."${physicalTableName}" ${whereSql}`;
@@ -537,59 +494,7 @@ export class QueryBuilder {
     const whereClauses: string[] = [];
     const params: any[] = [];
 
-    for (const f of filters) {
-      const col = `"${f.physicalColumn}"`;
-      switch (f.op) {
-        case 'eq':
-          params.push(f.value);
-          whereClauses.push(`${col} = $${params.length}`);
-          break;
-        case 'neq':
-          params.push(f.value);
-          whereClauses.push(`${col} != $${params.length}`);
-          break;
-        case 'gt':
-          params.push(f.value);
-          whereClauses.push(`${col} > $${params.length}`);
-          break;
-        case 'gte':
-          params.push(f.value);
-          whereClauses.push(`${col} >= $${params.length}`);
-          break;
-        case 'lt':
-          params.push(f.value);
-          whereClauses.push(`${col} < $${params.length}`);
-          break;
-        case 'lte':
-          params.push(f.value);
-          whereClauses.push(`${col} <= $${params.length}`);
-          break;
-        case 'contains': {
-          const escaped = String(f.value).replace(/[%_]/g, '\\$&');
-          params.push(`%${escaped}%`);
-          whereClauses.push(`${col}::text ILIKE $${params.length}`);
-          break;
-        }
-        case 'in': {
-          let list: any[] = [];
-          if (Array.isArray(f.value)) {
-            list = f.value;
-          } else if (typeof f.value === 'string') {
-            list = f.value.split(',').map((s) => s.trim());
-          } else {
-            list = [f.value];
-          }
-          params.push(list);
-          whereClauses.push(`${col}::text = ANY($${params.length}::text[])`);
-          break;
-        }
-        case 'isNull': {
-          const isTrue = f.value === true || f.value === 'true' || f.value === 1 || f.value === '1';
-          whereClauses.push(isTrue ? `${col} IS NULL` : `${col} IS NOT NULL`);
-          break;
-        }
-      }
-    }
+    this.appendFilterClauses(filters, params, whereClauses);
 
     const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
     const colExpr = physicalColumn === '*' ? '*' : `"${physicalColumn}"`;
@@ -605,7 +510,9 @@ export class QueryBuilder {
 
     if (groupByField) {
       const groupCol = `"${groupByField.physicalColumn}"`;
-      const sql = `SELECT ${groupCol} AS group_key, ${selectExpr} AS value FROM "${schemaName}"."${physicalTableName}" ${whereSql} GROUP BY ${groupCol} LIMIT ${groupLimit};`;
+      // Groups in key order (so the same groups come back every time); one extra row tells
+      // the caller that more groups exist than the limit
+      const sql = `SELECT ${groupCol} AS group_key, ${selectExpr} AS value FROM "${schemaName}"."${physicalTableName}" ${whereSql} GROUP BY ${groupCol} ORDER BY ${groupCol} ASC NULLS LAST LIMIT ${groupLimit + 1};`;
       return { sql, params };
     }
 

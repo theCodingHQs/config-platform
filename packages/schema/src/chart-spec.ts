@@ -94,6 +94,8 @@ export const ChartOptionsSchema = z.object({
   area: z.boolean().optional(),
   xAxisTitle: z.string().optional(),
   yAxisTitle: z.string().optional(),
+  /** Per-slice colors for pie/donut charts, applied in category order. */
+  sliceColors: z.array(ChartColorSchema).max(24).optional(),
 });
 export type ChartOptions = z.infer<typeof ChartOptionsSchema>;
 

@@ -6,7 +6,8 @@ import { usePageRuntime } from '../context/page-runtime-context';
 import { fetchRecords, type RecordsResponse } from '../api/client';
 import { BrokenBinding } from '../renderer/broken-binding';
 import { ReferenceDisplay } from './reference-display';
-import type { TableProps } from '@config-platform/schema';
+import { formatDateFieldValue, type DateDisplayPrefs, type TableProps } from '@config-platform/schema';
+import { useDateDisplayPrefs } from '../context/date-display-context';
 
 export const TableComponent: React.FC<TableProps> = ({
   source,
@@ -25,6 +26,7 @@ export const TableComponent: React.FC<TableProps> = ({
   alignSelf,
 }) => {
   const { tenantId, resolveEntity, resolveField } = useMetadata();
+  const datePrefs = useDateDisplayPrefs();
   const runtime = usePageRuntime();
 
   // If source is provided, data comes from PageRuntimeContext dataSources
@@ -180,7 +182,7 @@ export const TableComponent: React.FC<TableProps> = ({
                     const val = row[field.name];
                     return (
                       <td key={col.fieldId || idx}>
-                        {renderCellValue(field, val)}
+                        {renderCellValue(field, val, datePrefs)}
                       </td>
                     );
                   })}
@@ -286,7 +288,7 @@ export const TableComponent: React.FC<TableProps> = ({
   );
 };
 
-function renderCellValue(field: any, val: any): React.ReactNode {
+function renderCellValue(field: any, val: any, datePrefs: DateDisplayPrefs): React.ReactNode {
   if (val === null || val === undefined || val === '') {
     return <span style={{ color: 'var(--text-muted)' }}>—</span>;
   }
@@ -302,14 +304,9 @@ function renderCellValue(field: any, val: any): React.ReactNode {
         </span>
       );
 
-    case 'date': {
-      try {
-        const d = new Date(val);
-        return isNaN(d.getTime()) ? String(val) : d.toLocaleDateString();
-      } catch {
-        return String(val);
-      }
-    }
+    case 'date':
+      // Calendar dates as written, months as "Oct 2026", moments in the viewer's time zone
+      return formatDateFieldValue(val, config, datePrefs);
 
     case 'select': {
       const opts = config?.options as Array<{ label: string; value: string }> | undefined;

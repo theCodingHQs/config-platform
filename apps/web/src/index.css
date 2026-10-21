@@ -19,53 +19,68 @@
   align-items: center;
   justify-content: flex-start;
   gap: var(--space-3);
-  min-height: 1.75rem;
+  /* Fixed height (not min-height) so messages and actions never resize the page */
+  height: calc(var(--control-height-sm) + var(--space-1));
   padding: 0 var(--space-3);
   border-top: var(--border-width) solid var(--border);
   background: var(--surface);
   color: var(--text-muted);
   flex: 0 0 auto;
   font-size: var(--font-size-xs);
+  /* Above modal overlays, so feedback for an action started in a dialog stays readable */
+  position: relative;
+  z-index: 1100;
 }
 
 .app-statusbar-content,
 .app-statusbar-actions,
+/* Action feedback: fills the bar's height in its colour, at the right edge, and opens
+   from zero to its width (the width is measured and set inline). */
 .app-statusbar-message {
+  flex: 0 1 auto;
+  align-self: stretch;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-}
-
-.app-statusbar-content {
-  flex: 0 1 auto;
-  max-width: 65%;
-  overflow: hidden;
-}
-
-.app-statusbar-actions {
-  flex: 0 0 auto;
-}
-
-.app-statusbar-message {
-  justify-content: flex-end;
-  flex: 0 1 auto;
+  justify-content: flex-start;
   margin-left: auto;
-  min-height: 1.5rem;
-  color: var(--text-muted);
+  /* Reach the bar's right edge (the bar has inline padding) */
+  margin-right: calc(-1 * var(--space-3));
+  max-width: 60%;
+  overflow: hidden;
+  transition: width 220ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.app-statusbar-message-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-1) 0 var(--space-3);
+  white-space: nowrap;
 }
 
 .app-statusbar-message-success {
-  color: var(--success);
+  background-color: var(--success);
+  color: var(--success-contrast);
 }
 
 .app-statusbar-message-error {
-  color: var(--danger);
+  background-color: var(--danger);
+  color: var(--danger-contrast);
+}
+
+.app-statusbar-message-info {
+  background-color: var(--accent);
+  color: var(--accent-contrast);
 }
 
 .app-statusbar-message-icon {
-  display: inline-flex;
   flex: 0 0 auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-statusbar-message {
+    transition: none;
+  }
 }
 
 .app-statusbar-message-text {
@@ -97,12 +112,14 @@
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
-  color: var(--text-muted);
+  color: inherit;
+  opacity: 0.8;
   cursor: pointer;
 }
 
-.app-statusbar-dismiss:hover {
-  color: var(--text);
+.app-statusbar-dismiss:hover,
+.app-statusbar-dismiss:focus-visible {
+  opacity: 1;
 }
 
 .app-statusbar-action:hover {
@@ -335,7 +352,11 @@ h3 {
   font-family: var(--font-sans);
   font-size: var(--font-size-sm);
   font-weight: 500;
-  padding: var(--spacing-2) var(--spacing-3);
+  /* Height comes from padding (not min-height) so it lands exactly on the
+     control-height token, while buttons with an inline padding override stay compact.
+     1.25em matches line-height; subtract the top+bottom border. */
+  --btn-height: var(--control-height-md);
+  padding: calc((var(--btn-height) - 1.25em) / 2 - var(--border-width-sm)) var(--spacing-3);
   border-radius: var(--radius-button);
   border: var(--border-width-sm) solid transparent;
   cursor: pointer;
@@ -344,6 +365,51 @@ h3 {
     border-color 0.15s ease;
   white-space: nowrap;
   line-height: 1.25;
+  box-sizing: border-box;
+  /* Space between an icon and its label */
+  gap: var(--spacing-1);
+}
+
+/* Size variants share the control-height tokens with inputs so mixed rows line up. */
+.btn-sm {
+  --btn-height: var(--control-height-sm);
+  padding-inline: var(--spacing-2);
+  font-size: var(--font-size-xs);
+}
+
+.btn-lg {
+  --btn-height: var(--control-height-lg);
+  padding-inline: var(--spacing-4);
+  font-size: var(--font-size-base);
+}
+
+/* Square icon-only button; size follows .btn-sm / .btn-lg via --btn-height. Needs aria-label. */
+.btn-icon {
+  width: var(--btn-height);
+  height: var(--btn-height);
+  padding: 0;
+  flex-shrink: 0;
+}
+
+/* Thin divider between groups of toolbar actions */
+.toolbar-separator {
+  align-self: center;
+  width: var(--border-width-sm);
+  height: calc(var(--control-height-sm) * 0.6);
+  background-color: var(--border);
+  flex-shrink: 0;
+}
+
+/* Quiet destructive action: muted until hovered/focused */
+.btn-ghost-danger {
+  background-color: transparent;
+  color: var(--text-muted);
+  border-color: transparent;
+}
+.btn-ghost-danger:hover:not(:disabled),
+.btn-ghost-danger:focus-visible {
+  background-color: var(--danger-subtle);
+  color: var(--danger);
 }
 
 .btn-primary {
@@ -411,6 +477,26 @@ button:disabled {
     box-shadow 0.15s ease;
 }
 
+/* Single-line controls sit exactly on the height token (native line-height
+   otherwise pushes them to ~37-39px), matching .btn in mixed rows.
+   :where() keeps specificity at one class so size modifiers below can override. */
+:where(input).form-input,
+:where(input).input,
+:where(select:not([multiple]):not([size])).form-select,
+:where(select:not([multiple]):not([size])).form-input,
+:where(select:not([multiple]):not([size])).input {
+  height: var(--control-height-md);
+  padding-block: 0;
+}
+
+/* Small control, pairs with .btn-sm (e.g. inline row controls) */
+.form-control-sm {
+  height: var(--control-height-sm);
+  min-height: var(--control-height-sm);
+  padding-inline: var(--spacing-2);
+  font-size: var(--font-size-xs);
+}
+
 .form-input:focus,
 .form-select:focus,
 .input:focus {
@@ -435,6 +521,18 @@ input:-webkit-autofill:active {
   border-color: var(--border) !important;
 }
 
+.form-group {
+  margin-bottom: var(--spacing-3);
+}
+
+/* In a horizontal stack the stack's gap handles spacing; a bottom margin would
+   misalign the field against siblings (e.g. buttons) when items align to the end.
+   The second selector covers the studio canvas's display:contents node wrapper. */
+.layout-stack[data-direction="horizontal"] > .form-group,
+.layout-stack[data-direction="horizontal"] > [data-node-id] > .form-group {
+  margin-bottom: 0;
+}
+
 .form-label {
   display: block;
   font-size: var(--font-size-xs);
@@ -456,6 +554,87 @@ input:-webkit-autofill:active {
   border: var(--border-width-sm) solid var(--border);
   border-radius: var(--radius-surface);
   background-color: var(--surface);
+}
+
+/* Page manager tree: page and group rows share one grid so columns line up at any depth */
+.page-tree-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.3fr) 104px 160px 204px;
+  align-items: center;
+  gap: var(--spacing-3);
+  min-height: 52px;
+  padding: var(--spacing-2) var(--spacing-4);
+  border-top: var(--border-width-sm) solid var(--border);
+}
+.page-tree-row:hover {
+  background-color: var(--surface-hover);
+}
+.page-tree-head {
+  border-top: 0;
+  min-height: 0;
+  padding-block: var(--spacing-2);
+  background-color: var(--surface-2);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.page-tree-head:hover {
+  background-color: var(--surface-2);
+}
+.page-tree-name {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  min-width: 0;
+}
+.page-tree-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.page-tree-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-1);
+}
+.page-tree-group > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.page-tree-group > summary::-webkit-details-marker {
+  display: none;
+}
+.page-tree-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+.page-tree-group[open] > summary .page-tree-chevron {
+  transform: rotate(90deg);
+}
+
+/* Narrow screens: name + actions on the first line, details beneath */
+@media (max-width: 760px) {
+  .page-tree-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "name actions"
+      "route route"
+      "status group";
+    row-gap: var(--spacing-1);
+  }
+  .page-tree-head {
+    display: none;
+  }
+  .page-tree-row > .page-tree-name { grid-area: name; }
+  .page-tree-row > .page-tree-actions { grid-area: actions; }
+  .page-tree-row > .page-tree-cell-route { grid-area: route; }
+  .page-tree-row > .page-tree-cell-status { grid-area: status; }
+  .page-tree-row > .page-tree-cell-group { grid-area: group; width: 160px; justify-self: end; }
 }
 
 .data-table {
@@ -651,7 +830,7 @@ input:-webkit-autofill:active {
 }
 
 .app-sidebar {
-  width: 240px;
+  width: var(--layout-sidebar-width);
   background-color: var(--surface);
   border-right: var(--border-width-sm) solid var(--border);
   display: flex;
@@ -785,6 +964,129 @@ input:-webkit-autofill:active {
   overflow-y: auto;
 }
 
+/* Container content layout (card/modal bodies). Vertically stacked children keep their
+   natural height, so height-limited containers scroll instead of squashing content.
+   The second selector covers the builder canvas's display:contents node wrapper. */
+.content-layout-vertical > *,
+.content-layout-vertical > [data-node-id] > * {
+  flex-shrink: 0;
+}
+
+/* Theme Studio: settings (tabs) and live preview side by side, stacked on narrow screens */
+.theme-studio-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--spacing-6);
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .theme-studio-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.theme-tabs {
+  display: flex;
+  gap: var(--spacing-1);
+  padding: 0 var(--spacing-4);
+  border-bottom: var(--border-width-sm) solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.theme-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-3) var(--spacing-3);
+  border: 0;
+  border-bottom: var(--border-width-md) solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.theme-tab:hover {
+  color: var(--text);
+}
+.theme-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.theme-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.theme-tab-error {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background-color: var(--danger);
+}
+.theme-tab-panel {
+  padding: var(--spacing-6);
+}
+.layout-preview-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: var(--spacing-2);
+  margin: var(--spacing-3) 0 0;
+}
+.layout-preview-legend dt {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+.layout-preview-legend dd {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+/* Visually hidden but available to screen readers.
+   The parent must be positioned (e.g. position: relative), otherwise this
+   absolutely positioned element can stretch the page and add a scrollbar. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Standard screen container, driven by the theme's Layout settings.
+   width: 100% stops it shrinking to its content inside flex parents, so the
+   width stays fixed while content changes (e.g. expanding a group). */
+.page-container {
+  width: 100%;
+  max-width: var(--layout-content-max-width);
+  margin-inline: var(--layout-content-margin-inline);
+  padding: calc(var(--layout-page-padding) * 1.25) var(--layout-page-padding);
+  box-sizing: border-box;
+}
+
+/* Published page set to "Full width": ignores the theme content width, keeps page padding */
+.page-container.page-container-full {
+  max-width: none;
+  margin-inline: 0;
+}
+
+/* Builder canvas: previews the width the published page will use (no page padding,
+   the canvas has its own) */
+.page-width-preview {
+  width: 100%;
+  max-width: var(--layout-content-max-width);
+  margin-inline: var(--layout-content-margin-inline);
+}
+.page-width-preview.page-width-preview-full {
+  max-width: none;
+  margin-inline: 0;
+}
+
 .sidebar-backdrop {
   display: none;
 }
@@ -822,4 +1124,96 @@ input:-webkit-autofill:active {
   .layout-grid.responsive-collapse {
     grid-template-columns: 1fr !important;
   }
+}
+
+/* ─── Date picker (components/date-input.tsx) ─── */
+.date-picker-popover {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  z-index: 1000;
+  width: max-content;
+  min-width: 17rem;
+  padding: var(--space-3);
+  background: var(--surface);
+  color: var(--text);
+  border: var(--border-width-sm) solid var(--border);
+  border-radius: var(--radius-surface);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--font-size-sm);
+}
+
+.date-picker-header,
+.date-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.date-picker-header {
+  margin-bottom: var(--space-2);
+}
+
+.date-picker-footer {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: var(--border-width-sm) solid var(--border);
+}
+
+.date-picker-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: calc(var(--space-1) / 2);
+}
+
+.date-picker-months {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-1);
+}
+
+.date-picker-weekday {
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  padding: var(--space-1) 0;
+}
+
+.date-picker-cell {
+  min-width: 2.25em;
+  height: 2.25em;
+  padding: 0 var(--space-1);
+  border: var(--border-width-sm) solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.date-picker-months .date-picker-cell {
+  height: 2.5em;
+}
+
+.date-picker-cell:hover {
+  background: var(--surface-hover);
+}
+
+.date-picker-cell[data-outside="true"] {
+  color: var(--text-muted);
+}
+
+.date-picker-cell[data-today="true"] {
+  border-color: var(--accent);
+}
+
+.date-picker-cell[aria-selected="true"] {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.date-picker-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }

@@ -18,6 +18,7 @@ import { Plus, X, AlertTriangle, ChevronUp, ChevronDown, Edit2, Upload } from 'l
 import type { ErdTable, ErdColumn, FieldType } from '@config-platform/schema';
 import { DynamicIcon } from '../components/dynamic-icon';
 import { IconPicker } from '../components/icon-picker';
+import { useStatusNotify } from '../context/app-bar-context';
 import { ImportDataModal } from './ImportDataModal';
 
 export const EntityManager: React.FC = () => {
@@ -31,7 +32,8 @@ export const EntityManager: React.FC = () => {
   const [showImportModal, setShowImportModal] = useState(false);
   const [editingField, setEditingField] = useState<ErdColumn | null>(null);
   const [activeSideTab, setActiveSideTab] = useState<'none' | 'erd' | 'ddl'>('none');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Action errors go to the status bar (visible above open dialogs too)
+  const notify = useStatusNotify();
 
   // Form states
   const [newEntityLabel, setNewEntityLabel] = useState('');
@@ -47,6 +49,8 @@ export const EntityManager: React.FC = () => {
   const [fieldRequired, setFieldRequired] = useState(false);
   const [fieldSelectOptions, setFieldSelectOptions] = useState('Option 1, Option 2');
   const [fieldRefTarget, setFieldRefTarget] = useState('');
+  /** Date fields: a calendar date, a month, or a moment (date & time). */
+  const [fieldDateKind, setFieldDateKind] = useState<DateKind>('day');
 
   // Queries
   const { data: entities = [], isLoading, refetch } = useQuery<ErdTable[]>({
@@ -113,25 +117,23 @@ export const EntityManager: React.FC = () => {
       setNewEntityLabel('');
       setNewEntityName('');
       setNewEntityIcon('User');
-      setErrorMessage(null);
       queryClient.invalidateQueries({ queryKey: ['schema-entities', tenantId] });
       setSelectedEntityId(res.entityId || res.id);
     },
-    onError: (err: any) => setErrorMessage(err.message),
+    onError: (err: any) => notify("error", err.message),
   });
 
   const deleteEntityMut = useMutation({
     mutationFn: (e: ErdTable) => deleteEntity(tenantId, e.id, e.version),
     onSuccess: () => {
       setSelectedEntityId(null);
-      setErrorMessage(null);
       queryClient.invalidateQueries({ queryKey: ['schema-entities', tenantId] });
     },
     onError: (err: any) => {
       if (err instanceof ApiError && err.statusCode === 409) {
         refetch();
       }
-      setErrorMessage(err.message);
+      notify("error", err.message);
     },
   });
 
@@ -145,13 +147,12 @@ export const EntityManager: React.FC = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['schema-entities', tenantId] });
-      setErrorMessage(null);
     },
     onError: (err: any) => {
       if (err instanceof ApiError && err.statusCode === 409) {
         refetch();
       }
-      setErrorMessage(err.message);
+      notify("error", err.message);
     },
   });
 
@@ -167,13 +168,12 @@ export const EntityManager: React.FC = () => {
     onSuccess: () => {
       setShowEditEntityModal(false);
       queryClient.invalidateQueries({ queryKey: ['schema-entities', tenantId] });
-      setErrorMessage(null);
     },
     onError: (err: any) => {
       if (err instanceof ApiError && err.statusCode === 409) {
         refetch();
       }
-      setErrorMessage(err.message);
+      notify("error", err.message);
     },
   });
 
@@ -196,6 +196,8 @@ export const EntityManager: React.FC = () => {
           .map((v) => ({ label: v, value: v }));
       } else if (fieldType === 'reference') {
         config.targetEntityId = fieldRefTarget;
+      } else if (fieldType === 'date') {
+        config = dateKindToConfig(fieldDateKind, config);
       }
       return addField(tenantId, selectedEntity.id, {
         name: fieldName,
@@ -209,14 +211,13 @@ export const EntityManager: React.FC = () => {
     onSuccess: () => {
       setShowAddFieldModal(false);
       resetFieldForm();
-      setErrorMessage(null);
       queryClient.invalidateQueries({ queryKey: ['schema-entities', tenantId] });
     },
     onError: (err: any) => {
       if (err instanceof ApiError && err.statusCode === 409) {
         refetch();
       }
-      setErrorMessage(err.message);
+      notify("error", err.message);
     },
   });
 
@@ -232,6 +233,8 @@ export const EntityManager: React.FC = () => {
           .map((v) => ({ label: v, value: v }));
       } else if (fieldType === 'reference') {
         config.targetEntityId = fieldRefTarget;
+      } else if (fieldType === 'date') {
+        config = dateKindToConfig(fieldDateKind, config);
       }
       return updateField(tenantId, selectedEntity.id, editingField.id, {
         label: fieldLabel,
@@ -243,14 +246,13 @@ export const EntityManager: React.FC = () => {
     onSuccess: () => {
       setEditingField(null);
       resetFieldForm();
-      setErrorMessage(null);
       queryClient.invalidateQueries({ queryKey: ['schema-entities', tenantId] });
     },
     onError: (err: any) => {
       if (err instanceof ApiError && err.statusCode === 409) {
         refetch();
       }
-      setErrorMessage(err.message);
+      notify("error", err.message);
     },
   });
 
@@ -260,14 +262,13 @@ export const EntityManager: React.FC = () => {
       return deleteField(tenantId, selectedEntity.id, fieldId, selectedEntity.version);
     },
     onSuccess: () => {
-      setErrorMessage(null);
       queryClient.invalidateQueries({ queryKey: ['schema-entities', tenantId] });
     },
     onError: (err: any) => {
       if (err instanceof ApiError && err.statusCode === 409) {
         refetch();
       }
-      setErrorMessage(err.message);
+      notify("error", err.message);
     },
   });
 
@@ -279,7 +280,7 @@ export const EntityManager: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['schema-entities', tenantId] });
     },
-    onError: (err: any) => setErrorMessage(err.message),
+    onError: (err: any) => notify("error", err.message),
   });
 
   const handleMoveField = (fieldId: string, direction: 'up' | 'down') => {
@@ -307,6 +308,7 @@ export const EntityManager: React.FC = () => {
     setFieldRequired(false);
     setFieldSelectOptions('Option 1, Option 2');
     setFieldRefTarget('');
+    setFieldDateKind('day');
   };
 
   const openEditFieldModal = (f: ErdColumn) => {
@@ -325,6 +327,7 @@ export const EntityManager: React.FC = () => {
     } else {
       setFieldRefTarget('');
     }
+    setFieldDateKind(dateKindOf(f.config));
   };
 
   return (
@@ -364,16 +367,6 @@ export const EntityManager: React.FC = () => {
         </div>
       </div>
 
-      {errorMessage && (
-        <div className="props-error" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-            <AlertTriangle size={15} style={{ color: 'var(--danger)' }} />
-            <span>{errorMessage}</span>
-          </div>
-          <button type="button" onClick={() => setErrorMessage(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', display: 'inline-flex', alignItems: 'center' }}><X size={14} /></button>
-        </div>
-      )}
-
       {/* Main Layout: Left entity list, center entity fields, right schema panel */}
       <div style={{ display: 'grid', gridTemplateColumns: activeSideTab !== 'none' ? '240px 1fr 340px' : '240px 1fr', gap: '1.5rem', alignItems: 'start' }}>
         {/* Left: Entities list */}
@@ -400,7 +393,6 @@ export const EntityManager: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setSelectedEntityId(e.id);
-                  setErrorMessage(null);
                 }}
                 style={{
                   display: 'flex',
@@ -895,6 +887,10 @@ export const EntityManager: React.FC = () => {
               </div>
             )}
 
+            {fieldType === 'date' && (
+              <DateKindField id="add-field-date-kind" value={fieldDateKind} onChange={setFieldDateKind} />
+            )}
+
             {fieldType === 'reference' && (
               <div>
                 <label className="form-label" htmlFor="add-field-target" style={{ fontSize: 'var(--font-size-xs)' }}>Target Entity</label>
@@ -947,6 +943,15 @@ export const EntityManager: React.FC = () => {
                 onChange={(e) => setFieldName(e.target.value)}
               />
             </div>
+            {editingField.type === 'date' && (
+              <DateKindField
+                id="edit-field-date-kind"
+                value={fieldDateKind}
+                onChange={setFieldDateKind}
+                // DATE and TIMESTAMPTZ are different columns: only Date ⇄ Month can switch in place
+                lockedToDateTime={dateKindOf(editingField.config) === 'datetime'}
+              />
+            )}
             {editingField.type === 'select' && (
               <div>
                 <label className="form-label" htmlFor="edit-field-options" style={{ fontSize: 'var(--font-size-xs)' }}>Select Options (comma-separated)</label>
@@ -980,3 +985,51 @@ export const EntityManager: React.FC = () => {
     </div>
   );
 };
+
+type DateKind = 'day' | 'month' | 'datetime';
+
+function dateKindOf(config: any): DateKind {
+  if (config?.includeTime) return 'datetime';
+  return config?.granularity === 'month' ? 'month' : 'day';
+}
+
+function dateKindToConfig(kind: DateKind, config: Record<string, any>): Record<string, any> {
+  const { includeTime: _t, granularity: _g, ...rest } = config;
+  if (kind === 'datetime') return { ...rest, includeTime: true };
+  if (kind === 'month') return { ...rest, granularity: 'month' };
+  return rest;
+}
+
+/** Date, Month or Date & time for a date field. */
+function DateKindField({
+  id,
+  value,
+  onChange,
+  lockedToDateTime,
+}: {
+  id: string;
+  value: DateKind;
+  onChange: (kind: DateKind) => void;
+  /** Editing an existing field: date & time can't switch to/from a calendar date. */
+  lockedToDateTime?: boolean;
+}) {
+  const editing = lockedToDateTime !== undefined;
+  return (
+    <div>
+      <label className="form-label" htmlFor={id} style={{ fontSize: 'var(--font-size-xs)' }}>Stores</label>
+      <select id={id} className="form-select" value={value} onChange={(e) => onChange(e.target.value as DateKind)} disabled={lockedToDateTime}>
+        <option value="day">Date (a calendar day)</option>
+        <option value="month">Month (e.g. a monthly sheet)</option>
+        {(!editing || lockedToDateTime) && <option value="datetime">Date & time (a moment)</option>}
+      </select>
+      <p style={{ margin: 'var(--space-1) 0 0', fontSize: 'var(--font-size-xs)', color: 'var(--text-muted)' }}>
+        {value === 'datetime'
+          ? "Shown in each viewer's time zone."
+          : value === 'month'
+            ? 'Saved as the 1st of the month; people pick a month.'
+            : 'The same day for everyone, in any time zone.'}
+        {editing && !lockedToDateTime && ' Switching to Month moves existing values to the 1st of their month.'}
+      </p>
+    </div>
+  );
+}

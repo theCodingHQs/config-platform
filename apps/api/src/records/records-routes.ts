@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { recordsService } from './records-service.js';
 import { permissionService } from '../permissions/permission-service.js';
 import { entityCache } from './entity-cache.js';
+import { FILTER_ANY_OF_SEPARATOR } from './query-builder.js';
 import { csrfCheckHook } from '../auth/session-middleware.js';
 import { hasMinRole } from '../auth/auth-types.js';
 import { tenantLimitsService } from '../limits/tenant-limits.js';
@@ -84,6 +85,11 @@ export async function recordsRoutes(fastify: FastifyInstance) {
       if (fieldDef && hiddenFieldIds.has(fieldDef.id)) {
         return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: `Field '${aggField}' is not accessible` });
       }
+    }
+    // Filtering on a hidden field would reveal its values through the result
+    const rejectHiddenErr = rejectHiddenInQuery(query, resolved, hiddenFieldIds);
+    if (rejectHiddenErr) {
+      return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: rejectHiddenErr });
     }
 
     return await recordsService.getAggregate(tenantId, entityId, query);
@@ -197,10 +203,13 @@ function rejectHiddenInQuery(
   for (const key of Object.keys(query)) {
     const filterMatch = key.match(/^filter\[([^\]]+)\]/);
     if (filterMatch) {
-      const fieldName = filterMatch[1];
-      const fieldDef = resolved.fieldByName.get(fieldName) || resolved.fieldById.get(fieldName);
-      if (fieldDef && hiddenFieldIds.has(fieldDef.id)) {
-        return `Field '${fieldName}' is not accessible`;
+      // An any-of key (filter[a,b][op]) names several fields; each must be accessible
+      for (const rawName of filterMatch[1].split(FILTER_ANY_OF_SEPARATOR)) {
+        const fieldName = rawName.trim();
+        const fieldDef = resolved.fieldByName.get(fieldName) || resolved.fieldById.get(fieldName);
+        if (fieldDef && hiddenFieldIds.has(fieldDef.id)) {
+          return `Field '${fieldName}' is not accessible`;
+        }
       }
     }
     if (key === 'sort') {

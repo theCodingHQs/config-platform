@@ -93,7 +93,7 @@ export const ThemeProvider: React.FC<{
 
       applyWorkspaceThemeToDom(wsTheme);
 
-      // Dispatch event for third-party libs like Chart.js
+      // Dispatch event so charts (ECharts) re-read the theme tokens
       window.dispatchEvent(
         new CustomEvent('theme-changed', {
           detail: { theme: currentTheme, resolvedTheme: resolved, workspaceTheme: wsTheme },

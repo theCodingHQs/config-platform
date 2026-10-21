@@ -32,6 +32,7 @@ import {
   type ExportTemplateItem,
 } from "../api/client";
 import { useMetadata } from "../context/metadata-context";
+import { useStatusNotify } from "../context/app-bar-context";
 import {
   buildGridStarterTemplate,
   buildExecutiveReportTemplate,
@@ -53,8 +54,8 @@ export function ExportTemplatesManager() {
   );
   const [isCreating, setIsCreating] = useState(false);
   const [searchFilter, setSearchFilter] = useState("");
-  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  // Action results go to the status bar instead of banners above the panels
+  const notify = useStatusNotify();
 
   // New template form state
   const [newTemplateName, setNewTemplateName] = useState("");
@@ -234,16 +235,8 @@ export function ExportTemplatesManager() {
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
-  const showSuccess = (msg: string) => {
-    setActionSuccess(msg);
-    setActionError(null);
-    setTimeout(() => setActionSuccess(null), 3500);
-  };
-
-  const showError = (msg: string) => {
-    setActionError(msg);
-    setActionSuccess(null);
-  };
+  const showSuccess = (msg: string) => notify("success", msg);
+  const showError = (msg: string) => notify("error", msg);
 
   const handleQuickCreateExecutiveTemplate = (targetEntityId?: string) => {
     const ent = entities.find((e) => e.id === targetEntityId) || entities[0];
@@ -293,7 +286,7 @@ export function ExportTemplatesManager() {
       });
       // Browser download trigger (no blob in browser memory)
       window.location.href = downloadUrl;
-      showSuccess(`Downloading ${format.toUpperCase()} export...`);
+      notify("info", `Downloading ${format.toUpperCase()} export...`);
     } catch (err: any) {
       showError(err.message || "Download failed");
     }
@@ -386,9 +379,7 @@ export function ExportTemplatesManager() {
   );
 
   return (
-    <div
-      style={{ maxWidth: "1400px", margin: "0 auto", padding: "2rem 1.5rem" }}
-    >
+    <div>
       {/* Header */}
       <div
         style={{
@@ -437,59 +428,6 @@ export function ExportTemplatesManager() {
           <Plus size={16} /> New Template
         </button>
       </div>
-
-      {/* Notifications */}
-      {actionError && (
-        <div
-          style={{
-            backgroundColor: "var(--danger-subtle)",
-            border: "var(--border-width) solid var(--danger)",
-            borderRadius: "var(--radius-surface)",
-            padding: "var(--space-3) var(--space-4)",
-            marginBottom: "1rem",
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-2)",
-            color: "var(--danger)",
-          }}
-        >
-          <AlertCircle size={16} />
-          <span style={{ fontSize: "var(--font-size-sm)" }}>{actionError}</span>
-          <button
-            type="button"
-            onClick={() => setActionError(null)}
-            style={{
-              marginLeft: "auto",
-              background: "none",
-              border: "none",
-              color: "inherit",
-              cursor: "pointer",
-            }}
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
-      {actionSuccess && (
-        <div
-          style={{
-            backgroundColor: "var(--success-subtle)",
-            border: "var(--border-width) solid var(--success)",
-            borderRadius: "var(--radius-surface)",
-            padding: "var(--space-3) var(--space-4)",
-            marginBottom: "1rem",
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-2)",
-            color: "var(--success)",
-          }}
-        >
-          <Check size={16} />
-          <span style={{ fontSize: "var(--font-size-sm)" }}>
-            {actionSuccess}
-          </span>
-        </div>
-      )}
 
       {/* Main Two-Panel Layout */}
       <div

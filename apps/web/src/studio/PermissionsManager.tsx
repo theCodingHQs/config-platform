@@ -29,6 +29,9 @@ import {
   type FieldPermissionRecord,
   type MemberInfo,
 } from "../api/client";
+import { useStatusNotify } from "../context/app-bar-context";
+import { useDateDisplayPrefs } from "../context/date-display-context";
+import { formatPlainDate, plainDateInTimeZone } from "@config-platform/schema";
 import { useMetadata } from "../context/metadata-context";
 
 const ROLES = ["owner", "admin", "builder", "editor", "viewer"] as const;
@@ -46,8 +49,9 @@ export function PermissionsManager() {
   const [generatedInviteToken, setGeneratedInviteToken] = useState<
     string | null
   >(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  // Action results go to the status bar instead of banners above the tabs
+  const notify = useStatusNotify();
+  const datePrefs = useDateDisplayPrefs();
 
   // Entities query
   const { data: entities = [], isLoading: entitiesLoading } = useQuery<
@@ -151,14 +155,13 @@ export function PermissionsManager() {
     },
     onSuccess: () => {
       refetchEntityPerms();
-      setActionSuccess("Entity permission updated");
-      setTimeout(() => setActionSuccess(null), 3000);
+      notify("success", "Entity permission updated");
     },
     onError: (err: any, _vars, ctx: any) => {
       if (ctx?.previous) {
         queryClient.setQueryData(["entity-permissions", selectedEntityId], ctx.previous);
       }
-      setActionError(err.message || "Failed to update entity permission");
+      notify("error", err.message || "Failed to update entity permission");
     },
   });
 
@@ -203,14 +206,13 @@ export function PermissionsManager() {
     },
     onSuccess: () => {
       refetchFieldPerms();
-      setActionSuccess("Field permission updated");
-      setTimeout(() => setActionSuccess(null), 3000);
+      notify("success", "Field permission updated");
     },
     onError: (err: any, _vars, ctx: any) => {
       if (ctx?.previous) {
         queryClient.setQueryData(["field-permissions", selectedEntityId], ctx.previous);
       }
-      setActionError(err.message || "Failed to update field permission");
+      notify("error", err.message || "Failed to update field permission");
     },
   });
 
@@ -224,11 +226,10 @@ export function PermissionsManager() {
       setGeneratedInviteToken(token);
       setInviteEmail("");
       refetchMembers();
-      setActionSuccess("Invite generated successfully");
-      setTimeout(() => setActionSuccess(null), 4000);
+      notify("success", "Invite generated successfully");
     },
     onError: (err: any) => {
-      setActionError(err.message || "Failed to send invite");
+      notify("error", err.message || "Failed to send invite");
     },
   });
 
@@ -239,11 +240,10 @@ export function PermissionsManager() {
     },
     onSuccess: () => {
       refetchMembers();
-      setActionSuccess("Member role updated");
-      setTimeout(() => setActionSuccess(null), 3000);
+      notify("success", "Member role updated");
     },
     onError: (err: any) => {
-      setActionError(err.message || "Failed to update member role");
+      notify("error", err.message || "Failed to update member role");
     },
   });
 
@@ -254,11 +254,10 @@ export function PermissionsManager() {
     },
     onSuccess: () => {
       refetchMembers();
-      setActionSuccess("Member removed");
-      setTimeout(() => setActionSuccess(null), 3000);
+      notify("success", "Member removed");
     },
     onError: (err: any) => {
-      setActionError(err.message || "Failed to remove member");
+      notify("error", err.message || "Failed to remove member");
     },
   });
 
@@ -306,9 +305,7 @@ export function PermissionsManager() {
   };
 
   return (
-    <div
-      style={{ maxWidth: "1200px", margin: "0 auto", padding: "2rem 1.5rem" }}
-    >
+    <div>
       {/* Header */}
       <div
         style={{
@@ -383,59 +380,6 @@ export function PermissionsManager() {
           </button>
         </div>
       </div>
-
-      {/* Notifications */}
-      {actionError && (
-        <div
-          style={{
-            backgroundColor: "var(--danger-subtle)",
-            border: "var(--border-width) solid var(--danger)",
-            borderRadius: "var(--radius-surface)",
-            padding: "var(--space-3) var(--space-4)",
-            marginBottom: "var(--space-4)",
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-2)",
-            color: "var(--danger)",
-          }}
-        >
-          <AlertCircle size={16} />
-          <span style={{ fontSize: "var(--font-size-sm)" }}>{actionError}</span>
-          <button
-            type="button"
-            onClick={() => setActionError(null)}
-            style={{
-              marginLeft: "auto",
-              background: "none",
-              border: "none",
-              color: "inherit",
-              cursor: "pointer",
-            }}
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
-      {actionSuccess && (
-        <div
-          style={{
-            backgroundColor: "var(--success-subtle)",
-            border: "var(--border-width) solid var(--success)",
-            borderRadius: "var(--radius-surface)",
-            padding: "var(--space-3) var(--space-4)",
-            marginBottom: "var(--space-4)",
-            display: "flex",
-            alignItems: "center",
-            gap: "var(--space-2)",
-            color: "var(--success)",
-          }}
-        >
-          <Check size={16} />
-          <span style={{ fontSize: "var(--font-size-sm)" }}>
-            {actionSuccess}
-          </span>
-        </div>
-      )}
 
       {/* TAB 1: Entity & Field Permissions */}
       {activeTab === "entities" && (
@@ -1203,7 +1147,7 @@ export function PermissionsManager() {
                           fontSize: "var(--font-size-sm)",
                         }}
                       >
-                        {new Date(member.memberSince).toLocaleDateString()}
+                        {formatPlainDate(plainDateInTimeZone(member.memberSince, datePrefs.timeZone), datePrefs)}
                       </td>
                       <td
                         style={{ padding: "0.875rem 1rem", textAlign: "right" }}

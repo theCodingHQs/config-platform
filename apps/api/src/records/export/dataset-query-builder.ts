@@ -16,6 +16,9 @@ import { defaultStorageAdapter } from '../../db/storage-adapter.js';
 import { pool } from '../../db/pool.js';
 import type { TenantRole } from '../../auth/auth-types.js';
 
+/** Postgres type OIDs node-postgres returns as strings: INT8 (bigint, COUNT) and NUMERIC. */
+const PG_STRING_NUMBER_TYPES = new Set([20, 1700]);
+
 export class GridHydrationForbiddenError extends Error {
   public statusCode = 403;
   constructor(message: string) {
@@ -834,9 +837,15 @@ export class DatasetQueryBuilder {
     const sortItems: string[] = [];
     for (const s of dataset.sort || []) {
       const dir = s.direction?.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
-      // Sort could be an aggregate ID or a field
+      // Sort could be an aggregate ID, a grouped column (sorted by its output alias so date
+      // buckets order correctly), or a field
+      const groupedCol = isAggregateQuery
+        ? selectCols.find((col) => col.alias.startsWith('g_') && col.fieldPath === s.fieldPath)
+        : undefined;
       if (aggregateAliasMap.has(s.fieldPath)) {
         sortItems.push(`"${s.fieldPath}" ${dir}`);
+      } else if (groupedCol) {
+        sortItems.push(`"${groupedCol.alias}" ${dir}`);
       } else {
         const res = this.resolveFieldPath(s.fieldPath, baseEntity, joinsMeta, aliasToEntity);
         checkFieldForbidden(res);
@@ -950,6 +959,23 @@ export class DatasetQueryBuilder {
 
       const dataRes = await tx.client.query(dataSql, dataParams);
       const rawRows = dataRes.rows;
+
+      // node-postgres returns NUMERIC and BIGINT (incl. COUNT/SUM results) as strings. Exports
+      // must write numbers, otherwise Excel stores "26" as text and SUM/IF formulas skip it.
+      const numericColumns = (dataRes.fields || [])
+        .filter((f: { dataTypeID: number }) => PG_STRING_NUMBER_TYPES.has(f.dataTypeID))
+        .map((f: { name: string }) => f.name);
+      if (numericColumns.length > 0) {
+        for (const row of rawRows) {
+          for (const name of numericColumns) {
+            const v = row[name];
+            if (typeof v === 'string' && v.trim() !== '') {
+              const n = Number(v);
+              if (Number.isFinite(n)) row[name] = n;
+            }
+          }
+        }
+      }
 
       // 3. Process rows: map friendly identifiers onto rowObj and evaluate computed expressions
       const processedRows = rawRows.map((row) => {

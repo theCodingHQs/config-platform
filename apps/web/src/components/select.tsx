@@ -43,7 +43,6 @@ export function SelectComponent({
     <div
       className="form-group"
       style={{
-        marginBottom: 'var(--spacing-3)',
         flex: flex !== undefined ? flex : undefined,
         width: widthValue,
         minWidth: minWidth !== undefined ? (typeof minWidth === 'number' ? `${minWidth}px` : minWidth) : undefined,

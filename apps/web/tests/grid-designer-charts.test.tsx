@@ -232,6 +232,84 @@ describe('Phase B: Grid Designer Charts UI', () => {
     expect(titleInput).toBeInTheDocument();
   });
 
+  it('draws the hydrated (shifted) charts in preview and the template charts in design', async () => {
+    // Regression: preview showed hydrated cells but the design charts, whose ranges point at
+    // template rows; once a region expanded, a chart read a data row (e.g. row 23).
+    const apiClient = await import('../src/api/client');
+    const stored: any = await apiClient.getExportTemplate('tpl_1');
+    const previewDraft = structuredClone(stored.draft);
+    previewDraft.charts = [{
+      ...stored.draft.charts[0],
+      id: 'chart_preview_shifted',
+      source: { ...stored.draft.charts[0].source, categoryRange: 'A9:A14', series: [{ name: 'Revenue', range: 'B9:B14' }] },
+      anchor: { ...stored.draft.charts[0].anchor, startRow: 16, endRow: 30 },
+    }];
+    vi.mocked(apiClient.fetchExportTemplatePreviewData).mockResolvedValueOnce({ draft: previewDraft } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/templates/tpl_1/grid']}>
+        <Routes>
+          <Route path="/templates/:id/grid" element={<GridTemplateDesigner />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('chart-overlay-chart_existing')).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole('button', { name: /preview with data/i }));
+    expect(await screen.findByTestId('chart-overlay-chart_preview_shifted')).toBeInTheDocument();
+    expect(screen.queryByTestId('chart-overlay-chart_existing')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /design view/i }));
+    expect(await screen.findByTestId('chart-overlay-chart_existing')).toBeInTheDocument();
+    expect(screen.queryByTestId('chart-overlay-chart_preview_shifted')).toBeNull();
+  });
+
+  it('never saves hydrated preview data as the template (charts would keep unshifted ranges)', async () => {
+    // Regression: an edit while previewing marked the draft dirty, and Download Preview then
+    // saved the on-screen live data (expanded rows) as the template with the old chart ranges.
+    const apiClient = await import('../src/api/client');
+    const stored: any = await apiClient.getExportTemplate('tpl_1');
+    const previewDraft = structuredClone(stored.draft);
+    previewDraft.sheets[0].cells['1:0'] = { value: 'LIVE PREVIEW ROW' };
+    vi.mocked(apiClient.fetchExportTemplatePreviewData).mockResolvedValueOnce({ draft: previewDraft } as any);
+    mockUpdateExportTemplate.mockClear();
+    const urlApi = window.URL as any;
+    urlApi.createObjectURL ??= () => 'blob:preview';
+    urlApi.revokeObjectURL ??= () => {};
+    // jsdom can't follow the download link the button clicks
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    render(
+      <MemoryRouter initialEntries={['/templates/tpl_1/grid']}>
+        <Routes>
+          <Route path="/templates/:id/grid" element={<GridTemplateDesigner />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /preview with data/i }));
+    await screen.findByRole('button', { name: /design view/i });
+
+    // A real template edit made while previewing (removing a chart)...
+    fireEvent.click(await screen.findByTestId('charts-tab-btn'));
+    fireEvent.click(await screen.findByTestId('panel-delete-chart-chart_existing'));
+    await waitFor(() => expect(screen.queryByTestId('chart-card-chart_existing')).toBeNull());
+
+    // ...then Download Preview saves the pending change first
+    fireEvent.click(screen.getByRole('button', { name: /download preview/i }));
+    await waitFor(() => expect(apiClient.downloadExportTemplateRenderPreview).toHaveBeenCalledWith('tpl_1', true));
+
+    // The saved draft is the stored design (plus the chart removal), never the preview data
+    for (const call of mockUpdateExportTemplate.mock.calls) {
+      const saved = call[1].draft;
+      expect(saved.sheets[0].cells['1:0']?.value).toBe('Jan');
+      expect(JSON.stringify(saved)).not.toContain('LIVE PREVIEW ROW');
+      expect(saved.charts).toEqual([]);
+    }
+    clickSpy.mockRestore();
+  });
+
   it('deletes an existing chart when clicking Delete in the Charts panel', async () => {
     render(
       <MemoryRouter initialEntries={['/templates/tpl_1/grid']}>

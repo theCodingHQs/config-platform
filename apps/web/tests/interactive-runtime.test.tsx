@@ -414,6 +414,56 @@ describe('Part B: Interactive Pages - Runtime & Actions', () => {
       });
     });
 
+    it('resolves operator filters ({ contains: "{{ state.x }}" }) and drops dynamic values that are empty', async () => {
+      (apiClient.fetchRecords as any).mockResolvedValue({ data: [], nextCursor: null });
+
+      const page: PageDefinition = {
+        schemaVersion: 2,
+        id: 'p_operator_filter',
+        version: 1,
+        route: '/operator-filter',
+        state: { month: '2026-10-01', search: '' },
+        dataSources: [
+          {
+            id: 'ds_sheets',
+            entityId: 't_sheets',
+            limit: 10,
+            filter: { month: '{{ state.month }}', machine_name: { contains: '{{ state.search }}' }, status: 'open' },
+          },
+        ],
+        root: { id: 'root', type: 'stack', props: { direction: 'vertical' }, children: [] },
+      };
+
+      function Consumer() {
+        const runtime = usePageRuntime();
+        return <button data-testid="search" onClick={() => runtime?.setKey('search', 'lathe')}>Search</button>;
+      }
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <PageRuntimeProvider tenantId={tenantId} page={page}>
+            <Consumer />
+          </PageRuntimeProvider>
+        </QueryClientProvider>
+      );
+
+      // An empty search box doesn't filter (the literal "{{ ... }}" was sent before)
+      expect(apiClient.fetchRecords).toHaveBeenCalledWith(
+        tenantId,
+        't_sheets',
+        expect.objectContaining({ filter: { month: '2026-10-01', status: 'open' } })
+      );
+
+      await userEvent.setup().click(screen.getByTestId('search'));
+      await waitFor(() => {
+        expect(apiClient.fetchRecords).toHaveBeenCalledWith(
+          tenantId,
+          't_sheets',
+          expect.objectContaining({ filter: { month: '2026-10-01', machine_name: { contains: 'lathe' }, status: 'open' } })
+        );
+      });
+    });
+
     it('opens and closes a modal via button click actions on a rendered page', async () => {
       const page: PageDefinition = {
         id: 'p_modal_test',

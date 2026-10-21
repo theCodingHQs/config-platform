@@ -22,6 +22,17 @@ import {
 } from "../renderer/action-runner";
 import { useOptionalMetadata } from "./metadata-context";
 
+/**
+ * Resolves a data source filter value. A dynamic value ("{{ state.search }}") that resolves
+ * to nothing means "not filtering on this" (e.g. an empty search box), so it is dropped
+ * instead of being sent; literal values are kept as written.
+ */
+export function resolveDynamicFilterValue(value: string, scope: ExpressionScope): string | undefined {
+  if (!value.includes("{{")) return value;
+  const resolved = resolveTemplate(value, scope);
+  return resolved === undefined || resolved === null || String(resolved).trim() === "" ? undefined : resolved;
+}
+
 export interface ToastState {
   message: string;
   variant: "info" | "success" | "warning" | "error";
@@ -29,6 +40,10 @@ export interface ToastState {
 }
 
 export interface DataSourceState {
+  /** Entity the source reads, and its filter with {{ }} values resolved (as sent to the API). */
+  entityId: string;
+  filter?: Record<string, any>;
+  /** The loaded page of records (see pageSize); use server aggregates for totals. */
   data: any[];
   total?: number;
   loading: boolean;
@@ -323,7 +338,16 @@ export function PageRuntimeProvider({
         resolvedFilter = {};
         for (const [k, v] of Object.entries(ds.filter)) {
           if (typeof v === "string") {
-            resolvedFilter[k] = resolveTemplate(v, baseScope);
+            const resolved = resolveDynamicFilterValue(v, baseScope);
+            if (resolved !== undefined) resolvedFilter[k] = resolved;
+          } else if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+            // Operator filters ({ contains: "{{ state.search }}" }) resolve each operand
+            const ops: Record<string, any> = {};
+            for (const [op, operand] of Object.entries(v)) {
+              const resolved = typeof operand === "string" ? resolveDynamicFilterValue(operand, baseScope) : operand;
+              if (resolved !== undefined) ops[op] = resolved;
+            }
+            if (Object.keys(ops).length > 0) resolvedFilter[k] = ops;
           } else {
             resolvedFilter[k] = v;
           }
@@ -484,6 +508,7 @@ export function PageRuntimeProvider({
   // Combined dataSources map for consumers
   const dataSources = useMemo<Record<string, DataSourceState>>(() => {
     const res: Record<string, DataSourceState> = {};
+    const filtersById = new Map(evaluatedDataSources.map((ds) => [ds.id, ds.filter]));
     for (const ds of dataSourcesList) {
       const info = dsData[ds.id] || {
         data: [],
@@ -497,6 +522,8 @@ export function PageRuntimeProvider({
       const hasMore = Boolean(info.nextCursor);
 
       res[ds.id] = {
+        entityId: ds.entityId,
+        filter: filtersById.get(ds.id),
         data: info.data,
         total: info.total,
         loading: info.loading,
@@ -514,6 +541,7 @@ export function PageRuntimeProvider({
     return res;
   }, [
     dataSourcesList,
+    evaluatedDataSources,
     dsData,
     dsPagination,
     refetchDataSource,

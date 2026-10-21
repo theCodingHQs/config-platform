@@ -6,10 +6,27 @@ import {
   type ThemeDensityOverride,
   type WorkspaceThemeConfig,
   validateAccentContrast,
+  ThemeTextSizeOverrideSchema,
+  TEXT_SIZE_PRESETS,
+  TEXT_SIZE_MIN,
+  TEXT_SIZE_MAX,
+  getDensityDefaultTextSize,
+  type ThemeLayoutOverride,
 } from "@config-platform/schema";
+import { ThemeLayoutSettings } from "./ThemeLayoutSettings";
+import {
+  ThemeSettingsTabs,
+  themePanelId,
+  themeTabId,
+  type ThemeTabId,
+} from "./ThemeSettingsTabs";
+import { ThemeStudioPreview, PREVIEW_HINT } from "./ThemeStudioPreview";
+
+const EMPTY_LAYOUT: ThemeLayoutOverride = {};
 import { useTheme } from "../context/theme-context";
 import { useAuth } from "../context/auth-context";
 import { updateWorkspaceTheme } from "../api/client";
+import { useStatusNotify } from "../context/app-bar-context";
 import {
   Palette,
   RotateCcw,
@@ -19,8 +36,6 @@ import {
   Lock,
   Sun,
   Moon,
-  TrendingUp,
-  Layers,
   Tv,
 } from "lucide-react";
 
@@ -42,6 +57,7 @@ const DENSITY_OPTIONS: Array<{
   label: string;
   factor: string;
 }> = [
+  { id: "dense", label: "Dense", factor: "0.6x spacing" },
   { id: "compact", label: "Compact", factor: "0.8x spacing" },
   { id: "normal", label: "Normal", factor: "1.0x spacing (Default)" },
   { id: "comfortable", label: "Comfortable", factor: "1.25x spacing" },
@@ -71,10 +87,27 @@ export function ThemeStudio() {
   const [density, setDensity] = useState<ThemeDensityOverride | undefined>(
     workspaceTheme.overrides?.density,
   );
+  const [textSize, setTextSize] = useState<number | undefined>(
+    workspaceTheme.overrides?.textSize,
+  );
+  // Raw text of the custom size field, so intermediate keystrokes ("1" on the way to "16") are allowed
+  const [textSizeInput, setTextSizeInput] = useState<string>(
+    String(
+      workspaceTheme.overrides?.textSize ??
+        getDensityDefaultTextSize(workspaceTheme.overrides?.density),
+    ),
+  );
+
+  const [layout, setLayout] = useState<ThemeLayoutOverride>(
+    workspaceTheme.overrides?.layout ?? EMPTY_LAYOUT,
+  );
+  const [layoutValid, setLayoutValid] = useState(true);
+  const [activeTab, setActiveTab] = useState<ThemeTabId>("colors");
 
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  // Save feedback goes to the status bar, so nothing appears above the settings
+  const notify = useStatusNotify();
   const [modalPreviewOpen, setModalPreviewOpen] = useState(false);
 
   // Sync draft state if workspaceTheme loads or changes from server
@@ -83,7 +116,33 @@ export function ThemeStudio() {
     setAccentColor(workspaceTheme.overrides?.accent || "");
     setRadius(workspaceTheme.overrides?.radius);
     setDensity(workspaceTheme.overrides?.density);
+    setTextSize(workspaceTheme.overrides?.textSize);
+    // Shared empty constant (not a new {}) so this sync can't loop with the live preview
+    setLayout(workspaceTheme.overrides?.layout ?? EMPTY_LAYOUT);
   }, [workspaceTheme]);
+
+  // Text size the density recommends; used whenever there is no explicit override
+  const autoTextSize = getDensityDefaultTextSize(density);
+  const effectiveTextSize = textSize ?? autoTextSize;
+
+  // Keep the custom field showing the effective size when it follows density
+  useEffect(() => {
+    setTextSizeInput(String(textSize ?? autoTextSize));
+  }, [textSize, autoTextSize]);
+
+  const applyTextSize = (value: number | undefined) => setTextSize(value);
+
+  // Choosing a density resets text size to that density's default; a size picked afterwards still wins
+  const applyDensity = (value: ThemeDensityOverride | undefined) => {
+    setDensity(value);
+    setTextSize(undefined);
+  };
+
+  const textSizeError = useMemo(() => {
+    if (textSizeInput.trim() === "") return "Enter a text size";
+    const parsed = ThemeTextSizeOverrideSchema.safeParse(Number(textSizeInput));
+    return parsed.success ? null : (parsed.error.issues[0]?.message ?? "Invalid text size");
+  }, [textSizeInput]);
 
   const isLocked = themeEditing === "locked";
   const canEdit =
@@ -100,11 +159,13 @@ export function ThemeStudio() {
     }
     if (radius) overrides.radius = radius;
     if (density) overrides.density = density;
+    if (textSize !== undefined) overrides.textSize = textSize;
+    if (Object.keys(layout).length > 0) overrides.layout = layout;
     return {
       presetId: selectedPreset,
       overrides,
     };
-  }, [selectedPreset, accentColor, radius, density]);
+  }, [selectedPreset, accentColor, radius, density, textSize, layout]);
 
   // Contrast validation for custom accent
   const contrastInfo = useMemo(() => {
@@ -123,33 +184,32 @@ export function ThemeStudio() {
     setAccentColor("");
     setRadius(undefined);
     setDensity(undefined);
+    applyTextSize(undefined);
+    setLayout(EMPTY_LAYOUT);
     setSaveSuccess(false);
-    setSaveError(null);
   };
 
   const handleSave = async () => {
     if (!canEdit) return;
     try {
       setSaving(true);
-      setSaveError(null);
       setSaveSuccess(false);
 
       const result = await updateWorkspaceTheme(draftConfig);
       if (result.success) {
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 4000);
+        notify("success", "Workspace theme saved and logged to the audit trail.");
       }
     } catch (err: any) {
-      setSaveError(err.message || "Failed to save workspace theme");
+      notify("error", err.message || "Failed to save workspace theme");
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div
-      style={{ maxWidth: "1400px", margin: "0 auto", padding: "2rem 1.5rem" }}
-    >
+    <div>
       {/* Top Header */}
       <div
         style={{
@@ -201,7 +261,7 @@ export function ThemeStudio() {
             }}
           >
             Choose an immutable design preset and tune workspace overrides for
-            accent color, radius, and density.
+            accent color, radius, density, text size, and layout.
           </p>
         </div>
 
@@ -227,7 +287,7 @@ export function ThemeStudio() {
             type="button"
             className="btn btn-primary"
             onClick={handleSave}
-            disabled={saving || !canEdit}
+            disabled={saving || !canEdit || !!textSizeError || !layoutValid}
             style={{
               display: "inline-flex",
               alignItems: "center",
@@ -317,81 +377,42 @@ export function ThemeStudio() {
         </div>
       )}
 
-      {/* Save Success / Error feedback */}
-      {saveSuccess && (
-        <div
-          role="status"
-          style={{
-            padding: "0.75rem 1rem",
-            marginBottom: "1.5rem",
-            borderRadius: "var(--radius-surface)",
-            backgroundColor: "var(--success-subtle)",
-            border: "1px solid var(--success)",
-            color: "var(--text)",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            fontSize: "var(--font-size-sm)",
-          }}
-        >
-          <Check size={16} color="var(--success)" />
-          <span>
-            Workspace theme successfully saved and logged to audit trail.
-          </span>
-        </div>
-      )}
+      {/* Main Grid: Settings tabs (left half) + Live Preview (right half) */}
+      <div className="theme-studio-grid">
+        {/* Left half: settings, grouped in tabs. Hidden panels stay mounted so typed values
+            and their validation survive switching tabs. */}
+        <section className="card" style={{ padding: 0, overflow: "hidden" }}>
+          <ThemeSettingsTabs
+            active={activeTab}
+            onChange={setActiveTab}
+            invalid={{ spacing: !!textSizeError, layout: !layoutValid }}
+          />
 
-      {saveError && (
-        <div
-          role="alert"
-          style={{
-            padding: "0.75rem 1rem",
-            marginBottom: "1.5rem",
-            borderRadius: "var(--radius-surface)",
-            backgroundColor: "var(--danger-subtle)",
-            border: "1px solid var(--danger)",
-            color: "var(--text)",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            fontSize: "var(--font-size-sm)",
-          }}
-        >
-          <AlertTriangle size={16} color="var(--danger)" />
-          <span>{saveError}</span>
-        </div>
-      )}
-
-      {/* Main Grid: Controls (Left) + Live Preview (Right) */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(350px, 1fr) minmax(380px, 1.2fr)",
-          gap: "2rem",
-          alignItems: "start",
-        }}
-      >
-        {/* Left Column: Preset Gallery & Overrides */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
-          {/* Preset Gallery */}
-          <section className="card" style={{ padding: "1.5rem" }}>
+          {/* Colors: preset palette + accent */}
+          <div
+            role="tabpanel"
+            id={themePanelId("colors")}
+            aria-labelledby={themeTabId("colors")}
+            hidden={activeTab !== "colors"}
+            className="theme-tab-panel"
+          >
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: "0.5rem",
-                marginBottom: "1rem",
+                marginBottom: "0.25rem",
               }}
             >
               <Palette size={18} color="var(--accent)" />
               <h2
                 style={{
-                  fontSize: "var(--font-size-lg)",
+                  fontSize: "var(--font-size-md)",
                   fontWeight: 600,
                   margin: 0,
                 }}
               >
-                1. Select Preset Palette
+                Preset Palette
               </h2>
             </div>
             <p
@@ -529,29 +550,13 @@ export function ThemeStudio() {
                 },
               )}
             </div>
-          </section>
 
-          {/* Overrides: Accent, Radius, Density */}
-          <section className="card" style={{ padding: "1.5rem" }}>
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.5rem",
-                marginBottom: "1.25rem",
+                borderTop: "var(--border-width-sm) solid var(--border)",
+                margin: "1.5rem 0",
               }}
-            >
-              <Layers size={18} color="var(--accent)" />
-              <h2
-                style={{
-                  fontSize: "var(--font-size-lg)",
-                  fontWeight: 600,
-                  margin: 0,
-                }}
-              >
-                2. Workspace Overrides
-              </h2>
-            </div>
+            />
 
             {/* Accent Color Override */}
             <div style={{ marginBottom: "1.75rem" }}>
@@ -690,8 +695,18 @@ export function ThemeStudio() {
               )}
             </div>
 
+          </div>
+
+          {/* Shape: corner radius */}
+          <div
+            role="tabpanel"
+            id={themePanelId("shape")}
+            aria-labelledby={themeTabId("shape")}
+            hidden={activeTab !== "shape"}
+            className="theme-tab-panel"
+          >
             {/* Corner Radius Override */}
-            <div style={{ marginBottom: "1.75rem" }}>
+            <div>
               <div
                 style={{
                   display: "flex",
@@ -729,7 +744,7 @@ export function ThemeStudio() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
                   gap: "0.5rem",
                 }}
               >
@@ -799,6 +814,16 @@ export function ThemeStudio() {
               </div>
             </div>
 
+          </div>
+
+          {/* Spacing & Text: density + text size */}
+          <div
+            role="tabpanel"
+            id={themePanelId("spacing")}
+            aria-labelledby={themeTabId("spacing")}
+            hidden={activeTab !== "spacing"}
+            className="theme-tab-panel"
+          >
             {/* Density Override */}
             <div>
               <div
@@ -823,7 +848,7 @@ export function ThemeStudio() {
                     type="button"
                     className="btn btn-ghost"
                     disabled={!canEdit}
-                    onClick={() => setDensity(undefined)}
+                    onClick={() => applyDensity(undefined)}
                     style={{
                       fontSize: "var(--font-size-xs)",
                       padding: "0.15rem 0.5rem",
@@ -838,7 +863,7 @@ export function ThemeStudio() {
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(3, 1fr)",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
                   gap: "0.5rem",
                 }}
               >
@@ -852,7 +877,7 @@ export function ThemeStudio() {
                       key={opt.id}
                       type="button"
                       disabled={!canEdit}
-                      onClick={() => setDensity(opt.id)}
+                      onClick={() => applyDensity(opt.id)}
                       className={`btn ${isSelected ? "btn-secondary active" : "btn-ghost"}`}
                       style={{
                         padding: "var(--spacing-2)",
@@ -899,7 +924,7 @@ export function ThemeStudio() {
                             color: "var(--text-muted)",
                           }}
                         >
-                          {opt.factor}
+                          {opt.factor} · {getDensityDefaultTextSize(opt.id)}px text
                         </span>
                       )}
                     </button>
@@ -907,8 +932,169 @@ export function ThemeStudio() {
                 })}
               </div>
             </div>
-          </section>
-        </div>
+
+            {/* Text Size Override */}
+            <div style={{ marginTop: "1.75rem" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "0.5rem",
+                }}
+              >
+                <label
+                  htmlFor="theme-text-size"
+                  style={{
+                    fontSize: "var(--font-size-sm)",
+                    fontWeight: 600,
+                    color: "var(--text)",
+                  }}
+                >
+                  Text Size
+                </label>
+                {textSize !== undefined && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={!canEdit}
+                    onClick={() => applyTextSize(undefined)}
+                    style={{
+                      fontSize: "var(--font-size-xs)",
+                      padding: "0.15rem 0.5rem",
+                      color: "var(--text-muted)",
+                    }}
+                  >
+                    Clear override
+                  </button>
+                )}
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                  gap: "0.5rem",
+                }}
+              >
+                {TEXT_SIZE_PRESETS.map((opt) => {
+                  const isSelected = textSize !== undefined && textSize === opt.value;
+                  const showDefaultMarker =
+                    textSize === undefined && opt.value === autoTextSize;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      disabled={!canEdit}
+                      onClick={() => applyTextSize(opt.value)}
+                      className={`btn ${isSelected ? "btn-secondary active" : "btn-ghost"}`}
+                      style={{
+                        padding: "var(--spacing-2)",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        borderRadius: "var(--radius-control)",
+                        border: isSelected
+                          ? "2px solid var(--accent)"
+                          : "1px solid var(--border)",
+                        backgroundColor: isSelected
+                          ? "var(--accent-subtle)"
+                          : "var(--surface)",
+                      }}
+                    >
+                      {/* Fixed px so each card previews its own size, independent of the live theme */}
+                      <span style={{ fontWeight: 600, fontSize: `${opt.value}px`, lineHeight: 1.2 }}>
+                        Aa
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "var(--font-size-xs)",
+                          color: "var(--text-muted)",
+                          marginTop: "var(--spacing-1)",
+                        }}
+                      >
+                        {opt.label} · {opt.value}px
+                        {showDefaultMarker ? " (Auto)" : ""}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Custom size: any value in range, in 0.5px steps */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.75rem",
+                  marginTop: "0.75rem",
+                }}
+              >
+                <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
+                  Custom
+                </span>
+                <input
+                  type="range"
+                  aria-label="Text size slider"
+                  min={TEXT_SIZE_MIN}
+                  max={TEXT_SIZE_MAX}
+                  step={0.5}
+                  disabled={!canEdit}
+                  value={effectiveTextSize}
+                  onChange={(e) => applyTextSize(Number(e.target.value))}
+                  style={{ flex: 1, accentColor: "var(--accent)" }}
+                />
+                <input
+                  id="theme-text-size"
+                  type="number"
+                  className={`form-input${textSizeError ? " is-invalid" : ""}`}
+                  min={TEXT_SIZE_MIN}
+                  max={TEXT_SIZE_MAX}
+                  step={0.5}
+                  disabled={!canEdit}
+                  value={textSizeInput}
+                  onChange={(e) => {
+                    setTextSizeInput(e.target.value);
+                    const parsed = ThemeTextSizeOverrideSchema.safeParse(Number(e.target.value));
+                    if (e.target.value.trim() !== "" && parsed.success) setTextSize(parsed.data);
+                  }}
+                  style={{ width: "80px" }}
+                />
+                <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>px</span>
+              </div>
+
+              <p
+                role={textSizeError ? "alert" : undefined}
+                style={{
+                  margin: "0.5rem 0 0",
+                  fontSize: "var(--font-size-xs)",
+                  color: textSizeError ? "var(--danger)" : "var(--text-muted)",
+                }}
+              >
+                {textSizeError ??
+                  `${textSize === undefined ? `Auto: ${autoTextSize}px, the default for the selected density.` : `Custom ${textSize}px; clear the override to follow density again.`} Range ${TEXT_SIZE_MIN}–${TEXT_SIZE_MAX}px. Headings, captions and buttons scale with it; controls grow taller if the text needs room.`}
+              </p>
+            </div>
+          </div>
+
+          {/* Layout */}
+          <div
+            role="tabpanel"
+            id={themePanelId("layout")}
+            aria-labelledby={themeTabId("layout")}
+            hidden={activeTab !== "layout"}
+            className="theme-tab-panel"
+          >
+            <ThemeLayoutSettings
+              layout={layout}
+              density={density}
+              canEdit={canEdit}
+              onChange={setLayout}
+              onValidityChange={setLayoutValid}
+            />
+          </div>
+        </section>
 
         {/* Right Column: Live Interactive Preview */}
         <div>
@@ -916,8 +1102,12 @@ export function ThemeStudio() {
             className="card"
             style={{
               padding: "1.5rem",
+              // Stays in view while the settings scroll; the studio's <main> is the scroller,
+              // so the offset is from its top. Capped so the preview's own bottom stays reachable.
               position: "sticky",
-              top: "calc(var(--navbar-height) + 1.5rem)",
+              top: "var(--spacing-4)",
+              maxHeight: "calc(100vh - var(--navbar-height) - 2 * var(--spacing-4))",
+              overflowY: "auto",
             }}
           >
             <div
@@ -925,7 +1115,7 @@ export function ThemeStudio() {
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
-                marginBottom: "1.25rem",
+                marginBottom: "var(--spacing-2)",
               }}
             >
               <div
@@ -987,245 +1177,22 @@ export function ThemeStudio() {
               </div>
             </div>
 
-            {/* Preview Components */}
-            <div
+            <p
               style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "1.25rem",
+                margin: "0 0 var(--spacing-4)",
+                fontSize: "var(--font-size-xs)",
+                color: "var(--text-muted)",
               }}
             >
-              {/* Modal Container Preview */}
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                  <label className="form-label" style={{ margin: 0 }}>Modal Container (capped at 16px)</label>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setModalPreviewOpen(true)}
-                    style={{ fontSize: 'var(--font-size-xs)', padding: '0.2rem 0.5rem' }}
-                  >
-                    Open Overlay
-                  </button>
-                </div>
-                <div
-                  data-testid="preview-modal-box"
-                  style={{
-                    backgroundColor: "var(--surface)",
-                    borderRadius: "var(--radius-surface)",
-                    border: "1px solid var(--border)",
-                    boxShadow: "var(--shadow-md)",
-                    overflow: "hidden",
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: "0.75rem 1rem",
-                      borderBottom: "1px solid var(--border)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      backgroundColor: "var(--surface-2)",
-                    }}
-                  >
-                    <span style={{ fontWeight: 600, fontSize: "var(--font-size-sm)" }}>
-                      Modal Header
-                    </span>
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      style={{ padding: "0.2rem 0.4rem", fontSize: "var(--font-size-xs)" }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <div style={{ padding: "0.75rem 1rem", fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
-                    Modal surface role caps radius so Full does not pill the window.
-                  </div>
-                </div>
-              </div>
-
-              {/* Stat Card Preview */}
-              <div>
-                <label className="form-label">Card Surface (capped at 16px)</label>
-                <div
-                  data-testid="preview-card-box"
-                  style={{
-                    padding: "1.25rem",
-                    borderRadius: "var(--radius-surface)",
-                    backgroundColor: "var(--surface-2)",
-                    border: "1px solid var(--border)",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: "var(--font-size-xs)",
-                      color: "var(--text-muted)",
-                      marginBottom: "0.25rem",
-                    }}
-                  >
-                    MONTHLY ACTIVE USERS
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "baseline",
-                      gap: "0.75rem",
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: "var(--font-size-2xl)",
-                        fontWeight: 700,
-                        color: "var(--text)",
-                      }}
-                    >
-                      24,580
-                    </span>
-                    <span
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "0.2rem",
-                        fontSize: "var(--font-size-xs)",
-                        color: "var(--success)",
-                        fontWeight: 600,
-                      }}
-                    >
-                      <TrendingUp size={14} /> +12.4%
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Form Input Preview */}
-              <div>
-                <label className="form-label" htmlFor="preview-input">
-                  Input Control (capped at 8px)
-                </label>
-                <input
-                  id="preview-input"
-                  type="text"
-                  className="form-input"
-                  defaultValue="Editable theme input"
-                  placeholder="Focus to see accent focus ring"
-                />
-              </div>
-
-              {/* Button Groups Preview */}
-              <div>
-                <label className="form-label">Button Hierarchy (pills on Full)</label>
-                <div
-                  style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}
-                >
-                  <button type="button" className="btn btn-primary">
-                    Primary Accent
-                  </button>
-                  <button type="button" className="btn btn-secondary">
-                    Secondary
-                  </button>
-                  <button type="button" className="btn btn-danger">
-                    Danger
-                  </button>
-                  <button type="button" className="btn btn-ghost">
-                    Ghost
-                  </button>
-                </div>
-              </div>
-
-              {/* Badges Preview */}
-              <div>
-                <label className="form-label">Semantic Badges (pills)</label>
-                <div
-                  style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}
-                >
-                  <span className="badge badge-accent">Accent Badge</span>
-                  <span className="badge badge-success">Success Badge</span>
-                  <span className="badge badge-warning">Warning Badge</span>
-                  <span className="badge badge-danger">Danger Badge</span>
-                </div>
-              </div>
-
-              {/* Mini Table Preview */}
-              <div>
-                <label className="form-label">Table Surface (capped at 16px)</label>
-                <div
-                  data-testid="preview-table-box"
-                  style={{
-                    overflow: "hidden",
-                    borderRadius: "var(--radius-surface)",
-                    border: "1px solid var(--border)",
-                  }}
-                >
-                  <table
-                    className="table"
-                    style={{ width: "100%", borderCollapse: "collapse" }}
-                  >
-                    <thead>
-                      <tr
-                        style={{
-                          backgroundColor: "var(--surface-2)",
-                          borderBottom: "1px solid var(--border)",
-                        }}
-                      >
-                        <th
-                          style={{
-                            padding: "0.625rem 0.75rem",
-                            textAlign: "left",
-                            fontSize: "var(--font-size-xs)",
-                            fontWeight: 600,
-                          }}
-                        >
-                          Entity
-                        </th>
-                        <th
-                          style={{
-                            padding: "0.625rem 0.75rem",
-                            textAlign: "left",
-                            fontSize: "var(--font-size-xs)",
-                            fontWeight: 600,
-                          }}
-                        >
-                          Status
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr
-                        style={{
-                          borderBottom: "1px solid var(--border-subtle)",
-                        }}
-                      >
-                        <td
-                          style={{
-                            padding: "0.625rem 0.75rem",
-                            fontSize: "var(--font-size-sm)",
-                          }}
-                        >
-                          Orders
-                        </td>
-                        <td style={{ padding: "0.625rem 0.75rem" }}>
-                          <span className="badge badge-success">Active</span>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td
-                          style={{
-                            padding: "0.625rem 0.75rem",
-                            fontSize: "var(--font-size-sm)",
-                          }}
-                        >
-                          Customers
-                        </td>
-                        <td style={{ padding: "0.625rem 0.75rem" }}>
-                          <span className="badge badge-accent">Syncing</span>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+              {PREVIEW_HINT[activeTab]}
+            </p>
+            {/* Only the components affected by the selected settings tab */}
+            <ThemeStudioPreview
+              tab={activeTab}
+              layout={layout}
+              density={density}
+              onOpenModal={() => setModalPreviewOpen(true)}
+            />
           </section>
         </div>
       </div>

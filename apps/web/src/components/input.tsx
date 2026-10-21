@@ -2,6 +2,7 @@ import React from 'react';
 import type { InputProps } from '@config-platform/schema';
 import { usePageRuntime } from '../context/page-runtime-context';
 import { DynamicIcon } from './dynamic-icon';
+import { DateInput } from './date-input';
 
 export function InputComponent({
   label,
@@ -22,8 +23,9 @@ export function InputComponent({
   const runtime = usePageRuntime();
   const value = runtime ? runtime.state[valueKey] ?? '' : '';
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawVal = e.target.value;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => setValue(e.target.value);
+
+  const setValue = (rawVal: string) => {
     const nextVal = type === 'number' ? (rawVal === '' ? '' : Number(rawVal)) : rawVal;
 
     if (runtime) {
@@ -45,7 +47,6 @@ export function InputComponent({
     <div
       className="form-group"
       style={{
-        marginBottom: 'var(--spacing-3)',
         flex: flex !== undefined ? flex : undefined,
         width: widthValue,
         minWidth: minWidth !== undefined ? (typeof minWidth === 'number' ? `${minWidth}px` : minWidth) : undefined,
@@ -77,18 +78,29 @@ export function InputComponent({
             <DynamicIcon name={prefixIcon} size={16} />
           </div>
         )}
-        <input
-          type={type}
-          className="form-input"
-          placeholder={placeholder}
-          value={value}
-          disabled={disabled}
-          required={required}
-          onChange={handleChange}
-          style={{
-            paddingLeft: prefixIcon ? 'calc(var(--space-3) + 22px)' : undefined,
-          }}
-        />
+        {type === 'date' ? (
+          // Typed or picked in the viewer's date format; page state holds "YYYY-MM-DD"
+          <DateInput
+            aria-label={label || placeholder}
+            value={value || undefined}
+            disabled={disabled}
+            onChange={(date) => setValue(date ?? '')}
+            inputStyle={prefixIcon ? { paddingLeft: 'calc(var(--space-3) + 22px)' } : undefined}
+          />
+        ) : (
+          <input
+            type={type}
+            className="form-input"
+            placeholder={placeholder}
+            value={value}
+            disabled={disabled}
+            required={required}
+            onChange={handleChange}
+            style={{
+              paddingLeft: prefixIcon ? 'calc(var(--space-3) + 22px)' : undefined,
+            }}
+          />
+        )}
       </div>
       {helpText && (
         <small

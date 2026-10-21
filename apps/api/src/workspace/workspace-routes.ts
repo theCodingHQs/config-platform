@@ -7,10 +7,54 @@ import { hasMinRole } from '../auth/auth-types.js';
 import { pool } from '../db/pool.js';
 import { defaultStorageAdapter } from '../db/storage-adapter.js';
 import { auditLogService } from '../audit/audit-service.js';
-import { WorkspaceThemeConfigSchema, validateAccentContrast } from '@config-platform/schema';
+import { WorkspaceThemeConfigSchema, validateAccentContrast, WorkspaceDateSettingsSchema } from '@config-platform/schema';
 import argon2 from 'argon2';
 
 export async function workspaceRoutes(fastify: FastifyInstance) {
+  // GET /workspace/date-settings - Workspace date defaults (every member reads them to show dates)
+  fastify.get('/workspace/date-settings', async (req: FastifyRequest) => {
+    const res = await pool.query<{ date_settings: any; timezone: string }>(
+      'SELECT date_settings, timezone FROM public.tenant WHERE id = $1',
+      [req.session.tenantId]
+    );
+    const row = res.rows[0];
+    return WorkspaceDateSettingsSchema.parse({ ...(row?.date_settings || {}), timeZone: row?.timezone || 'UTC' });
+  });
+
+  // PUT /workspace/date-settings - Change workspace date defaults (admin+)
+  fastify.put('/workspace/date-settings', {
+    preHandler: csrfCheckHook,
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const { tenantId, userId, role, email } = req.session;
+    if (!hasMinRole(role, 'admin')) {
+      return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'Admin role or higher required to change regional settings' });
+    }
+    const parsed = WorkspaceDateSettingsSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return reply.status(422).send({ statusCode: 422, error: 'Unprocessable Entity', message: parsed.error.issues.map((i) => i.message).join('; ') });
+    }
+    const { timeZone, ...display } = parsed.data;
+    const before = await pool.query<{ date_settings: any; timezone: string }>(
+      'SELECT date_settings, timezone FROM public.tenant WHERE id = $1',
+      [tenantId]
+    );
+    await pool.query(
+      'UPDATE public.tenant SET date_settings = $1, timezone = $2 WHERE id = $3',
+      [JSON.stringify(display), timeZone, tenantId]
+    );
+    await auditLogService.log({
+      tenantId,
+      userId,
+      userEmail: email,
+      action: 'workspace.date_settings.update',
+      entityType: 'workspace',
+      entityId: tenantId,
+      beforeState: { ...(before.rows[0]?.date_settings || {}), timeZone: before.rows[0]?.timezone },
+      afterState: parsed.data,
+    });
+    return parsed.data;
+  });
+
   // GET /workspace/theme - Returns workspace theme configuration and policy
   fastify.get('/workspace/theme', async (req: FastifyRequest) => {
     const { tenantId } = req.session;

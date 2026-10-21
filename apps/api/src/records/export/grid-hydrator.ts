@@ -14,7 +14,7 @@ import { permissionService } from '../../permissions/permission-service.js';
 import { tenantLimitsService } from '../../limits/tenant-limits.js';
 import { defaultStorageAdapter } from '../../db/storage-adapter.js';
 import { queryBuilder, type QueryOptions } from '../query-builder.js';
-import { gridXlsxRenderer } from './grid-xlsx-renderer.js';
+import { gridXlsxRenderer, buildNativeChartSpecs } from './grid-xlsx-renderer.js';
 import { evaluateAndCacheSheetFormulas } from './formula-evaluator.js';
 import {
   datasetQueryBuilder,
@@ -25,7 +25,7 @@ import { migrationService } from '../../migrations/migration-service.js';
 import type { TenantRole } from '../../auth/auth-types.js';
 import { chartDataExtractor } from './chart-data-extractor.js';
 import { chartRenderer } from './chart-renderer.js';
-import { shiftRangeByRegion } from './chart-range-helper.js';
+import { parseA1Range, shiftRangeByRegion } from './chart-range-helper.js';
 
 export interface GridHydrationOptions {
   tenantId: string;
@@ -75,19 +75,59 @@ export function rewriteFormulaCoordinates(
     }
   );
 
-  // 2. Rewrite standalone cell references below the region (not preceding a colon or following a colon)
+  // 2. Rewrite standalone cell references below the region (not part of a range). A reference at
+  // the very end of a formula counts too: the old `(?!…|$)` skipped it, so a bare "=C22" (the
+  // tracker's week rows) kept pointing at a template row that had become a data row. As when
+  // Excel inserts rows, absolute rows ($22) move as well. "(" excludes names like ATAN2(.
   rewritten = rewritten.replace(
-    /(^|[^A-Z0-9:])([A-Z]+)(\d+)(?![A-Z0-9:]|$)/g,
-    (match, prefix, col, rStr) => {
+    /(^|[^A-Za-z0-9_:$])(\$?[A-Z]{1,3})(\$?)(\d+)(?![A-Za-z0-9_:(])/g,
+    (match, prefix, col, absRow, rStr) => {
       const r = parseInt(rStr, 10);
       if (r > regionEndRow1) {
-        return `${prefix}${col}${r + delta}`;
+        return `${prefix}${col}${absRow}${r + delta}`;
       }
       return match;
     }
   );
 
   return rewritten;
+}
+
+/**
+ * Re-targets a region template-row formula to another record row: relative references to the
+ * template row move to the target row (e.g. SUM(C21:AG21) on row 21 → SUM(C24:AG24) on row 24).
+ * Absolute rows ($21) and references to other rows are left alone.
+ */
+export function rewriteRowRelativeFormula(formula: string, templateRow1: number, targetRow1: number): string {
+  if (!formula || templateRow1 === targetRow1) return formula;
+  return formula.replace(
+    /(^|[^A-Za-z0-9_$])(\$?[A-Z]{1,3})(\$?)(\d+)(?![A-Za-z0-9_(])/g,
+    (match, prefix, col, absRow, rowStr) => {
+      if (absRow || parseInt(rowStr, 10) !== templateRow1) return match;
+      return `${prefix}${col}${targetRow1}`;
+    }
+  );
+}
+
+/** Normalises hydrated values in checkbox ranges to the rule's numeric checked/unchecked values. */
+export function applyCheckboxValues(sheet: GridSheetDefinition): void {
+  for (const dv of sheet.dataValidations || []) {
+    if (dv.type !== 'checkbox') continue;
+    const range = parseA1Range(dv.ref);
+    if (!range) continue;
+    const checked = dv.checkedValue ?? 1;
+    const unchecked = dv.uncheckedValue ?? 0;
+    for (let r = range.startRow; r <= range.endRow; r++) {
+      for (let c = range.startCol; c <= range.endCol; c++) {
+        const cell = sheet.cells[`${r}:${c}`];
+        if (!cell || cell.formula) continue;
+        const v = cell.value;
+        if (v === checked || v === unchecked) continue;
+        const isChecked = v === true || v === 1 || (typeof v === 'string' && ['true', 't', '1', 'yes'].includes(v.trim().toLowerCase()));
+        cell.value = isChecked ? checked : unchecked;
+      }
+    }
+  }
 }
 
 /**
@@ -161,6 +201,7 @@ export class GridHydrator {
       const shiftedRowHeights: Record<string, number> = {};
       const shiftedMerges: Array<{ startRow: number; endRow: number; startCol: number; endCol: number }> = [];
       const hydratedRegions: GridRegionDefinition[] = [];
+      const shiftedValidations = (sheetDef.dataValidations || []).map((dv) => ({ ...dv }));
 
       // Copy original row heights
       if (sheetDef.rowHeights) {
@@ -315,6 +356,8 @@ export class GridHydrator {
           }
         }
 
+        const boundCols = new Set((region.columns || []).map((m) => m.col));
+
         // Hydrate records into region
         const totalRenderRows = Math.max(minRows, actualCount);
         for (let i = 0; i < totalRenderRows; i++) {
@@ -381,6 +424,19 @@ export class GridHydrator {
               style: cellStyle,
             };
           }
+
+          // Per-row formulas in the template row (outside bound columns) repeat on each record row
+          if (record) {
+            for (const [cStr, formatDef] of Object.entries(formatRowCells)) {
+              const c = parseInt(cStr, 10);
+              if (!formatDef.formula || boundCols.has(c)) continue;
+              hydratedCells[`${targetRow}:${c}`] = {
+                ...formatDef,
+                value: undefined,
+                formula: rewriteRowRelativeFormula(formatDef.formula, regionStartRow1, targetRow + 1),
+              };
+            }
+          }
         }
 
         // Shift rows that appear BELOW the region by delta
@@ -437,8 +493,11 @@ export class GridHydrator {
           endRow: region.startRow + totalRenderRows - 1,
         });
 
-        // Shift chart anchors and range sources when regions expand
+        // Shift chart anchors, range sources and checkbox ranges when regions expand
         if (delta > 0) {
+          for (const dv of shiftedValidations) {
+            dv.ref = shiftRangeByRegion(dv.ref, region.startRow, region.endRow, delta);
+          }
           for (const ch of hydratedCharts) {
             if (ch.anchor && (ch.anchor.sheetId === sheetDef.id || ch.anchor.sheetId === sheetDef.name)) {
               if (ch.anchor.startRow > region.endRow) {
@@ -557,9 +616,11 @@ export class GridHydrator {
         merges: shiftedMerges,
         rowHeights: Object.keys(shiftedRowHeights).length > 0 ? shiftedRowHeights : undefined,
         regions: hydratedRegions,
+        ...(sheetDef.dataValidations ? { dataValidations: shiftedValidations } : {}),
       };
 
       // Sandboxed evaluator: compute and cache formula results on shifted coordinates
+      applyCheckboxValues(hydratedSheet);
       evaluateAndCacheSheetFormulas(hydratedSheet);
 
       hydratedSheets.push(hydratedSheet);
@@ -579,12 +640,25 @@ export class GridHydrator {
     template: GridExportTemplateDefinition,
     options: GridHydrationOptions
   ): Promise<ExcelJS.Workbook> {
-    const datasetCache = new Map<string, { rows: any[]; totalCount: number }>();
     const hydratedTemplate = await this.hydrateGridDefinition(template, options);
+    const chartImages = await this.renderChartImages(hydratedTemplate, options);
+    return gridXlsxRenderer.renderToWorkbook(hydratedTemplate, chartImages);
+  }
 
+  /**
+   * Renders PNG snapshots for the template's charts. Range charts are skipped when
+   * `skipRangeCharts` is set because they are exported as native, live Excel charts instead.
+   */
+  private async renderChartImages(
+    hydratedTemplate: GridExportTemplateDefinition,
+    options: GridHydrationOptions,
+    skipRangeCharts = false
+  ): Promise<Map<string, Buffer>> {
+    const datasetCache = new Map<string, { rows: any[]; totalCount: number }>();
     const chartImages = new Map<string, Buffer>();
     if (hydratedTemplate.charts && hydratedTemplate.charts.length > 0) {
       for (const chart of hydratedTemplate.charts) {
+        if (skipRangeCharts && chart.source.kind === 'range') continue;
         const chartData = await chartDataExtractor.extractChartData(
           options.tenantId,
           options.userRole,
@@ -606,17 +680,17 @@ export class GridHydrator {
         chartImages.set(chart.id, pngBuffer);
       }
     }
-
-    return gridXlsxRenderer.renderToWorkbook(hydratedTemplate, chartImages);
+    return chartImages;
   }
 
   public async renderHydratedToBuffer(
     template: GridExportTemplateDefinition,
     options: GridHydrationOptions
   ): Promise<Buffer> {
-    const workbook = await this.hydrateToWorkbook(template, options);
-    const buffer = await workbook.xlsx.writeBuffer();
-    return Buffer.from(buffer);
+    const hydratedTemplate = await this.hydrateGridDefinition(template, options);
+    const chartImages = await this.renderChartImages(hydratedTemplate, options, true);
+    const nativeCharts = buildNativeChartSpecs(hydratedTemplate);
+    return gridXlsxRenderer.renderToBuffer(hydratedTemplate, chartImages, nativeCharts);
   }
 }
 

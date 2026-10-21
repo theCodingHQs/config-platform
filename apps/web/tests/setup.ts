@@ -24,6 +24,15 @@ if (typeof HTMLCanvasElement !== 'undefined') {
         scale: () => {},
         rotate: () => {},
         arc: () => {},
+        arcTo: () => {},
+        bezierCurveTo: () => {},
+        quadraticCurveTo: () => {},
+        ellipse: () => {},
+        setLineDash: () => {},
+        getLineDash: () => [],
+        strokeRect: () => {},
+        strokeText: () => {},
+        isPointInPath: () => false,
         fill: () => {},
         measureText: () => ({ width: 10 }),
         transform: () => {},
@@ -37,5 +46,22 @@ if (typeof HTMLCanvasElement !== 'undefined') {
       } as any;
     }
     return null;
+  };
+}
+
+// jsdom has no Path2D; @univerjs/sheets-data-validation-ui builds checkbox paths at import time
+if (typeof (globalThis as any).Path2D === 'undefined') {
+  (globalThis as any).Path2D = class {
+    addPath() {}
+    closePath() {}
+    moveTo() {}
+    lineTo() {}
+    bezierCurveTo() {}
+    quadraticCurveTo() {}
+    arc() {}
+    arcTo() {}
+    ellipse() {}
+    rect() {}
+    roundRect() {}
   };
 }

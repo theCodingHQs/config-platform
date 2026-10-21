@@ -8,6 +8,10 @@ import {
   type AuditLog,
 } from '../api/client';
 import { useAuth } from '../context/auth-context';
+import { useStatusNotify } from '../context/app-bar-context';
+import { useDateDisplayPrefs } from '../context/date-display-context';
+import { RegionalSettingsPanel } from './RegionalSettingsPanel';
+import { formatInstant } from '@config-platform/schema';
 import {
   Activity,
   Download,
@@ -20,11 +24,12 @@ import {
   Eye,
   RefreshCw,
   Sliders,
+  Globe,
 } from 'lucide-react';
 
 export function WorkspaceSettings() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'usage' | 'audit' | 'export-import'>('usage');
+  const [activeTab, setActiveTab] = useState<'usage' | 'regional' | 'audit' | 'export-import'>('usage');
 
   // Usage state
   const [usage, setUsage] = useState<WorkspaceUsage | null>(null);
@@ -40,8 +45,10 @@ export function WorkspaceSettings() {
   const [importResult, setImportResult] = useState<any | null>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
+  // Load failures stay on the page; export/import results go to the status bar
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const notify = useStatusNotify();
+  const datePrefs = useDateDisplayPrefs();
 
   const loadUsage = async () => {
     try {
@@ -77,7 +84,6 @@ export function WorkspaceSettings() {
   const handleExport = async () => {
     try {
       setExportLoading(true);
-      setError(null);
       const bundle = await exportWorkspace();
       const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -88,9 +94,9 @@ export function WorkspaceSettings() {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      setSuccess('Workspace bundle exported successfully');
+      notify('success', 'Workspace bundle exported');
     } catch (err: any) {
-      setError(err.message || 'Failed to export workspace bundle');
+      notify('error', err.message || 'Failed to export workspace bundle');
     } finally {
       setExportLoading(false);
     }
@@ -99,24 +105,22 @@ export function WorkspaceSettings() {
   const handleImport = async (dryRun: boolean) => {
     try {
       setImportLoading(true);
-      setError(null);
-      setSuccess(null);
       const bundle = JSON.parse(importJson);
       const result = await importWorkspace(bundle, dryRun);
       setImportResult(result);
       if (!dryRun && result.success) {
-        setSuccess(`Successfully imported ${result.entitiesCount} entities and ${result.pagesCount} pages.`);
+        notify('success', `Imported ${result.entitiesCount} entities and ${result.pagesCount} pages.`);
         loadUsage();
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to import workspace bundle');
+      notify('error', err.message || 'Failed to import workspace bundle');
     } finally {
       setImportLoading(false);
     }
   };
 
   return (
-    <div style={{ padding: '2rem 1.5rem', maxWidth: '1100px', margin: '0 auto' }}>
+    <div>
       <div style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ fontSize: 'var(--font-size-2xl)', fontWeight: 700, margin: 0 }}>Workspace Settings</h1>
@@ -144,25 +148,6 @@ export function WorkspaceSettings() {
           <AlertTriangle size={16} /> {error}
         </div>
       )}
-      {success && (
-        <div
-          style={{
-            padding: 'var(--space-3) var(--space-4)',
-            backgroundColor: 'var(--success-subtle)',
-            color: 'var(--success)',
-            border: 'var(--border-width) solid var(--success)',
-            borderRadius: 'var(--radius-surface)',
-            marginBottom: 'var(--space-4)',
-            fontSize: 'var(--font-size-sm)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-2)',
-          }}
-        >
-          <CheckCircle size={16} /> {success}
-        </div>
-      )}
-
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 'var(--space-2)', borderBottom: 'var(--border-width) solid var(--border)', marginBottom: 'var(--space-5)' }}>
         <button
@@ -183,6 +168,26 @@ export function WorkspaceSettings() {
           }}
         >
           <Sliders size={15} /> Resource Usage & Plan
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('regional')}
+          style={{
+            padding: 'var(--space-3) var(--space-4)',
+            border: 'none',
+            background: 'transparent',
+            fontWeight: 600,
+            fontSize: 'var(--font-size-sm)',
+            cursor: 'pointer',
+            color: activeTab === 'regional' ? 'var(--accent)' : 'var(--muted)',
+            borderBottom: activeTab === 'regional' ? '2px solid var(--accent)' : '2px solid transparent',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-1)',
+          }}
+        >
+          <Globe size={15} /> Regional
         </button>
 
         <button
@@ -227,6 +232,10 @@ export function WorkspaceSettings() {
           </button>
         )}
       </div>
+
+      {activeTab === 'regional' && (
+        <RegionalSettingsPanel canEdit={user?.role === 'admin' || user?.role === 'owner'} />
+      )}
 
       {/* Tab: Usage */}
       {activeTab === 'usage' && (
@@ -439,7 +448,7 @@ export function WorkspaceSettings() {
                   {logs.map((log) => (
                     <tr key={log.id} style={{ borderBottom: 'var(--border-width) solid var(--border)' }}>
                       <td style={{ padding: 'var(--space-3) var(--space-4)', whiteSpace: 'nowrap', color: 'var(--muted)' }}>
-                        {new Date(log.createdAt).toLocaleString()}
+                        {formatInstant(log.createdAt, datePrefs)}
                       </td>
                       <td style={{ padding: 'var(--space-3) var(--space-4)' }}>{log.userEmail}</td>
                       <td style={{ padding: 'var(--space-3) var(--space-4)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{log.action}</td>

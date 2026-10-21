@@ -1,11 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildPersonalMonthlyBudgetBenchmark,
+  buildProductionTrackerTemplate,
+  productionDayField,
   type GridExportTemplateDefinition,
 } from '@config-platform/schema';
 import {
   gridTemplateToUniver,
   univerToGridTemplate,
+  UNIVER_DATA_VALIDATION_RESOURCE,
 } from '../src/studio/export-grid/univer-adapter';
 
 describe('Univer Spreadsheet Engine Adapter Round-Trip Tests', () => {
@@ -529,5 +532,73 @@ describe('Univer Spreadsheet Engine Adapter Round-Trip Tests', () => {
     // Rows 3 and 4 contain NO sample data rows in the saved template!
     expect(saved.sheets[0].cells['3:0']).toBeUndefined();
     expect(saved.sheets[0].cells['4:0']).toBeUndefined();
+  });
+
+  it('loads checkbox validations into the Univer data-validation resource and sizes wide sheets', () => {
+    const template = buildProductionTrackerTemplate();
+    const snapshot = gridTemplateToUniver(template);
+
+    const resource = snapshot.resources.find((r: any) => r.name === UNIVER_DATA_VALIDATION_RESOURCE);
+    const rules = JSON.parse(resource.data).sheet_production;
+    expect(rules).toEqual([
+      expect.objectContaining({
+        uid: 'dv_production_checks',
+        type: 'checkbox',
+        ranges: [{ startRow: 20, endRow: 27, startColumn: 2, endColumn: 32 }],
+        formula1: 1,
+        formula2: 0,
+      }),
+    ]);
+    // 39 used columns (A..AM) must fit; the old fixed 20 columns would clip the tracker
+    expect(snapshot.sheets.sheet_production.columnCount).toBeGreaterThanOrEqual(39);
+    expect(snapshot.sheets.sheet_production.rowCount).toBeGreaterThanOrEqual(48);
+  });
+
+  it('saves live checkbox rules from the editor in preference to the template copy', () => {
+    const template = buildProductionTrackerTemplate();
+    const snapshot = gridTemplateToUniver(template);
+
+    // Without live rules the template copy round-trips
+    expect(univerToGridTemplate(snapshot).sheets[0].dataValidations).toEqual(template.sheets[0].dataValidations);
+
+    // Live rules (e.g. after "Insert Checkboxes" on B5:C6) replace it
+    const saved = univerToGridTemplate(snapshot, {
+      sheet_production: [
+        { uid: 'dv_new', type: 'checkbox', ranges: [{ startRow: 4, endRow: 5, startColumn: 1, endColumn: 2 }], formula1: 1, formula2: 0 },
+        { uid: 'dv_list', type: 'list', ranges: [{ startRow: 0, endRow: 0, startColumn: 0, endColumn: 0 }] },
+      ],
+    });
+    expect(saved.sheets[0].dataValidations).toEqual([
+      { id: 'dv_new', ref: 'B5:C6', type: 'checkbox', checkedValue: 1, uncheckedValue: 0 },
+    ]);
+  });
+
+  it('shows bound checkbox cells as unchecked boxes in design view, not placeholder text', () => {
+    const template = buildProductionTrackerTemplate({
+      productionEntityId: 't_sheet',
+      machineEntityId: 't_machine',
+      machineRefFieldId: 'f_machine',
+      defaultMonth: '2026-10-01',
+    });
+    const row = 20; // the region's binding row
+    const design = gridTemplateToUniver(template, { designView: true }).sheets.sheet_production.cellData;
+    expect(design[row][0].v).toBe('{{ Machine }}');
+    expect(design[row][1].v).toBe('{{ Plan }}');
+    for (let c = 2; c <= 32; c++) expect(design[row][c].v).toBe(0);
+    // The binding is still recorded on the cell, and saving restores the placeholder
+    expect(design[row][2].custom.binding.fieldId).toBe(productionDayField(1));
+
+    // A saved template stores "{{ 1 }}" + binding on those cells; design view still shows a checkbox
+    const saved = univerToGridTemplate(gridTemplateToUniver(template, { designView: true }));
+    expect(saved.sheets[0].cells['20:2'].value).toBe('{{ 1 }}');
+    const reloaded = gridTemplateToUniver(saved, { designView: true }).sheets.sheet_production.cellData;
+    for (let c = 2; c <= 32; c++) expect(reloaded[row][c].v).toBe(0);
+    expect(reloaded[row][1].v).toBe('{{ Plan }}');
+    // Preview / export views keep real values untouched
+    expect(gridTemplateToUniver(saved, { designView: false }).sheets.sheet_production.cellData[row][2].v).toBe('{{ 1 }}');
+
+    // Row formulas tolerate the text placeholder in the plan column
+    expect(template.sheets[0].cells['20:34'].formula).toBe('IF(MAX(B21:B21,0)>AH21,MAX(B21:B21,0)-AH21,0)');
+    expect(template.sheets[0].cells['20:35'].formula).toBe('IF(MAX(B21:B21,0)>0,ROUND(AH21/MAX(B21:B21,1),2),0)');
   });
 });

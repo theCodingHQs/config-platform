@@ -272,4 +272,64 @@ describe('End-to-End: Master/Detail Page via Builder UI Operations', () => {
       expect(apiClient.publishPage).toHaveBeenCalledWith(tenantId, 'p_master_detail');
     });
   }, 60000);
+
+  it('runs overlapping saves one after another, each with the version the previous save returned', async () => {
+    const draft: PageDefinition = {
+      schemaVersion: 2, id: 'p_saves', version: 1, route: '/saves', state: {}, dataSources: [],
+      root: { id: 'root', type: 'stack', props: { direction: 'vertical' }, children: [] },
+    };
+    const detail: PageDetail = {
+      id: 'p_saves', name: 'Saves Page', route: '/saves', version: 1, hasDraft: true, hasPublished: false,
+      draft, published: null, createdAt: '', updatedAt: '', brokenBindings: [],
+    };
+    (apiClient.fetchPage as any).mockResolvedValue(detail);
+
+    // The first save stays pending until released; the server bumps the version per save
+    let serverVersion = 1;
+    let inFlight = 0;
+    let maxInFlight = 0;
+    let releaseFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    (apiClient.updatePage as any).mockImplementation(async (_t: string, _p: string, input: any) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      if (serverVersion === 1) await firstGate;
+      inFlight--;
+      if (input.expectedVersion !== serverVersion) throw new Error('Version conflict');
+      serverVersion++;
+      return { ...detail, draft: input.draft, version: serverVersion };
+    });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MetadataProvider tenantId={tenantId} initialEntities={mockEntities}>
+          <MemoryRouter initialEntries={['/studio/pages/p_saves']}>
+            <Routes>
+              <Route path="/studio/pages/:id" element={<PageBuilder />} />
+            </Routes>
+          </MemoryRouter>
+        </MetadataProvider>
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(screen.getByText('Saves Page')).toBeInTheDocument());
+
+    // An edit and Save Draft; while that save is still running, another edit's auto-save fires
+    fireEvent.click(screen.getByRole('button', { name: /\+ text/i }));
+    const saveBtn = await screen.findByTestId('save-draft-btn');
+    await waitFor(() => expect(saveBtn).not.toBeDisabled());
+    fireEvent.click(saveBtn);
+    await waitFor(() => expect(apiClient.updatePage).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: /\+ button/i }));
+    await new Promise((resolve) => setTimeout(resolve, 2000)); // auto-save delay is 1.5 s
+    // The auto-save waits for the running save instead of sending a stale version
+    expect(apiClient.updatePage).toHaveBeenCalledTimes(1);
+    releaseFirst();
+
+    await waitFor(() => expect(apiClient.updatePage).toHaveBeenCalledTimes(2));
+    const versions = (apiClient.updatePage as any).mock.calls.map((c: any[]) => c[2].expectedVersion);
+    expect(versions).toEqual([1, 2]);
+    expect(maxInFlight).toBe(1);
+    await waitFor(() => expect(screen.queryByText(/Save error/)).toBeNull());
+    expect(screen.queryByText(/Version conflict/)).toBeNull();
+  }, 30000);
 });

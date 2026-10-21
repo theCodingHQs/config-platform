@@ -222,7 +222,14 @@ export class RecordsService {
     tenantId: string,
     entityIdOrName: string,
     rawQuery: Record<string, any>
-  ): Promise<{ value?: number | null; groups?: Array<{ key: any; value: number | null }>; op: string; field: string }> {
+  ): Promise<{
+    value?: number | null;
+    groups?: Array<{ key: any; value: number | null }>;
+    /** True when more groups exist than `groupLimit` (only the first ones, in key order, are returned). */
+    groupsTruncated?: boolean;
+    op: string;
+    field: string;
+  }> {
     const resolved = await entityCache.resolveEntity(tenantId, entityIdOrName);
     const { op, physicalColumn, canonicalFieldName, filters, groupByField, groupLimit } =
       queryBuilder.parseAggregateParams(resolved, rawQuery);
@@ -243,8 +250,10 @@ export class RecordsService {
     const rows = await this.storage.query<{ value: any; group_key?: any }>(tenantId, sql, params);
 
     if (groupByField) {
+      const limit = groupLimit ?? 50;
       return {
-        groups: rows.map((r) => ({
+        groupsTruncated: rows.length > limit,
+        groups: rows.slice(0, limit).map((r) => ({
           key: r.group_key,
           value: r.value === null || r.value === undefined ? null : Number(r.value),
         })),

@@ -1153,14 +1153,19 @@ export function ChartEditorModal({
                   </label>
                 )}
 
-                {(chartType === 'line' || chartType === 'area' || chartType === 'combo') && (
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', fontSize: 'var(--font-size-xs)' }}>
+                {/* Excel can smooth line series but not area charts, so the option is only offered
+                    where the exported workbook will honour it */}
+                {(chartType === 'line' || chartType === 'combo') && (
+                  <label
+                    style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-1)', fontSize: 'var(--font-size-xs)' }}
+                    title="Applies to line series; Excel draws area series with straight segments"
+                  >
                     <input
                       type="checkbox"
                       checked={isSmooth}
                       onChange={(e) => setIsSmooth(e.target.checked)}
                     />
-                    <span>Smooth Curves</span>
+                    <span>Smooth Lines</span>
                   </label>
                 )}
               </div>

@@ -15,6 +15,8 @@ import { ThemeProvider, useTheme } from '../src/context/theme-context';
 import { ThemeModeSwitch } from '../src/components/ThemeModeSwitch';
 import { ThemeStudio } from '../src/studio/ThemeStudio';
 import { AuthContext } from '../src/context/auth-context';
+import { AppBarProvider } from '../src/context/app-bar-context';
+import * as apiClient from '../src/api/client';
 
 describe('Theme Foundation Unit & Integration Tests', () => {
   beforeEach(() => {
@@ -272,6 +274,99 @@ describe('Theme Foundation Unit & Integration Tests', () => {
       const styleTag = document.getElementById('workspace-theme-overrides');
       expect(styleTag).toBeDefined();
       expect(styleTag?.textContent).toContain('Preset: Ocean (ocean)');
+    });
+
+    it('reports a theme save in the status bar, not in a banner above the settings', async () => {
+      const spy = vi.spyOn(apiClient, 'updateWorkspaceTheme').mockResolvedValue({ success: true } as any);
+      const ownerAuth = { ...mockAuthContext, user: { ...mockAuthContext.user, role: 'owner' as const } };
+      render(
+        <AuthContext.Provider value={ownerAuth}>
+          <ThemeProvider initialTheme="light" initialWorkspaceTheme={{ presetId: 'neutral', overrides: {} }}>
+            <AppBarProvider>
+              <ThemeStudio />
+            </AppBarProvider>
+          </ThemeProvider>
+        </AuthContext.Provider>
+      );
+
+      await act(async () => { fireEvent.click(screen.getByText('Save Theme').closest('button')!); });
+      expect(spy).toHaveBeenCalled();
+      const status = screen.getByTestId('app-status-notification');
+      expect(status).toHaveTextContent(/Workspace theme saved/);
+      // Only one place shows it: no banner inside the page
+      expect(screen.getAllByText(/Workspace theme saved/)).toHaveLength(1);
+
+      spy.mockRejectedValueOnce(new Error('Theme locked by another editor'));
+      await act(async () => { fireEvent.click(screen.getByText(/Save Theme|Saved!/).closest('button')!); });
+      expect(screen.getByTestId('app-status-notification')).toHaveTextContent('Theme locked by another editor');
+      spy.mockRestore();
+    });
+
+    it('groups settings in keyboard-accessible tabs and flags a tab whose value blocks saving', () => {
+      render(
+        <AuthContext.Provider value={mockAuthContext}>
+          <ThemeProvider initialTheme="light" initialWorkspaceTheme={{ presetId: 'neutral', overrides: {} }}>
+            <ThemeStudio />
+          </ThemeProvider>
+        </AuthContext.Provider>
+      );
+
+      const tabs = screen.getAllByRole('tab').map((t) => t.textContent);
+      expect(tabs).toEqual(['Colors', 'Shape', 'Spacing & Text', 'Layout']);
+      const colors = screen.getByRole('tab', { name: 'Colors' });
+      expect(colors).toHaveAttribute('aria-selected', 'true');
+      // Live preview is visible alongside the settings
+      expect(screen.getByText('Ocean')).toBeVisible();
+
+      // Arrow keys move between tabs and show the matching panel only
+      act(() => { fireEvent.keyDown(colors, { key: 'ArrowRight' }); });
+      expect(screen.getByRole('tab', { name: 'Shape' })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('tabpanel', { name: 'Shape' })).toBeVisible();
+      expect(screen.queryByRole('tabpanel', { name: 'Colors' })).toBeNull();
+      act(() => { fireEvent.keyDown(screen.getByRole('tab', { name: 'Shape' }), { key: 'End' }); });
+      expect(screen.getByRole('tab', { name: 'Layout' })).toHaveAttribute('aria-selected', 'true');
+
+      // An invalid text size keeps its value when the tab is left, and the tab is flagged
+      act(() => { fireEvent.click(screen.getByRole('tab', { name: 'Spacing & Text' })); });
+      const textSize = screen.getByLabelText('Text Size');
+      act(() => { fireEvent.change(textSize, { target: { value: '30' } }); });
+      act(() => { fireEvent.click(screen.getByRole('tab', { name: 'Colors' })); });
+      expect(screen.getByRole('tab', { name: /Spacing & Text/ })).toContainElement(screen.getByLabelText('has an error'));
+      act(() => { fireEvent.click(screen.getByRole('tab', { name: /Spacing & Text/ })); });
+      expect(screen.getByLabelText('Text Size')).toHaveValue(30);
+    });
+
+    it('live preview shows only the components related to the selected tab', () => {
+      render(
+        <AuthContext.Provider value={mockAuthContext}>
+          <ThemeProvider initialTheme="light" initialWorkspaceTheme={{ presetId: 'neutral', overrides: {} }}>
+            <ThemeStudio />
+          </ThemeProvider>
+        </AuthContext.Provider>
+      );
+      const openTab = (name: string) => act(() => { fireEvent.click(screen.getByRole('tab', { name })); });
+
+      // Colors: buttons/badges/data; no layout diagram or type scale
+      expect(screen.getByText('Primary Accent')).toBeInTheDocument();
+      expect(screen.queryByTestId('layout-preview')).toBeNull();
+      expect(screen.queryByTestId('preview-type-scale')).toBeNull();
+
+      openTab('Shape');
+      expect(screen.getByTestId('preview-modal-box')).toBeInTheDocument();
+      expect(screen.queryByText('Accent')).toBeNull(); // badges belong to Colors
+
+      openTab('Spacing & Text');
+      expect(screen.getByTestId('preview-type-scale')).toBeInTheDocument();
+      expect(screen.getByTestId('preview-control-row')).toBeInTheDocument();
+      expect(screen.queryByTestId('preview-modal-box')).toBeNull();
+
+      openTab('Layout');
+      const diagram = screen.getByTestId('layout-preview');
+      expect(diagram).toHaveAttribute('aria-label', expect.stringContaining('240px sidebar, content up to 1280px centered, 24px padding'));
+      expect(screen.queryByTestId('preview-card-box')).toBeNull();
+      // Screen width switch rescales the diagram
+      act(() => { fireEvent.click(screen.getByRole('radio', { name: '2560px screen' })); });
+      expect(screen.getByTestId('layout-preview')).toHaveAttribute('viewBox', '0 0 2560 1440');
     });
 
     it('warns when custom accent contrast is below 4.5:1 and allows reset', () => {

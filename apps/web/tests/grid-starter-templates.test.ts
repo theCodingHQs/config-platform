@@ -20,22 +20,26 @@ const entity: ExecutiveReportEntityInput = {
   ],
 };
 
+const DATA_STARTERS = GRID_STARTER_TEMPLATES.filter((starter) => starter.category === 'data');
+
 describe('Grid starter templates', () => {
-  it('provides four distinct starter layouts', () => {
+  it('provides four distinct entity starter layouts plus the interactive production target tracker', () => {
     expect(GRID_STARTER_TEMPLATES.map((starter) => starter.id)).toEqual([
       'executive',
       'operations',
       'financial',
       'audit',
+      'production',
     ]);
+    expect(GRID_STARTER_TEMPLATES.find((starter) => starter.id === 'production')?.category).toBe('interactive');
 
-    const titles = GRID_STARTER_TEMPLATES.map((starter) =>
+    const titles = DATA_STARTERS.map((starter) =>
       buildGridStarterTemplate(entity, starter.id).sheets[0].cells['0:0'].value,
     );
     expect(new Set(titles).size).toBe(4);
   });
 
-  it.each(GRID_STARTER_TEMPLATES)('builds a valid $name workbook without fake data rows', ({ id }) => {
+  it.each(DATA_STARTERS)('builds a valid $name workbook without fake data rows', ({ id }) => {
     const template = buildGridStarterTemplate(entity, id);
     const parsed = GridExportTemplateDefinitionSchema.safeParse(template);
 
@@ -81,5 +85,27 @@ describe('Grid starter templates', () => {
     expect(template.sheets[0].regions).toEqual([]);
     expect(template.sheets[0].cells['7:0'].value).toBe('No fields available for this entity');
     expect(GridExportTemplateDefinitionSchema.safeParse(template).success).toBe(true);
+    expect(template.charts).toEqual([]);
+  });
+
+  it.each(DATA_STARTERS)('adds two dataset charts to the $name layout', ({ id }) => {
+    const template = buildGridStarterTemplate(entity, id);
+    expect(template.charts).toHaveLength(2);
+    for (const chart of template.charts!) {
+      expect(chart.source.kind).toBe('dataset');
+      expect(chart.anchor.sheetId).toBe(template.sheets[0].id);
+    }
+    // One chart beside the KPI cards/table, one below the totals row
+    expect(template.charts![0].anchor.startCol).toBeGreaterThan(7);
+    expect(template.charts![1].anchor.startRow).toBeGreaterThan(18);
+  });
+
+  it('builds the production target tracker without needing entity fields', () => {
+    const template = buildGridStarterTemplate(entity, 'production');
+    expect(GridExportTemplateDefinitionSchema.safeParse(template).success).toBe(true);
+    expect(template.datasets).toEqual([]);
+    expect(template.sheets[0].name).toBe('Production Tracker');
+    expect(template.sheets[0].dataValidations?.[0]).toMatchObject({ type: 'checkbox', ref: 'C21:AG28' });
+    expect(template.charts!.map((c) => c.type)).toEqual(['area', 'donut', 'bar', 'bar']);
   });
 });

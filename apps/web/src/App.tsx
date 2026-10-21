@@ -96,6 +96,7 @@ import { AuthPage } from "./pages/AuthPage";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { ThemeProvider } from "./context/theme-context";
 import { ThemeModeSwitch } from "./components/ThemeModeSwitch";
+import { DatePreferencesButton } from "./components/date-preferences-dialog";
 import {
   Zap,
   Menu,
@@ -112,6 +113,7 @@ import {
 } from "lucide-react";
 import type { PageDefinition } from "@config-platform/schema";
 import { AppBarProvider } from "./context/app-bar-context";
+import { DateSettingsProvider } from "./context/date-settings-provider";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -197,9 +199,7 @@ function RuntimeDynamicPage({
       params={params}
       navigate={navigate}
     >
-      <div
-        style={{ maxWidth: "1200px", margin: "0 auto", padding: "2rem 1.5rem" }}
-      >
+      <div className={`page-container${matched.width === "full" ? " page-container-full" : ""}`}>
         {renderNode(matched.root)}
       </div>
     </PageRuntimeProvider>
@@ -207,6 +207,10 @@ function RuntimeDynamicPage({
 }
 
 function getPageIcon(page: PageDefinition, metadata?: any): React.ReactNode {
+  // An icon chosen in Page Settings wins over anything derived
+  if (page.icon) {
+    return <DynamicIcon name={page.icon} size={16} />;
+  }
   // Check if page links to an entity in dataSources or root
   if (metadata) {
     const dsEntityId = page.dataSources?.[0]?.entityId;
@@ -373,7 +377,9 @@ function AppContent({ user }: { user: CurrentUser }) {
       {visibleNavigationPages.filter((page) => page.folderId === folderId).map((summary) => {
         const page = effectivePages.find((candidate) => candidate.id === summary.id);
         if (!page) return null;
-        const title = getPageTitle(page);
+        // The page's saved name; definitions don't carry one (migration strips it), so
+        // getPageTitle would fall back to the route for pages that don't start with a text node.
+        const title = summary.name?.trim() || getPageTitle(page);
         const icon = getPageIcon(page, metadata);
         return (
           <NavLink
@@ -392,7 +398,7 @@ function AppContent({ user }: { user: CurrentUser }) {
       {(pageNavigation?.folders ?? []).filter((folder) => folder.parentId === folderId).map((folder) => (
         <details key={folder.id} open>
           <summary style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 0.75rem", paddingLeft: `${0.75 + depth * 0.9}rem`, cursor: "pointer", color: "var(--text-muted)", listStyle: "none" }}>
-            <Folder size={16} />
+            {folder.icon ? <DynamicIcon name={folder.icon} size={16} /> : <Folder size={16} />}
             <span className="app-sidebar-item-title">{folder.name}</span>
           </summary>
           {renderNavigation(folder.id, depth + 1)}
@@ -410,6 +416,7 @@ function AppContent({ user }: { user: CurrentUser }) {
         flexDirection: "column",
       }}
     >
+      <DateSettingsProvider>
       <AppBarProvider routeKey={location.pathname}>
       {/* Top Navbar: Brand + Studio Tools + User Profile */}
       <header
@@ -643,6 +650,7 @@ function AppContent({ user }: { user: CurrentUser }) {
               {user.email}
             </span>
 
+            <DatePreferencesButton />
             <ThemeModeSwitch compact />
 
             <button
@@ -668,7 +676,8 @@ function AppContent({ user }: { user: CurrentUser }) {
 
       {/* Main Body */}
       {isStudioRoute ? (
-        /* Studio Views (Data Entities, Page Manager, Page Builder) take full width */
+        /* Standard studio screens use the theme's Layout container (.page-container);
+           full-bleed workspaces (Page Builder, Grid Designer) render without it. */
         <main
           style={{
             flex: 1,
@@ -682,69 +691,34 @@ function AppContent({ user }: { user: CurrentUser }) {
             <Routes>
               <Route
                 path="/studio/data"
-                element={
-                  <div
-                    style={{
-                      maxWidth: "1400px",
-                      margin: "0 auto",
-                      padding: "2rem 1.5rem",
-                    }}
-                  >
-                    <EntityManager />
-                  </div>
-                }
+                element={<div className="page-container"><EntityManager /></div>}
               />
               <Route
                 path="/studio/pages"
-                element={
-                  <div
-                    style={{
-                      maxWidth: "1400px",
-                      margin: "0 auto",
-                      padding: "2rem 1.5rem",
-                    }}
-                  >
-                    <PageManager />
-                  </div>
-                }
+                element={<div className="page-container"><PageManager /></div>}
               />
               <Route
                 path="/studio/export-templates"
-                element={<ExportTemplatesManager />}
+                element={<div className="page-container"><ExportTemplatesManager /></div>}
               />
+              <Route
+                path="/studio/permissions"
+                element={<div className="page-container"><PermissionsManager /></div>}
+              />
+              <Route
+                path="/studio/settings"
+                element={<div className="page-container"><WorkspaceSettings /></div>}
+              />
+              <Route
+                path="/studio/theme"
+                // Always full width: settings and live preview sit side by side
+                element={<div className="page-container page-container-full"><ThemeStudio /></div>}
+              />
+              {/* Full-bleed workspaces */}
               <Route
                 path="/studio/export-templates/:id/designer"
                 element={<GridTemplateDesigner />}
               />
-              <Route
-                path="/studio/permissions"
-                element={
-                  <div
-                    style={{
-                      maxWidth: "1400px",
-                      margin: "0 auto",
-                      padding: "2rem 1.5rem",
-                    }}
-                  >
-                    <PermissionsManager />
-                  </div>
-                }
-              />
-              <Route
-                path="/studio/settings"
-                element={
-                  <div
-                    style={{
-                      maxWidth: "1400px",
-                      margin: "0 auto",
-                      padding: "2rem 1.5rem",
-                    }}
-                  >
-                    <WorkspaceSettings />
-                  </div>
-                }
-              />
-              <Route path="/studio/theme" element={<ThemeStudio />} />
               <Route path="/studio/pages/:id" element={<PageBuilder />} />
             </Routes>
           </React.Suspense>
@@ -859,6 +833,7 @@ function AppContent({ user }: { user: CurrentUser }) {
         </div>
       )}
       </AppBarProvider>
+      </DateSettingsProvider>
     </div>
   );
 }

@@ -9,6 +9,8 @@
     "user:add": "tsx src/scripts/add-user.ts",
     "user:add:prod": "node dist/scripts/add-user.js",
     "check:db-clean": "tsx src/scripts/check-db-clean.ts",
+    "seed:production": "tsx src/scripts/seed-production-tracker.ts",
+    "seed:production-pages": "tsx src/scripts/seed-production-pages.ts",
     "test:db:up": "docker compose up -d postgres",
     "test:db:down": "docker compose down",
     "build": "tsc",
@@ -31,6 +33,7 @@
     "echarts": "^6.1.0",
     "exceljs": "^4.4.0",
     "fastify": "^5.2.1",
+    "jszip": "3.10.1",
     "nodemailer": "^10.0.13",
     "pg": "^8.13.3",
     "zod": "^3.24.2"

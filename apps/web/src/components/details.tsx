@@ -1,5 +1,6 @@
 import React from "react";
-import type { DetailsProps } from "@config-platform/schema";
+import { formatDateFieldValue, type DetailsProps } from "@config-platform/schema";
+import { useDateDisplayPrefs } from "../context/date-display-context";
 import { useMetadata } from "../context/metadata-context";
 import { usePageRuntime } from "../context/page-runtime-context";
 import { BrokenBinding } from "../renderer/broken-binding";
@@ -18,6 +19,7 @@ export const DetailsComponent: React.FC<DetailsProps> = ({
   alignSelf,
 }) => {
   const { resolveEntity, resolveField } = useMetadata();
+  const datePrefs = useDateDisplayPrefs();
   const runtime = usePageRuntime();
 
   // If source is provided, look up record in data source
@@ -171,6 +173,8 @@ export const DetailsComponent: React.FC<DetailsProps> = ({
                     }
                     recordId={val}
                   />
+                ) : fieldDef?.type === "date" ? (
+                  formatDateFieldValue(val, fieldDef.config, datePrefs)
                 ) : (
                   String(val)
                 )}

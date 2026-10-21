@@ -1,6 +1,7 @@
 import React from 'react';
 import type { CardProps } from '@config-platform/schema';
 import { DynamicIcon } from './dynamic-icon';
+import { contentLayout } from './content-layout';
 
 export const CardComponent: React.FC<CardProps & { children?: React.ReactNode }> = ({
   title,
@@ -13,6 +14,11 @@ export const CardComponent: React.FC<CardProps & { children?: React.ReactNode }>
   minWidth,
   maxWidth,
   alignSelf,
+  direction,
+  gap,
+  align,
+  justify,
+  wrap,
   children,
 }) => {
   const paddingMap = {
@@ -35,6 +41,8 @@ export const CardComponent: React.FC<CardProps & { children?: React.ReactNode }>
     flat: 'none',
     elevated: 'var(--border-width-sm) solid var(--border)',
   };
+
+  const body = contentLayout({ direction, gap, align, justify, wrap });
 
   const widthValue =
     width !== undefined
@@ -104,7 +112,17 @@ export const CardComponent: React.FC<CardProps & { children?: React.ReactNode }>
           </div>
         </div>
       )}
-      <div style={{ padding: paddingMap[padding], flex: 1 }}>{children}</div>
+      <div
+        data-testid="card-body"
+        className={body.className}
+        style={{
+          padding: paddingMap[padding],
+          flex: 1,
+          ...body.style,
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 };

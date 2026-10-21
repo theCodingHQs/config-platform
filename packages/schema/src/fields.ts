@@ -30,8 +30,11 @@ export const BooleanFieldConfigSchema = z.object({
 });
 
 export const DateFieldConfigSchema = z.object({
+  /** Date & time (a moment, shown in the viewer's time zone) instead of a calendar date. */
   includeTime: z.boolean().optional(),
   defaultNow: z.boolean().optional(),
+  /** Calendar dates only: 'month' stores the 1st of the month and shows/picks a month. */
+  granularity: z.enum(['day', 'month']).optional(),
 });
 
 export const SelectOptionSchema = z.object({
@@ -68,9 +71,10 @@ export const FieldConfigSchema = z.object({
   scale: z.number().int().optional(),
   min: z.number().optional(),
   max: z.number().optional(),
-  // Date
+  // Date ('precision' above is for numbers; a date's day/month choice is 'granularity')
   includeTime: z.boolean().optional(),
   defaultNow: z.boolean().optional(),
+  granularity: z.enum(['day', 'month']).optional(),
   // Common
   defaultValue: z.any().optional(),
 }).passthrough();

@@ -1,3 +1,4 @@
+import type { UserDatePreferences } from '@config-platform/schema';
 /**
  * Auth types for the config-platform.
  *
@@ -45,6 +46,8 @@ export interface SessionPayload {
   role: TenantRole;
   email: string;
   themePreference?: 'system' | 'light' | 'dark';
+  /** The user's own date display choices (absent keys = workspace default). */
+  datePreferences?: UserDatePreferences;
   expiresAt: Date;
 }
 

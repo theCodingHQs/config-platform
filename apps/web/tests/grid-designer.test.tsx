@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import {
   Univer,
@@ -21,7 +21,7 @@ import {
 } from '@config-platform/schema';
 import { gridTemplateToUniver, univerToGridTemplate } from '../src/studio/export-grid/univer-adapter';
 import { GridTemplateDesigner } from '../src/studio/GridTemplateDesigner';
-import { AppBarProvider } from '../src/context/app-bar-context';
+import { AppBarProvider, STATUS_MESSAGE_DURATION_MS, useStatusNotify } from '../src/context/app-bar-context';
 
 // Mock API client
 vi.mock('../src/api/client', () => ({
@@ -93,7 +93,7 @@ vi.mock('@univerjs/ui', async (importOriginal) => {
 });
 
 describe('Phase 2A: Grid Template Designer Frontend Suite', () => {
-  it('keeps the shared app bar hidden when there is no content, action, or message', () => {
+  it('keeps the status bar in place (empty) so a message appearing never moves the page', () => {
     render(
       <MemoryRouter>
         <AppBarProvider>
@@ -103,7 +103,69 @@ describe('Phase 2A: Grid Template Designer Frontend Suite', () => {
     );
 
     expect(screen.getByText('Page content')).toBeInTheDocument();
-    expect(screen.queryByTestId('app-bottom-bar')).not.toBeInTheDocument();
+    expect(screen.getByTestId('app-bottom-bar')).toBeEmptyDOMElement();
+  });
+
+  it('notify shows action feedback in the status bar and clears it after a while', async () => {
+    vi.useFakeTimers();
+    try {
+      function Saver() {
+        const notify = useStatusNotify();
+        return (
+          <>
+            <button onClick={() => notify('success', 'Theme saved')}>save</button>
+            <button onClick={() => notify('error', 'Save failed: offline')}>fail</button>
+          </>
+        );
+      }
+      render(<AppBarProvider><Saver /></AppBarProvider>);
+
+      fireEvent.click(screen.getByText('save'));
+      const message = screen.getByTestId('app-status-notification');
+      expect(message).toHaveTextContent('Theme saved');
+      expect(message).toHaveClass('app-statusbar-message-success');
+      act(() => { vi.advanceTimersByTime(STATUS_MESSAGE_DURATION_MS.success + 10); });
+      expect(screen.queryByTestId('app-status-notification')).toBeNull();
+
+      // Errors stay longer and are announced assertively
+      fireEvent.click(screen.getByText('fail'));
+      act(() => { vi.advanceTimersByTime(STATUS_MESSAGE_DURATION_MS.success + 10); });
+      expect(screen.getByTestId('app-status-notification')).toHaveAttribute('aria-live', 'assertive');
+      act(() => { vi.advanceTimersByTime(STATUS_MESSAGE_DURATION_MS.error); });
+      expect(screen.queryByTestId('app-status-notification')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a message opens from zero to its own width, filled in its type colour with a matching icon', async () => {
+    const widthSpy = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockReturnValue(180);
+    try {
+      function Saver() {
+        const notify = useStatusNotify();
+        return <button onClick={() => notify('error', 'Delete failed')}>fail</button>;
+      }
+      render(<AppBarProvider><Saver /></AppBarProvider>);
+      fireEvent.click(screen.getByText('fail'));
+
+      const message = screen.getByTestId('app-status-notification');
+      // Starts closed, then opens to the measured content width (CSS transitions the change)
+      expect(message.style.width).toBe('0px');
+      await waitFor(() => expect(message.style.width).toBe('180px'));
+      expect(message).toHaveClass('app-statusbar-message-error');
+      expect(message.querySelector('svg.app-statusbar-message-icon')).not.toBeNull();
+    } finally {
+      widthSpy.mockRestore();
+    }
+  });
+
+  it('a component outside the app shell can call notify safely (no-op)', () => {
+    function Saver() {
+      const notify = useStatusNotify();
+      return <button onClick={() => notify('success', 'x')}>save</button>;
+    }
+    render(<Saver />);
+    expect(() => fireEvent.click(screen.getByText('save'))).not.toThrow();
   });
 
   // ─── 1. Zero Foreign Network Requests ──────────────────────────────────────
@@ -210,6 +272,33 @@ describe('Phase 2A: Grid Template Designer Frontend Suite', () => {
       expect(screen.getByText('Applied Operations Board template')).toBeInTheDocument();
     });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('offers the interactive Production Target Tracker starter and loads its charts', async () => {
+    render(
+      <MemoryRouter initialEntries={['/studio/export-templates/tpl_1/designer']}>
+        <Routes>
+          <Route path="/studio/export-templates/:id/designer" element={<GridTemplateDesigner />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Budget Template')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Starter Templates' }));
+    expect(screen.getByText('Production Target Tracker')).toBeInTheDocument();
+    expect(screen.getByText('Interactive')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Production Target Tracker starter template' }));
+    await waitFor(() => {
+      expect(screen.getByText('Applied Production Target Tracker template')).toBeInTheDocument();
+    });
+    // The four range charts render as overlay cards
+    for (const id of ['chart_production_daily_pct', 'chart_production_overall', 'chart_production_per_day', 'chart_production_progress']) {
+      expect(await screen.findByTestId(`chart-overlay-${id}`)).toBeInTheDocument();
+    }
   });
 
   it('shows publish confirmation in the designer status bar', async () => {

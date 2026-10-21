@@ -40,6 +40,7 @@ export const StackComponent: React.FC<StackComponentProps> = ({
     <div
       className="layout-stack"
       data-testid="layout-stack"
+      data-direction={direction}
       style={{
         display: "flex",
         flexDirection: direction === "horizontal" ? "row" : "column",

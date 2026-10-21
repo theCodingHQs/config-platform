@@ -1,20 +1,48 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Search, ChevronDown, Check } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo, useId } from 'react';
+import { Search, ChevronDown, Check, Ban } from 'lucide-react';
 import { DynamicIcon, POPULAR_ENTITY_ICONS, ALL_ICON_NAMES } from './dynamic-icon';
 
-interface IconPickerProps {
+interface IconPickerBaseProps {
+  label?: string;
+  /** id for the trigger button (lets an external <label htmlFor> point at it). */
+  id?: string;
+}
+
+/** An icon is required (e.g. entity icons). */
+interface RequiredIconPickerProps extends IconPickerBaseProps {
+  clearable?: false;
   value: string;
   onChange: (iconName: string) => void;
-  label?: string;
 }
+
+/** An icon is optional: adds a "No icon" choice and reports `undefined` when cleared. */
+interface ClearableIconPickerProps extends IconPickerBaseProps {
+  clearable: true;
+  value: string | undefined;
+  onChange: (iconName: string | undefined) => void;
+  /** Text shown when no icon is selected. */
+  placeholder?: string;
+  /** Name of the empty choice in the grid, e.g. "Automatic icon" when a default applies. */
+  clearLabel?: string;
+}
+
+type IconPickerProps = RequiredIconPickerProps | ClearableIconPickerProps;
 
 const PAGE_SIZE = 96;
 
-export const IconPicker: React.FC<IconPickerProps> = ({
-  value,
-  onChange,
-  label = 'Entity Icon',
-}) => {
+/** Icon badge in the trigger: the control height minus the inset on each side. */
+const ICON_BADGE_SIZE = 'calc(var(--control-height-md) - 2 * var(--space-1) - 2 * var(--border-width-sm))';
+
+export const IconPicker: React.FC<IconPickerProps> = (props) => {
+  const { value, label = 'Entity Icon', id } = props;
+  const clearable = props.clearable === true;
+  const placeholder = props.clearable ? props.placeholder ?? 'No icon' : undefined;
+  const clearLabel = props.clearable ? props.clearLabel ?? 'No icon' : 'No icon';
+  const onChange = props.onChange as (iconName: string | undefined) => void;
+  const generatedId = useId();
+  const triggerId = id ?? `icon-picker-${generatedId}`;
+  const isEmpty = clearable && !value;
+
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('Popular');
@@ -97,53 +125,69 @@ export const IconPicker: React.FC<IconPickerProps> = ({
   return (
     <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
       {label && (
-        <label className="form-label" style={{ fontSize: 'var(--font-size-xs)', marginBottom: 'var(--space-1)' }}>
+        <label
+          className="form-label"
+          htmlFor={triggerId}
+        >
           {label}
         </label>
       )}
 
       {/* Trigger Button */}
       <button
+        id={triggerId}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        className="form-input"
+        onClick={() => {
+          // Each opening starts fresh (no leftover search hiding icons or the "No icon" choice)
+          if (!isOpen) setSearch('');
+          setIsOpen(!isOpen);
+        }}
         style={{
+          // Same height, border, radius and text as inputs and selects (theme density / text size);
+          // the icon badge is inset by the same space on every side
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          width: '100%',
-          padding: 'var(--space-2) var(--space-3)',
-          backgroundColor: 'var(--surface)',
-          border: 'var(--border-width-sm) solid var(--border)',
-          borderRadius: 'var(--radius-control)',
-          color: 'var(--text)',
+          gap: 'var(--space-2)',
+          height: 'var(--control-height-md)',
+          paddingBlock: 0,
+          paddingInlineStart: 'var(--space-1)',
           cursor: 'pointer',
-          fontSize: 'var(--font-size-sm)',
-          transition: 'border-color 0.15s ease',
+          textAlign: 'left',
         }}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', minWidth: 0 }}>
           <div
             style={{
-              width: 'var(--control-height-sm)',
-              height: 'var(--control-height-sm)',
+              width: ICON_BADGE_SIZE,
+              height: ICON_BADGE_SIZE,
+              flexShrink: 0,
               borderRadius: 'var(--radius-control)',
-              backgroundColor: 'var(--primary-subtle)',
-              color: 'var(--primary)',
+              backgroundColor: isEmpty ? 'transparent' : 'var(--primary-subtle)',
+              border: isEmpty ? 'var(--border-width-sm) dashed var(--border)' : 'none',
+              color: isEmpty ? 'var(--text-muted)' : 'var(--primary)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
             }}
           >
-            <DynamicIcon name={value || 'Database'} size={16} />
+            {isEmpty ? <Ban size="1em" /> : <DynamicIcon name={value || 'Database'} size="1.15em" />}
           </div>
-          <span style={{ fontWeight: 500 }}>{selectedLabel}</span>
-          <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)' }}>
-            ({value || 'Database'})
-          </span>
+          {isEmpty ? (
+            <span style={{ color: 'var(--text-muted)' }}>{placeholder}</span>
+          ) : (
+            <>
+              <span style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedLabel}</span>
+              <span style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-xs)' }}>
+                ({value || 'Database'})
+              </span>
+            </>
+          )}
         </div>
-        <ChevronDown size={16} style={{ color: 'var(--text-muted)' }} />
+        <ChevronDown size="1.15em" style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
       </button>
 
       {/* Popover */}
@@ -163,13 +207,14 @@ export const IconPicker: React.FC<IconPickerProps> = ({
             display: 'flex',
             flexDirection: 'column',
             gap: 'var(--space-2)',
-            maxHeight: 380,
+            fontSize: 'var(--font-size-sm)',
+            maxHeight: '28em',
           }}
         >
           {/* Search bar */}
           <div style={{ position: 'relative', width: '100%' }}>
             <Search
-              size={14}
+              size="1em"
               style={{
                 position: 'absolute',
                 left: 'var(--space-2)',
@@ -180,17 +225,12 @@ export const IconPicker: React.FC<IconPickerProps> = ({
             />
             <input
               type="text"
-              className="form-input"
+              className="form-input form-control-sm"
               placeholder={`Search all ${ALL_ICON_NAMES.length} icons...`}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               autoFocus
-              style={{
-                paddingLeft: 'var(--space-6)',
-                fontSize: 'var(--font-size-xs)',
-                height: 'var(--control-height-sm)',
-                width: '100%',
-              }}
+              style={{ paddingLeft: 'var(--space-6)', width: '100%' }}
             />
           </div>
 
@@ -258,7 +298,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({
               gridTemplateColumns: 'repeat(6, 1fr)',
               gap: 'var(--space-2)',
               overflowY: 'auto',
-              maxHeight: 210,
+              maxHeight: '15em',
               padding: 'var(--space-1)',
             }}
             onScroll={(e) => {
@@ -270,6 +310,34 @@ export const IconPicker: React.FC<IconPickerProps> = ({
               }
             }}
           >
+            {/* "No icon" choice for optional icons (hidden while searching) */}
+            {clearable && !search && (
+              <button
+                type="button"
+                title={clearLabel}
+                aria-label={clearLabel}
+                aria-pressed={isEmpty}
+                onClick={() => {
+                  onChange(undefined);
+                  setIsOpen(false);
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 'var(--space-2)',
+                  borderRadius: 'var(--radius-control)',
+                  border: isEmpty
+                    ? 'var(--border-width-md) solid var(--primary)'
+                    : 'var(--border-width-sm) dashed var(--border)',
+                  backgroundColor: isEmpty ? 'var(--primary-subtle)' : 'var(--surface)',
+                  color: isEmpty ? 'var(--primary)' : 'var(--text-muted)',
+                  cursor: 'pointer',
+                }}
+              >
+                <Ban size="1.25em" />
+              </button>
+            )}
             {visibleIcons.map((item) => {
               const isSelected = value === item.name;
               return (
@@ -300,7 +368,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({
                     transition: 'all 0.15s ease',
                   }}
                 >
-                  <DynamicIcon name={item.name} size={18} />
+                  <DynamicIcon name={item.name} size="1.25em" />
                   {isSelected && (
                     <div
                       style={{
@@ -310,14 +378,14 @@ export const IconPicker: React.FC<IconPickerProps> = ({
                         backgroundColor: 'var(--primary)',
                         color: 'var(--accent-contrast)',
                         borderRadius: 'var(--radius-full)',
-                        width: 12,
-                        height: 12,
+                        width: '0.875em',
+                        height: '0.875em',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                       }}
                     >
-                      <Check size={9} />
+                      <Check size="0.65em" />
                     </div>
                   )}
                 </button>

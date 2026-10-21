@@ -1,12 +1,57 @@
 import React, { useRef, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ChartProps } from "@config-platform/schema";
-import { neutralLightPalette, defaultSharedTokens } from "@config-platform/schema";
+import {
+  neutralLightPalette,
+  buildEChartsOption,
+  DEFAULT_CHART_APPEARANCE,
+  TEXT_SIZE_DEFAULT,
+  isAllowedIcon,
+  normalizePlainDate,
+  formatDateFieldValue,
+  type ChartAppearance,
+  type ChartProps,
+} from "@config-platform/schema";
 import { useMetadata } from "../context/metadata-context";
 import { usePageRuntime } from "../context/page-runtime-context";
 import { useTheme } from "../context/theme-context";
-import { fetchRecords } from "../api/client";
+import { fetchAggregateGroups } from "../api/client";
 import { BrokenBinding } from "../renderer/broken-binding";
+import { loadECharts } from "./echarts-loader";
+import { defaultChartAxisTitles } from "./chart-axis-titles";
+import { DynamicIcon } from "./dynamic-icon";
+import { useDateDisplayPrefs } from "../context/date-display-context";
+import type { EChartsType } from "echarts/core";
+
+/** Reads the live theme tokens so charts follow light/dark mode and the workspace theme. */
+function readThemeAppearance(): { appearance: ChartAppearance; accent: string; surface: string; border: string } {
+  const css = window.getComputedStyle(document.documentElement);
+  const token = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback;
+  const text = token("--text", neutralLightPalette.text);
+  const muted = token("--text-muted", neutralLightPalette.muted);
+  const border = token("--border", neutralLightPalette.border);
+  const surface = token("--surface", neutralLightPalette.surface);
+  // Chart text follows the theme Text Size: --font-size-sm is the body size (14px by default)
+  const rootPx = Number.parseFloat(css.fontSize) || 16;
+  const bodyToken = token("--font-size-sm", "");
+  const bodyPx = bodyToken.endsWith("rem") ? Number.parseFloat(bodyToken) * rootPx : Number.parseFloat(bodyToken);
+  const fontScale = Number.isFinite(bodyPx) && bodyPx > 0 ? bodyPx / TEXT_SIZE_DEFAULT : 1;
+  return {
+    appearance: {
+      title: text,
+      text,
+      legendText: muted,
+      mutedText: muted,
+      axisLine: border,
+      splitLine: token("--border-subtle", border),
+      background: surface,
+      fontFamily: token("--font-sans", DEFAULT_CHART_APPEARANCE.fontFamily ?? "sans-serif"),
+      fontScale,
+    },
+    accent: token("--accent", neutralLightPalette.accent),
+    surface,
+    border,
+  };
+}
 
 export const ChartComponent: React.FC<ChartProps> = ({
   entityId,
@@ -16,6 +61,10 @@ export const ChartComponent: React.FC<ChartProps> = ({
   aggregateOp = "count",
   aggregateFieldId,
   title,
+  icon,
+  showAxisTitles = true,
+  xAxisTitle,
+  yAxisTitle,
   flex,
   width,
   minWidth,
@@ -24,6 +73,7 @@ export const ChartComponent: React.FC<ChartProps> = ({
 }) => {
   const { tenantId, resolveEntity, resolveField } = useMetadata();
   const runtime = usePageRuntime();
+  const datePrefs = useDateDisplayPrefs();
   const { resolvedTheme } = useTheme();
   const [themeVersion, setThemeVersion] = useState(0);
 
@@ -35,229 +85,159 @@ export const ChartComponent: React.FC<ChartProps> = ({
     return () => window.removeEventListener("theme-changed", handleThemeChange);
   }, []);
 
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const chartInstanceRef = useRef<any>(null);
-  const [chartReady, setChartReady] = useState(false);
-  const [chartFailed, setChartFailed] = useState(false);
-
-  const isCanvasSupported = useMemo(() => {
-    if (typeof document === "undefined") return false;
-    if (
-      typeof navigator !== "undefined" &&
-      navigator.userAgent?.toLowerCase().includes("jsdom")
-    ) {
-      return false;
-    }
-    try {
-      const testCanvas = document.createElement("canvas");
-      return Boolean(testCanvas.getContext && testCanvas.getContext("2d"));
-    } catch {
-      return false;
-    }
-  }, []);
+  const chartElRef = useRef<HTMLDivElement | null>(null);
 
   const groupFieldDef = resolveField(groupByFieldId);
   const aggFieldDef = aggregateFieldId
     ? resolveField(aggregateFieldId)
     : undefined;
 
-  // 1. Data retrieval: from data source or direct query
-  const isDataSourceMode = Boolean(source && runtime);
+  // 1. Totals per group, calculated by the server over every matching record. A chart bound
+  //    to a page data source uses that source's entity and filters (all its records, not just
+  //    the page of rows a table shows); otherwise it reads its own entity.
   const dsState = source && runtime ? runtime.dataSources[source] : undefined;
+  const queryEntityId = source ? dsState?.entityId : entityId;
+  const queryFilter = source ? dsState?.filter : undefined;
+  const aggregateField = aggregateOp === "count" ? undefined : aggFieldDef?.name;
 
-  const { data: queryRecords } = useQuery({
-    queryKey: ["chart-records", tenantId, entityId],
+  const { data: aggregate, isLoading, refetch } = useQuery({
+    queryKey: ["chart-aggregate", tenantId, queryEntityId, aggregateOp, aggregateField, groupFieldDef?.name, queryFilter],
     queryFn: () =>
-      fetchRecords(tenantId, entityId!, { limit: 100 }).then((r) => r.data),
-    enabled: Boolean(!isDataSourceMode && tenantId && entityId),
+      fetchAggregateGroups(queryEntityId!, {
+        op: aggregateOp,
+        field: aggregateField,
+        groupBy: groupFieldDef!.name,
+        filter: queryFilter,
+      }),
+    enabled: Boolean(tenantId && queryEntityId && groupFieldDef && (aggregateOp === "count" || aggregateField)),
   });
 
-  const rawRecords = isDataSourceMode
-    ? dsState?.data || []
-    : queryRecords || [];
-
-  // 2. Compute group-by aggregation
-  const chartData = useMemo(() => {
-    if (!groupFieldDef || rawRecords.length === 0) {
-      return { labels: [], values: [] };
-    }
-
-    const groupFieldName = groupFieldDef.name;
-    const aggFieldName = aggFieldDef ? aggFieldDef.name : "id";
-
-    const groups = new Map<string, number[]>();
-
-    for (const row of rawRecords) {
-      const rawKey = row[groupFieldName];
-      const key =
-        rawKey === null || rawKey === undefined ? "Unknown" : String(rawKey);
-
-      if (!groups.has(key)) {
-        groups.set(key, []);
-      }
-
-      const val = row[aggFieldName];
-      const numVal = typeof val === "number" ? val : Number(val) || 0;
-      groups.get(key)!.push(numVal);
-    }
-
-    const labels: string[] = [];
-    const values: number[] = [];
-
-    for (const [key, vals] of groups.entries()) {
-      labels.push(key);
-      let calculated = 0;
-      switch (aggregateOp) {
-        case "count":
-          calculated = vals.length;
-          break;
-        case "sum":
-          calculated = vals.reduce((a, b) => a + b, 0);
-          break;
-        case "avg":
-          calculated =
-            vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-          break;
-        case "min":
-          calculated = vals.length > 0 ? Math.min(...vals) : 0;
-          break;
-        case "max":
-          calculated = vals.length > 0 ? Math.max(...vals) : 0;
-          break;
-      }
-      values.push(Math.round(calculated * 100) / 100);
-    }
-
-    return { labels, values };
-  }, [groupFieldDef, aggFieldDef, rawRecords, aggregateOp]);
-
-  // 3. Initialize or Re-render Chart.js reading token values from computed styles
+  // When the data source reloads (e.g. a record was saved), the totals are recalculated too
+  const sourceData = dsState?.data;
+  const sourceLoadedRef = useRef(false);
   useEffect(() => {
-    if (!isCanvasSupported || chartData.labels.length === 0) {
+    if (!source || sourceData === undefined) return;
+    if (!sourceLoadedRef.current) {
+      sourceLoadedRef.current = true;
       return;
     }
+    refetch();
+  }, [source, sourceData, refetch]);
 
-    let isCancelled = false;
+  // 2. Chart categories and values
+  const chartData = useMemo(() => {
+    if (!groupFieldDef || !aggregate) return { labels: [] as string[], values: [] as number[] };
+    const isDateGroup = groupFieldDef.type === "date";
+    const isInstantGroup = isDateGroup && Boolean(groupFieldDef.config?.includeTime);
+    const rows = aggregate.groups.map((group) => {
+      const raw = group.key;
+      // Sort key: the calendar date (or the instant) in ISO form, which orders chronologically
+      const key = raw === null || raw === undefined
+        ? "Unknown"
+        : !isDateGroup ? String(raw)
+        : isInstantGroup ? new Date(String(raw)).toISOString()
+        : normalizePlainDate(raw) ?? String(raw);
+      return { raw, key, value: group.value === null ? 0 : Math.round(group.value * 100) / 100 };
+    });
+    // Dates read left to right in time order, labelled in the viewer's date format
+    if (isDateGroup) rows.sort((a, b) => (a.key === "Unknown" ? 1 : b.key === "Unknown" ? -1 : a.key.localeCompare(b.key)));
+    return {
+      labels: rows.map((r) => (isDateGroup && r.key !== "Unknown" ? formatDateFieldValue(r.raw, groupFieldDef.config, datePrefs) : r.key)),
+      values: rows.map((r) => r.value),
+    };
+  }, [groupFieldDef, aggregate, datePrefs]);
+  const groupsTruncated = Boolean(aggregate?.groupsTruncated);
 
-    async function initChart() {
-      if (!isCanvasSupported || !canvasRef.current) return;
-      let ctx: CanvasRenderingContext2D | null = null;
-      try {
-        ctx = canvasRef.current.getContext("2d");
-      } catch {
-        ctx = null;
+  const seriesName = title || aggregateOp.toUpperCase();
+
+  // Axis titles: custom text, or derived from the fields; hidden when turned off
+  const autoTitles = defaultChartAxisTitles(groupFieldDef?.label, aggregateOp, aggFieldDef?.label);
+  const xTitle = showAxisTitles ? xAxisTitle?.trim() || autoTitles.x : undefined;
+  const yTitle = showAxisTitles ? yAxisTitle?.trim() || autoTitles.y : undefined;
+
+  // Rendered size of the plot; the builder uses it so axis titles fit (shortened if needed)
+  const [plotSize, setPlotSize] = useState<{ width: number; height: number } | null>(null);
+  const hasData = chartData.labels.length > 0;
+
+  // 3. ECharts option from the shared builder (same one used by grid charts and exports),
+  //    rebuilt when the data, the theme or the plot size changes
+  const option = useMemo(() => {
+    if (!hasData || typeof window === "undefined") return null;
+    const { appearance, accent, surface, border } = readThemeAppearance();
+    const built = buildEChartsOption(
+      // The card renders the title; lines keep their light area fill
+      {
+        type: type === "line" ? "line" : "bar",
+        title: "",
+        options: { legend: false, area: type === "line", xAxisTitle: xTitle, yAxisTitle: yTitle },
+      },
+      { categories: chartData.labels, series: [{ name: seriesName, data: chartData.values, color: accent }] },
+      undefined,
+      appearance,
+      plotSize ?? undefined,
+    );
+    // Live charts are interactive: tooltips and a short entry animation
+    built.animation = true;
+    built.tooltip = {
+      trigger: "axis",
+      backgroundColor: surface,
+      borderColor: border,
+      textStyle: { color: appearance.text, fontFamily: appearance.fontFamily, fontSize: Math.round(12 * (appearance.fontScale ?? 1)) },
+    };
+    return built;
+    // resolvedTheme/themeVersion: re-read the CSS tokens after a theme switch
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type, chartData, seriesName, xTitle, yTitle, plotSize, resolvedTheme, themeVersion]);
+
+  // 4. One ECharts instance (SVG renderer) for the plot's lifetime; it follows the card's size
+  const instanceRef = useRef<EChartsType | null>(null);
+  const optionRef = useRef(option);
+  optionRef.current = option;
+
+  useEffect(() => {
+    const el = chartElRef.current;
+    if (!el || !hasData) return;
+
+    let disposed = false;
+    let observer: ResizeObserver | null = null;
+    const measure = () => {
+      const width = Math.round(el.clientWidth);
+      const height = Math.round(el.clientHeight);
+      if (width > 0 && height > 0) {
+        setPlotSize((prev) => (prev && prev.width === width && prev.height === height ? prev : { width, height }));
       }
-      if (!ctx) {
-        setChartFailed(true);
-        return;
-      }
+    };
 
-      // Read design token values from computed styles
-      const computed = window.getComputedStyle(document.documentElement);
-      const accent = computed.getPropertyValue("--accent").trim() || neutralLightPalette.accent;
-      const accentSubtle =
-        computed.getPropertyValue("--accent-subtle").trim() || neutralLightPalette["accent-subtle"];
-      const textColor = computed.getPropertyValue("--text").trim() || neutralLightPalette.text;
-      const textMuted =
-        computed.getPropertyValue("--text-muted").trim() || neutralLightPalette.muted;
-      const borderColor =
-        computed.getPropertyValue("--border").trim() || neutralLightPalette.border;
-
-      try {
-        const { Chart, registerables } = await import("chart.js");
-        if (registerables) {
-          Chart.register(...registerables);
+    loadECharts()
+      .then((echarts) => {
+        if (disposed) return;
+        const chart = echarts.init(el, undefined, { renderer: "svg" });
+        instanceRef.current = chart;
+        if (optionRef.current) chart.setOption(optionRef.current, { notMerge: true });
+        measure();
+        if (typeof ResizeObserver !== "undefined") {
+          observer = new ResizeObserver(() => {
+            chart.resize();
+            measure();
+          });
+          observer.observe(el);
         }
-
-        if (chartInstanceRef.current) {
-          chartInstanceRef.current.destroy();
-          chartInstanceRef.current = null;
-        }
-
-        if (isCancelled) return;
-
-        chartInstanceRef.current = new Chart(ctx, {
-          type: type === "line" ? "line" : "bar",
-          data: {
-            labels: chartData.labels,
-            datasets: [
-              {
-                label: title || `${aggregateOp.toUpperCase()}`,
-                data: chartData.values,
-                backgroundColor:
-                  type === "line" ? accentSubtle : accent,
-                borderColor: accent,
-                borderWidth: parseInt(defaultSharedTokens.borderWidth.md, 10),
-                borderRadius: parseInt(defaultSharedTokens.radius.sm, 10),
-                tension: 0.2,
-                fill: type === "line",
-              },
-            ],
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                display: false,
-              },
-              tooltip: {
-                backgroundColor: computed.getPropertyValue("--surface").trim() || neutralLightPalette.surface,
-                titleColor: textColor,
-                bodyColor: textColor,
-                borderColor: borderColor,
-                borderWidth: parseInt(defaultSharedTokens.borderWidth.sm, 10),
-              },
-            },
-            scales: {
-              x: {
-                ticks: {
-                  color: textMuted,
-                  font: { family: computed.getPropertyValue("--font-sans").trim() || defaultSharedTokens.fontStack.sans },
-                },
-                grid: {
-                  color: borderColor,
-                },
-              },
-              y: {
-                beginAtZero: true,
-                ticks: {
-                  color: textMuted,
-                  font: { family: computed.getPropertyValue("--font-sans").trim() || "sans-serif" },
-                },
-                grid: {
-                  color: borderColor,
-                },
-              },
-            },
-          },
-        });
-
-        if (!isCancelled) {
-          setChartReady(true);
-          setChartFailed(false);
-        }
-      } catch (err) {
-        // Fallback to SVG gracefully
-        console.warn("Chart.js init fallback:", err);
-        if (!isCancelled) {
-          setChartReady(false);
-          setChartFailed(true);
-        }
-      }
-    }
-
-    initChart();
+      })
+      .catch((err) => console.warn("Chart failed to render:", err));
 
     return () => {
-      isCancelled = true;
-      if (chartInstanceRef.current) {
-        chartInstanceRef.current.destroy();
-        chartInstanceRef.current = null;
-      }
-      setChartReady(false);
+      disposed = true;
+      observer?.disconnect();
+      instanceRef.current?.dispose();
+      instanceRef.current = null;
     };
-  }, [type, chartData, title, aggregateOp, resolvedTheme, themeVersion, isCanvasSupported]);
+  }, [hasData]);
+
+  // Apply option changes (data, theme, size) to the existing instance. Merging (rather than
+  // notMerge) updates in place, so a resize doesn't replay the entry animation.
+  useEffect(() => {
+    if (option) instanceRef.current?.setOption(option, { replaceMerge: ["series"] });
+  }, [option]);
 
   if (!groupFieldDef && groupByFieldId) {
     return <BrokenBinding type="field" id={groupByFieldId} />;
@@ -265,8 +245,6 @@ export const ChartComponent: React.FC<ChartProps> = ({
   if (!aggFieldDef && aggregateFieldId) {
     return <BrokenBinding type="field" id={aggregateFieldId} />;
   }
-
-  const maxVal = Math.max(...chartData.values, 1);
 
   const widthValue =
     width !== undefined
@@ -278,6 +256,9 @@ export const ChartComponent: React.FC<ChartProps> = ({
       className="chart-container"
       data-testid="chart-container"
       style={{
+        // Contains the absolutely positioned screen-reader table; without it the table is
+        // placed relative to the page and stretches the document (second scrollbar)
+        position: "relative",
         padding: "var(--spacing-5)",
         backgroundColor: "var(--surface)",
         border: "var(--border-width-sm) solid var(--border)",
@@ -290,17 +271,24 @@ export const ChartComponent: React.FC<ChartProps> = ({
         minWidth: minWidth !== undefined ? (typeof minWidth === 'number' ? `${minWidth}px` : minWidth) : undefined,
         maxWidth: maxWidth !== undefined ? (typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth) : undefined,
         alignSelf,
-        minHeight: "260px",
+        minHeight: "320px",
       }}
     >
-      {title && (
+      {(title || icon) && (
         <div
+          data-testid="chart-title"
           style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--spacing-2)",
             fontSize: "var(--font-size-sm)",
             fontWeight: 600,
             color: "var(--text)",
           }}
         >
+          {icon && isAllowedIcon(icon) && (
+            <DynamicIcon name={icon} size="1.15em" style={{ color: "var(--accent)", flexShrink: 0 }} />
+          )}
           {title}
         </div>
       )}
@@ -313,69 +301,41 @@ export const ChartComponent: React.FC<ChartProps> = ({
             fontSize: "var(--font-size-xs)",
           }}
         >
-          No data available
+          {isLoading ? "Loading…" : "No data available"}
         </div>
       ) : (
-        <div style={{ position: "relative", width: "100%", height: "220px" }}>
-          {/* Canvas for Chart.js */}
-          <canvas ref={canvasRef} style={{ width: "100%", height: "100%" }} />
-
-          {/* SVG Fallback if canvas is not supported (e.g. standard JSDOM in tests) */}
-          {(!isCanvasSupported || chartFailed) && (
-            <svg
-              data-testid="chart-svg-fallback"
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                width: "100%",
-                height: "100%",
-                pointerEvents: "none",
-              }}
-              viewBox="0 0 400 180"
-            >
-              {chartData.labels.map((lbl, i) => {
-                const count = chartData.labels.length;
-                const barWidth = Math.max(16, Math.min(40, 300 / count - 10));
-                const x = 40 + i * (320 / count);
-                const height = (chartData.values[i] / maxVal) * 120;
-                const y = 140 - height;
-
-                return (
-                  <g key={lbl}>
-                    <rect
-                      x={x}
-                      y={y}
-                      width={barWidth}
-                      height={height}
-                      fill="var(--accent)"
-                      rx="3"
-                      opacity="0.85"
-                    />
-                    <text
-                      x={x + barWidth / 2}
-                      y={y - 5}
-                      textAnchor="middle"
-                      fontSize="10"
-                      fill="var(--text)"
-                    >
-                      {chartData.values[i]}
-                    </text>
-                    <text
-                      x={x + barWidth / 2}
-                      y={160}
-                      textAnchor="middle"
-                      fontSize="10"
-                      fill="var(--text-muted)"
-                    >
-                      {lbl}
-                    </text>
-                  </g>
-                );
-              })}
-            </svg>
+        <>
+          <div
+            ref={chartElRef}
+            data-testid="chart-plot"
+            role="img"
+            aria-label={`${title || "Chart"}: ${chartData.labels.length} ${chartData.labels.length === 1 ? "category" : "categories"}`}
+            style={{ position: "relative", width: "100%", height: "280px" }}
+          />
+          {groupsTruncated && (
+            <p style={{ margin: 0, fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
+              Showing the first {chartData.labels.length} groups. Add a filter to narrow the chart.
+            </p>
           )}
-        </div>
+          {/* Screen-reader equivalent of the chart */}
+          <table className="sr-only" data-testid="chart-data-table">
+            <caption>{title || seriesName}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{groupFieldDef?.label ?? groupFieldDef?.name ?? "Category"}</th>
+                <th scope="col">{seriesName}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {chartData.labels.map((label, i) => (
+                <tr key={label}>
+                  <th scope="row">{label}</th>
+                  <td>{chartData.values[i]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
     </div>
   );

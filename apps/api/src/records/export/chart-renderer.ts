@@ -50,13 +50,16 @@ export class ChartRenderer {
       }
     }
 
-    const option = buildEChartsOption(chart, data, themeTokens);
+    const width = Math.max(200, Math.min(dimensions.width, 2400));
+    const height = Math.max(150, Math.min(dimensions.height, 1600));
+    // The size lets axis titles adapt (shorten, or drop on very short charts) instead of colliding
+    const option = buildEChartsOption(chart, data, themeTokens, undefined, { width, height });
 
     const chartInstance = echarts.init(null, null, {
       renderer: 'svg',
       ssr: true,
-      width: Math.max(200, Math.min(dimensions.width, 2400)),
-      height: Math.max(150, Math.min(dimensions.height, 1600)),
+      width,
+      height,
     });
 
     try {

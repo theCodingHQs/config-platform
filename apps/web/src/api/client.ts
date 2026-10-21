@@ -6,6 +6,8 @@ import type {
   ImportPreviewResult,
   ImportDryRunResult,
   ImportCommitResult,
+  UserDatePreferences,
+  WorkspaceDateSettings,
 } from "@config-platform/schema";
 
 export class ApiError extends Error {
@@ -100,6 +102,8 @@ export interface CurrentUser {
   tenantId: string;
   tenantName?: string;
   role: "owner" | "admin" | "builder" | "editor" | "viewer";
+  /** The user's own date display choices (absent keys = workspace default). */
+  datePreferences?: UserDatePreferences;
 }
 
 export interface MemberInfo {
@@ -117,6 +121,31 @@ export async function fetchMe(): Promise<CurrentUser | null> {
   } catch {
     return null;
   }
+}
+
+/** Workspace date defaults (Settings → Regional). */
+export async function fetchWorkspaceDateSettings(): Promise<WorkspaceDateSettings> {
+  const res = await apiFetch(`${API_BASE_URL}/workspace/date-settings`);
+  return handleResponse<WorkspaceDateSettings>(res);
+}
+
+export async function updateWorkspaceDateSettings(settings: WorkspaceDateSettings): Promise<WorkspaceDateSettings> {
+  const res = await apiFetch(`${API_BASE_URL}/workspace/date-settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  return handleResponse<WorkspaceDateSettings>(res);
+}
+
+/** Replaces the signed-in user's date preferences (omitted keys = workspace default). */
+export async function updateMyDatePreferences(preferences: UserDatePreferences): Promise<UserDatePreferences> {
+  const res = await apiFetch(`${API_BASE_URL}/auth/date-preferences`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(preferences),
+  });
+  return (await handleResponse<{ datePreferences: UserDatePreferences }>(res)).datePreferences;
 }
 
 export async function login(
@@ -591,6 +620,43 @@ export async function fetchAggregate(
   );
 }
 
+export interface AggregateGroupsResult {
+  groups: Array<{ key: unknown; value: number | null }>;
+  /** More groups exist than requested; the first ones (in key order) were returned. */
+  groupsTruncated: boolean;
+}
+
+/**
+ * Totals per group, calculated by the server over every matching record (not just a loaded
+ * page), e.g. "sum of days on target per machine". The server returns at most 50 groups.
+ */
+export async function fetchAggregateGroups(
+  entityId: string,
+  params: { op: string; field?: string; groupBy: string; filter?: Record<string, any>; groupLimit?: number },
+): Promise<AggregateGroupsResult> {
+  const query = new URLSearchParams();
+  query.set("op", params.op);
+  if (params.field) query.set("field", params.field);
+  query.set("groupBy", params.groupBy);
+  query.set("groupLimit", String(params.groupLimit ?? 50));
+  if (params.filter) {
+    for (const [k, v] of Object.entries(params.filter)) {
+      if (typeof v === "object" && v !== null) {
+        for (const [op, val] of Object.entries(v)) {
+          if (val !== undefined && val !== null) query.set(`filter[${k}][${op}]`, String(val));
+        }
+      } else if (v !== undefined && v !== null) {
+        query.set(`filter[${k}][eq]`, String(v));
+      }
+    }
+  }
+  const res = await apiFetch(`${API_BASE_URL}/entities/${entityId}/aggregate?${query.toString()}`, {
+    headers: { "Content-Type": "application/json" },
+  });
+  const body = await handleResponse<{ groups?: AggregateGroupsResult["groups"]; groupsTruncated?: boolean }>(res);
+  return { groups: body.groups ?? [], groupsTruncated: Boolean(body.groupsTruncated) };
+}
+
 // ==========================================
 // Schema Management Endpoints (/studio/data)
 // ==========================================
@@ -753,6 +819,10 @@ export interface PageSummary {
   folderId?: string | null;
   position?: number;
   allowedRoles?: string[] | null;
+  /** Navigation icon override; null/absent = derived automatically. */
+  icon?: string | null;
+  /** 'full' = always full width; null/absent = follows the theme content width. */
+  width?: "full" | null;
 }
 
 export interface PageNavFolder {
@@ -761,6 +831,26 @@ export interface PageNavFolder {
   name: string;
   slug: string;
   position: number;
+  icon?: string | null;
+}
+
+export interface PageSettingsUpdate {
+  name?: string;
+  /** Last route segment; the full route is rebuilt from the page's group. */
+  slug?: string;
+  folderId?: string | null;
+  width?: "theme" | "full";
+  /** null clears the override. */
+  icon?: string | null;
+}
+
+export async function updatePageSettings(pageId: string, data: PageSettingsUpdate): Promise<PageSummary> {
+  const res = await apiFetch(`${API_BASE_URL}/pages/${pageId}/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<PageSummary>(res);
 }
 
 export interface PageNavigation {
@@ -785,7 +875,7 @@ export async function fetchPageNavigation(_tenantId?: string): Promise<PageNavig
 }
 
 export async function createPageFolder(
-  data: { name: string; parentId?: string | null },
+  data: { name: string; parentId?: string | null; icon?: string | null },
 ): Promise<PageNavFolder> {
   const res = await apiFetch(`${API_BASE_URL}/pages/navigation/folders`, {
     method: "POST",
@@ -797,7 +887,7 @@ export async function createPageFolder(
 
 export async function updatePageFolder(
   folderId: string,
-  data: { name?: string; parentId?: string | null },
+  data: { name?: string; parentId?: string | null; icon?: string | null },
 ): Promise<PageNavFolder> {
   const res = await apiFetch(`${API_BASE_URL}/pages/navigation/folders/${folderId}`, {
     method: "PUT",
@@ -836,7 +926,14 @@ export async function fetchPage(
 
 export async function createPage(
   _tenantId: string,
-  data: { name: string; route: string; draft?: any; folderId?: string | null },
+  data: {
+    name: string;
+    route: string;
+    draft?: any;
+    folderId?: string | null;
+    width?: "theme" | "full";
+    icon?: string | null;
+  },
 ): Promise<PageDetail> {
   const res = await apiFetch(`${API_BASE_URL}/pages`, {
     method: "POST",

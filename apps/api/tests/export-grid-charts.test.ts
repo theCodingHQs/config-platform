@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import crypto from 'node:crypto';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import {
   type GridExportTemplateDefinition,
   type GridChartDefinition,
@@ -236,8 +237,8 @@ describe('Phase A: Charts in Grid Templates (Server & Schema Engine)', () => {
     expect(() => assertSvgScriptFree('<svg onload="alert(1)"></svg>')).toThrow();
   });
 
-  // ─── 4. XLSX Read Back via ExcelJS Has Image at Expected Cells ─────────────
-  it('4. XLSX read back via ExcelJS has an image at the expected cells', async () => {
+  // ─── 4. Range Chart Exports as a Native Excel Chart at Expected Cells ───────
+  it('4. range chart exports as a native Excel chart anchored at the expected cells', async () => {
     const template: GridExportTemplateDefinition = {
       kind: 'grid',
       version: 1,
@@ -296,14 +297,15 @@ describe('Phase A: Charts in Grid Templates (Server & Schema Engine)', () => {
     const ws = readWb.getWorksheet('Dashboard');
     expect(ws).toBeDefined();
 
-    const images = ws!.getImages();
-    expect(images).toHaveLength(1);
-
-    const imgRange = images[0].range;
-    expect(imgRange.tl.nativeRow).toBe(2);
-    expect(imgRange.tl.nativeCol).toBe(1);
-    expect(imgRange.br.nativeRow).toBe(11);
-    expect(imgRange.br.nativeCol).toBe(8);
+    // Range charts are live native charts (not PNG snapshots) referencing the source cells
+    expect(ws!.getImages()).toHaveLength(0);
+    const zip = await JSZip.loadAsync(buffer);
+    const chartXml = await zip.file('xl/charts/chart1.xml')!.async('string');
+    expect(chartXml).toContain("<c:f>&apos;Dashboard&apos;!$B$2:$B$4</c:f>");
+    expect(chartXml).toContain("<c:f>&apos;Dashboard&apos;!$A$2:$A$4</c:f>");
+    const drawingXml = await zip.file('xl/drawings/drawing1.xml')!.async('string');
+    expect(drawingXml).toContain('<xdr:from><xdr:col>1</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>2</xdr:row>');
+    expect(drawingXml).toContain('<xdr:to><xdr:col>8</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>11</xdr:row>');
   });
 
   // ─── 5. Export with 40 Records Matches Database Sums ────────────────────────
@@ -765,10 +767,11 @@ describe('Phase A: Charts in Grid Templates (Server & Schema Engine)', () => {
     // Verification: 10 ECharts SVG SSR + PNG rasterization renders comfortably
     expect(durationMs).toBeLessThan(30000);
 
-    // Read back and assert all 10 images are present in worksheet
+    // Read back: the workbook still loads, and all 10 range charts are native chart parts
     const readWb = new ExcelJS.Workbook();
     await readWb.xlsx.load(buffer);
-    const ws = readWb.getWorksheet('10-Chart Dashboard');
-    expect(ws?.getImages()).toHaveLength(10);
+    expect(readWb.getWorksheet('10-Chart Dashboard')).toBeDefined();
+    const zip = await JSZip.loadAsync(buffer);
+    expect(Object.keys(zip.files).filter((f) => /^xl\/charts\/chart\d+\.xml$/.test(f))).toHaveLength(10);
   });
 });

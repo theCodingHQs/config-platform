@@ -1,3 +1,4 @@
+import { normalizePlainDate, type DateGranularity } from '@config-platform/schema';
 import type { ResolvedEntity } from './entity-cache.js';
 import { entityCache } from './entity-cache.js';
 import type { StorageAdapter } from '../db/storage-adapter.js';
@@ -127,12 +128,26 @@ export class RecordValidator {
         }
 
         case 'date': {
-          const parsed = Date.parse(val);
-          if (isNaN(parsed)) {
-            errors[field.name] = `${field.label} must be a valid ISO date`;
+          const cfg = (field.config || {}) as { includeTime?: boolean; granularity?: DateGranularity };
+          if (cfg.includeTime) {
+            // A moment in time: any ISO date-time, stored as an instant
+            const parsed = typeof val === 'string' || val instanceof Date ? new Date(val).getTime() : NaN;
+            if (Number.isNaN(parsed)) {
+              errors[field.name] = `${field.label} must be a valid date and time`;
+              break;
+            }
+            mappedPhysicalData[field.physicalColumnName] = new Date(parsed).toISOString();
             break;
           }
-          mappedPhysicalData[field.physicalColumnName] = new Date(parsed).toISOString();
+          // A calendar date (or month): stored as written, never shifted by a time zone
+          const plain = normalizePlainDate(val, cfg.granularity === 'month' ? 'month' : 'day');
+          if (!plain) {
+            errors[field.name] = cfg.granularity === 'month'
+              ? `${field.label} must be a month (YYYY-MM)`
+              : `${field.label} must be a valid date (YYYY-MM-DD)`;
+            break;
+          }
+          mappedPhysicalData[field.physicalColumnName] = plain;
           break;
         }
 

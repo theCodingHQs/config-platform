@@ -23,7 +23,12 @@ describe('Catalog Migration 008: User Theme Preference', () => {
 
   it('preserves all historical migrations without modification', () => {
     const versions = catalogMigrations.map((m) => m.version);
-    expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+    expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+  });
+
+  it('includes migration 014_page_nav_folder_icon in catalogMigrations', () => {
+    const migration014 = catalogMigrations.find((m) => m.version === 14);
+    expect(migration014?.name).toBe('014_page_nav_folder_icon');
   });
 
   it('validates ThemePreferenceSchema values (system, light, dark)', () => {

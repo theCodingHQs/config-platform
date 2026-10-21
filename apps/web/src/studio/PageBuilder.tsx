@@ -50,6 +50,9 @@ import { StateEditorModal } from "./StateEditorModal";
 import { DataSourceEditorModal } from "./DataSourceEditorModal";
 import { TemplatePickerModal } from "./TemplatePickerModal";
 import { ComponentOverlay } from "./ComponentOverlay";
+import { defaultChartAxisTitles } from "../components/chart-axis-titles";
+import { ContentLayoutFields, ContentLayoutSection } from "./ContentLayoutFields";
+import { IconPicker } from "../components/icon-picker";
 import { createTemplatePage, type TemplateType } from "./templates";
 import {
   fetchPage,
@@ -58,7 +61,7 @@ import {
   listExportTemplates,
   type PageDetail,
 } from "../api/client";
-import type {
+import type { PageRole,
   PageDefinition,
   NodeDefinition,
   NodeType,
@@ -71,7 +74,13 @@ function stableStringify(obj: any): string {
   if (typeof obj !== "object") return JSON.stringify(obj);
   if (Array.isArray(obj)) return "[" + obj.map(stableStringify).join(",") + "]";
   const keys = Object.keys(obj).sort();
-  return "{" + keys.map((k) => JSON.stringify(k) + ":" + stableStringify(obj[k])).join(",") + "}";
+  return (
+    "{" +
+    keys
+      .map((k) => JSON.stringify(k) + ":" + stableStringify(obj[k]))
+      .join(",") +
+    "}"
+  );
 }
 
 // Helper tree functions
@@ -211,6 +220,11 @@ function insertNodeSibling(
   return insertNodeIntoTree(root, parentInfo.parent.id, newNode, targetIndex);
 }
 
+
+/** Toolbar icons scale with the button text (theme text size). */
+const TOOLBAR_ICON_SIZE = "1.15em";
+const STATUS_DOT_SIZE = "0.45em";
+
 export function moveNodeInTree(
   root: NodeDefinition,
   activeId: string,
@@ -274,11 +288,7 @@ export function computeDropTarget(
   if (overNode.id === root.id) {
     return {
       targetParentId: root.id,
-      targetIndex: isDraggingUp
-        ? 0
-        : root.children
-          ? root.children.length
-          : 0,
+      targetIndex: isDraggingUp ? 0 : root.children ? root.children.length : 0,
     };
   }
 
@@ -370,11 +380,17 @@ const SortableTreeItem: React.FC<{
   const isRoot = depth === 0;
   const isContainer = isContainerNode(node);
 
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({
-      id: node.id,
-      disabled: isRoot,
-    });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: node.id,
+    disabled: isRoot,
+  });
 
   const isSelected = selectedId === node.id;
   const isHovered = hoveredId === node.id;
@@ -425,7 +441,13 @@ const SortableTreeItem: React.FC<{
           onHover(null);
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--space-2)",
+          }}
+        >
           {!isRoot ? (
             <span
               {...attributes}
@@ -723,7 +745,8 @@ export const PageBuilder: React.FC = () => {
 
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(() => {
-      handleSaveDraft();
+      // The toolbar shows a failed auto-save; nothing else awaits it
+      handleSaveDraft().catch(() => {});
     }, 1500);
 
     return () => {
@@ -733,13 +756,15 @@ export const PageBuilder: React.FC = () => {
 
   // Change detection: is draft modified vs DB draft, and does draft differ from live published
   const isDraftDirty = Boolean(
-    draft && pageDetail && stableStringify(draft) !== stableStringify(pageDetail.draft)
+    draft &&
+    pageDetail &&
+    stableStringify(draft) !== stableStringify(pageDetail.draft),
   );
 
   const hasUnpublishedChanges = Boolean(
     draft &&
-      (!pageDetail?.published ||
-        stableStringify(draft) !== stableStringify(pageDetail.published))
+    (!pageDetail?.published ||
+      stableStringify(draft) !== stableStringify(pageDetail.published)),
   );
 
   // Prevent accidental loss of unsaved changes if closing/reloading window
@@ -754,25 +779,59 @@ export const PageBuilder: React.FC = () => {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isDraftDirty]);
 
-  const handleSaveDraft = async () => {
-    if (!draft || !pageDetail) return;
-    setIsSaving(true);
-    try {
-      const updated = await updatePage(tenantId, pageDetail.id, {
-        draft,
-        expectedVersion: pageDetail.version,
-      });
-      setPageDetail(updated);
-      setSaveStatus("Draft saved");
-      setTimeout(() => setSaveStatus(null), 2500);
-      queryClient.invalidateQueries({ queryKey: ["pages", tenantId] });
-      return updated;
-    } catch (err: any) {
-      setSaveStatus(`Save error: ${err.message}`);
-      throw err;
-    } finally {
-      setIsSaving(false);
+  // Saves run one at a time, each with the latest draft and the version the previous save
+  // returned. Overlapping saves (auto-save + Save Draft) used to send a stale version and
+  // fail with a version conflict.
+  const latestDraftRef = useRef(draft);
+  latestDraftRef.current = draft;
+  const latestPageRef = useRef(pageDetail);
+  latestPageRef.current = pageDetail;
+  const saveInFlightRef = useRef<Promise<PageDetail | undefined> | null>(null);
+  const saveQueuedRef = useRef(false);
+
+  const runSave = async (): Promise<PageDetail | undefined> => {
+    const currentDraft = latestDraftRef.current;
+    const currentPage = latestPageRef.current;
+    if (!currentDraft || !currentPage) return undefined;
+    const updated = await updatePage(tenantId, currentPage.id, {
+      draft: currentDraft,
+      expectedVersion: currentPage.version,
+    });
+    latestPageRef.current = updated;
+    setPageDetail(updated);
+    return updated;
+  };
+
+  const handleSaveDraft = async (): Promise<PageDetail | undefined> => {
+    if (!draft || !pageDetail) return undefined;
+    if (saveInFlightRef.current) {
+      // Save again (with whatever changed meanwhile) once the running save finishes
+      saveQueuedRef.current = true;
+      return saveInFlightRef.current;
     }
+    setIsSaving(true);
+    const saving = (async () => {
+      try {
+        let updated = await runSave();
+        while (saveQueuedRef.current) {
+          saveQueuedRef.current = false;
+          updated = (await runSave()) ?? updated;
+        }
+        setSaveStatus("Draft saved");
+        setTimeout(() => setSaveStatus(null), 2500);
+        queryClient.invalidateQueries({ queryKey: ["pages", tenantId] });
+        return updated;
+      } catch (err: any) {
+        saveQueuedRef.current = false;
+        setSaveStatus(`Save error: ${err.message}`);
+        throw err;
+      } finally {
+        saveInFlightRef.current = null;
+        setIsSaving(false);
+      }
+    })();
+    saveInFlightRef.current = saving;
+    return saving;
   };
 
   const publishMut = useMutation({
@@ -1040,7 +1099,7 @@ export const PageBuilder: React.FC = () => {
     setSaveStatus(`Duplicated "${target.type}" (${clone.id})`);
     setTimeout(() => {
       try {
-        if (typeof window !== 'undefined') setSaveStatus(null);
+        if (typeof window !== "undefined") setSaveStatus(null);
       } catch {}
     }, 2500);
   };
@@ -1050,7 +1109,7 @@ export const PageBuilder: React.FC = () => {
     setSaveStatus(`Copied "${node.type}" (${node.id})`);
     setTimeout(() => {
       try {
-        if (typeof window !== 'undefined') setSaveStatus(null);
+        if (typeof window !== "undefined") setSaveStatus(null);
       } catch {}
     }, 2500);
   };
@@ -1065,7 +1124,12 @@ export const PageBuilder: React.FC = () => {
     if (isContainerNode(targetNode)) {
       updatedRoot = insertNodeIntoTree(draft.root, targetNode.id, clone);
     } else {
-      updatedRoot = insertNodeSibling(draft.root, targetNode.id, clone, "after");
+      updatedRoot = insertNodeSibling(
+        draft.root,
+        targetNode.id,
+        clone,
+        "after",
+      );
     }
 
     pushDraftUpdate({
@@ -1229,30 +1293,30 @@ export const PageBuilder: React.FC = () => {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          padding: "0.5rem 1rem",
-          borderBottom: "1px solid var(--border)",
+          gap: "var(--space-3)",
+          padding: "var(--space-2) var(--space-4)",
+          borderBottom: "var(--border-width-sm) solid var(--border)",
           backgroundColor: "var(--surface)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", minWidth: 0 }}>
           <button
             type="button"
-            className="btn btn-ghost"
+            className="btn btn-ghost btn-sm"
             onClick={() => navigate("/studio/pages")}
-            style={{
-              padding: "0.25rem 0.5rem",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.25rem",
-            }}
           >
-            <ArrowLeft size={16} /> Pages
+            <ArrowLeft size={TOOLBAR_ICON_SIZE} /> Pages
           </button>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", minWidth: 0 }}>
             <span style={{ fontWeight: 600, fontSize: "var(--font-size-sm)" }}>
               {pageDetail.name}
             </span>
-            <span style={{ color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
+            <span
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "var(--font-size-sm)",
+              }}
+            >
               {pageDetail.route}
             </span>
             <span className="badge" style={{ fontSize: "var(--font-size-xs)" }}>
@@ -1280,8 +1344,8 @@ export const PageBuilder: React.FC = () => {
               >
                 <span
                   style={{
-                    width: 6,
-                    height: 6,
+                    width: STATUS_DOT_SIZE,
+                    height: STATUS_DOT_SIZE,
                     borderRadius: "var(--radius-full)",
                     backgroundColor: "var(--warning)",
                   }}
@@ -1307,8 +1371,8 @@ export const PageBuilder: React.FC = () => {
               >
                 <span
                   style={{
-                    width: 6,
-                    height: 6,
+                    width: STATUS_DOT_SIZE,
+                    height: STATUS_DOT_SIZE,
                     borderRadius: "var(--radius-full)",
                     backgroundColor: "var(--success)",
                   }}
@@ -1319,9 +1383,15 @@ export const PageBuilder: React.FC = () => {
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexShrink: 0 }}>
           {saveStatus && (
-            <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
+            <span
+              role={saveStatus.startsWith("Save error") ? "alert" : "status"}
+              style={{
+                fontSize: "var(--font-size-xs)",
+                color: saveStatus.startsWith("Save error") ? "var(--danger)" : "var(--text-muted)",
+              }}
+            >
               {saveStatus}
             </span>
           )}
@@ -1329,107 +1399,74 @@ export const PageBuilder: React.FC = () => {
           {/* Undo / Redo */}
           <button
             type="button"
-            className="btn btn-ghost"
+            className="btn btn-ghost btn-sm btn-icon"
             onClick={handleUndo}
             disabled={historyIndex <= 0}
             title="Undo"
             aria-label="Undo"
-            style={{ padding: "0.25rem 0.5rem" }}
           >
-            <Undo2 size={16} />
+            <Undo2 size={TOOLBAR_ICON_SIZE} />
           </button>
           <button
             type="button"
-            className="btn btn-ghost"
+            className="btn btn-ghost btn-sm btn-icon"
             onClick={handleRedo}
             disabled={historyIndex >= history.length - 1}
             title="Redo"
             aria-label="Redo"
-            style={{ padding: "0.25rem 0.5rem" }}
           >
-            <Redo2 size={16} />
+            <Redo2 size={TOOLBAR_ICON_SIZE} />
           </button>
+
+          <span className="toolbar-separator" aria-hidden="true" />
 
           {/* State & Data Sources Buttons */}
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-sm"
             onClick={() => setIsStateModalOpen(true)}
-            style={{
-              fontSize: "var(--font-size-xs)",
-              padding: "0.375rem 0.625rem",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-            }}
           >
-            <Sliders size={13} /> State ({Object.keys(draft.state || {}).length}
-            )
+            <Sliders size={TOOLBAR_ICON_SIZE} /> State ({Object.keys(draft.state || {}).length})
           </button>
 
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-sm"
             onClick={() => setIsDataSourceModalOpen(true)}
-            style={{
-              fontSize: "var(--font-size-xs)",
-              padding: "0.375rem 0.625rem",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-            }}
           >
-            <Database size={13} /> Data Sources (
-            {(draft.dataSources || []).length})
+            <Database size={TOOLBAR_ICON_SIZE} /> Data Sources ({(draft.dataSources || []).length})
           </button>
 
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-sm"
             onClick={() => setIsTemplateModalOpen(true)}
-            style={{
-              fontSize: "var(--font-size-xs)",
-              padding: "0.375rem 0.625rem",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-            }}
           >
-            <LayoutTemplate size={13} /> Templates
+            <LayoutTemplate size={TOOLBAR_ICON_SIZE} /> Templates
           </button>
 
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-sm"
             onClick={() => setIsRolesModalOpen(true)}
-            style={{
-              fontSize: "var(--font-size-xs)",
-              padding: "0.375rem 0.625rem",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-            }}
           >
-            <Shield size={13} /> Allowed Roles (
+            <Shield size={TOOLBAR_ICON_SIZE} /> Allowed Roles (
             {draft.allowedRoles && draft.allowedRoles.length > 0
               ? draft.allowedRoles.length
               : "All"}
             )
           </button>
 
+          <span className="toolbar-separator" aria-hidden="true" />
+
           {/* Validation Status Indicator */}
           <div style={{ position: "relative" }}>
             <button
               type="button"
+              className="btn btn-sm"
+              aria-expanded={showValidationPopover}
               onClick={() => setShowValidationPopover(!showValidationPopover)}
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.25rem",
-                padding: "0.25rem 0.5rem",
-                borderRadius: "var(--radius-control)",
-                fontSize: "var(--font-size-xs)",
-                cursor: "pointer",
                 backgroundColor:
                   brokenBindings.length === 0
                     ? "var(--success-bg)"
@@ -1438,16 +1475,16 @@ export const PageBuilder: React.FC = () => {
                   brokenBindings.length === 0
                     ? "var(--success)"
                     : "var(--warning)",
-                border: `1px solid ${brokenBindings.length === 0 ? "transparent" : "var(--warning-border)"}`,
+                borderColor: brokenBindings.length === 0 ? "transparent" : "var(--warning-border)",
               }}
             >
               {brokenBindings.length === 0 ? (
                 <>
-                  <Check size={14} /> Valid
+                  <Check size={TOOLBAR_ICON_SIZE} /> Valid
                 </>
               ) : (
                 <>
-                  <AlertTriangle size={14} /> {brokenBindings.length} broken
+                  <AlertTriangle size={TOOLBAR_ICON_SIZE} /> {brokenBindings.length} broken
                 </>
               )}
             </button>
@@ -1458,18 +1495,20 @@ export const PageBuilder: React.FC = () => {
                   position: "absolute",
                   top: "100%",
                   right: 0,
-                  marginTop: "0.375rem",
+                  marginTop: "var(--space-1)",
                   width: "320px",
                   backgroundColor: "var(--surface)",
-                  border: "1px solid var(--border)",
+                  border: "var(--border-width-sm) solid var(--border)",
                   borderRadius: "var(--radius-surface)",
-                  padding: "0.75rem",
+                  padding: "var(--space-3)",
                   boxShadow: "var(--shadow-md)",
                   zIndex: 50,
                   fontSize: "var(--font-size-xs)",
                 }}
               >
-                <div style={{ fontWeight: 600, marginBottom: "var(--space-1)" }}>
+                <div
+                  style={{ fontWeight: 600, marginBottom: "var(--space-1)" }}
+                >
                   Binding Validation
                 </div>
                 {brokenBindings.length === 0 ? (
@@ -1495,12 +1534,13 @@ export const PageBuilder: React.FC = () => {
             )}
           </div>
 
+          <span className="toolbar-separator" aria-hidden="true" />
+
           {/* Preview Published toggle */}
           <button
             type="button"
-            className="btn btn-secondary"
+            className="btn btn-secondary btn-sm"
             onClick={() => setIsPreviewPublished(!isPreviewPublished)}
-            style={{ fontSize: "var(--font-size-xs)", padding: "var(--space-1) var(--space-3)" }}
             title={
               pageDetail.published
                 ? isPreviewPublished
@@ -1517,18 +1557,12 @@ export const PageBuilder: React.FC = () => {
             type="button"
             aria-label="Save Draft"
             data-testid="save-draft-btn"
-            className="btn btn-secondary"
-            onClick={handleSaveDraft}
+            className="btn btn-secondary btn-sm"
+            onClick={() => handleSaveDraft().catch(() => {})}
             disabled={isSaving || !isDraftDirty}
-            style={{
-              fontSize: "var(--font-size-xs)",
-              padding: "var(--space-1) var(--space-3)",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "var(--space-1)",
-              opacity: !isDraftDirty && !isSaving ? 0.65 : 1,
-            }}
-            title={isDraftDirty ? "Save changes to draft" : "Draft is already saved"}
+            title={
+              isDraftDirty ? "Save changes to draft" : "Draft is already saved"
+            }
           >
             {isSaving ? (
               "Saving..."
@@ -1536,8 +1570,8 @@ export const PageBuilder: React.FC = () => {
               <>
                 <span
                   style={{
-                    width: 6,
-                    height: 6,
+                    width: STATUS_DOT_SIZE,
+                    height: STATUS_DOT_SIZE,
                     borderRadius: "var(--radius-full)",
                     backgroundColor: "var(--warning)",
                   }}
@@ -1546,7 +1580,7 @@ export const PageBuilder: React.FC = () => {
               </>
             ) : (
               <>
-                <Check size={13} style={{ color: "var(--success)" }} />
+                <Check size={TOOLBAR_ICON_SIZE} style={{ color: "var(--success)" }} />
                 Draft Saved
               </>
             )}
@@ -1557,22 +1591,12 @@ export const PageBuilder: React.FC = () => {
             type="button"
             aria-label="Publish"
             data-testid="publish-btn"
-            className={hasUnpublishedChanges ? "btn btn-primary" : "btn btn-secondary"}
+            className={
+              hasUnpublishedChanges ? "btn btn-primary btn-sm" : "btn btn-secondary btn-sm"
+            }
             onClick={handlePublish}
             disabled={publishMut.isPending || !hasUnpublishedChanges}
-            style={{
-              fontSize: "var(--font-size-xs)",
-              padding: "var(--space-1) var(--space-3)",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "var(--space-1)",
-              fontWeight: 600,
-              boxShadow: hasUnpublishedChanges
-                ? "var(--shadow-sm)"
-                : "none",
-              opacity: !hasUnpublishedChanges && !publishMut.isPending ? 0.65 : 1,
-              cursor: !hasUnpublishedChanges && !publishMut.isPending ? "not-allowed" : "pointer",
-            }}
+            style={{ fontWeight: 600 }}
             title={
               hasUnpublishedChanges
                 ? "Pending changes to publish. Click to make live."
@@ -1585,8 +1609,8 @@ export const PageBuilder: React.FC = () => {
               <>
                 <span
                   style={{
-                    width: 7,
-                    height: 7,
+                    width: STATUS_DOT_SIZE,
+                    height: STATUS_DOT_SIZE,
                     borderRadius: "var(--radius-full)",
                     backgroundColor: "var(--accent-contrast)",
                   }}
@@ -1595,7 +1619,7 @@ export const PageBuilder: React.FC = () => {
               </>
             ) : (
               <>
-                <Check size={13} />
+                <Check size={TOOLBAR_ICON_SIZE} />
                 Published
               </>
             )}
@@ -1630,8 +1654,9 @@ export const PageBuilder: React.FC = () => {
           {/* Palette */}
           <div
             style={{
-              padding: "0.875rem",
               borderBottom: "1px solid var(--border)",
+              overflowY: "auto",
+              maxWidth: "300px",
             }}
           >
             <div
@@ -1641,6 +1666,12 @@ export const PageBuilder: React.FC = () => {
                 color: "var(--text-muted)",
                 textTransform: "uppercase",
                 marginBottom: "0.5rem",
+                padding: "0.3rem 0.575rem",
+                position: "sticky",
+                top: "0",
+                left: "0",
+                backgroundColor: "var(--bg)",
+                zIndex: "1",
               }}
             >
               Add Component
@@ -1650,6 +1681,7 @@ export const PageBuilder: React.FC = () => {
                 display: "grid",
                 gridTemplateColumns: "1fr 1fr",
                 gap: "0.375rem",
+                padding: "0.5rem",
               }}
             >
               {(
@@ -1694,7 +1726,23 @@ export const PageBuilder: React.FC = () => {
           </div>
 
           {/* Tree View */}
-          <div style={{ padding: "0.875rem", flex: 1 }}>
+          <div style={{ flex: 1, overflowY: "auto", maxWidth: "300px" }}>
+            <div
+              style={{
+                fontSize: "var(--font-size-xs)",
+                fontWeight: 600,
+                color: "var(--text-muted)",
+                textTransform: "uppercase",
+                padding: "0.3rem 0.575rem",
+                position: "sticky",
+                top: "0",
+                left: '0',
+                backgroundColor: "var(--bg)",
+                zIndex: "1",
+              }}
+            >
+              Component Tree
+            </div>
             <div
               style={{
                 display: "flex",
@@ -1703,16 +1751,6 @@ export const PageBuilder: React.FC = () => {
                 marginBottom: "0.5rem",
               }}
             >
-              <div
-                style={{
-                  fontSize: "var(--font-size-xs)",
-                  fontWeight: 600,
-                  color: "var(--text-muted)",
-                  textTransform: "uppercase",
-                }}
-              >
-                Component Tree
-              </div>
               {copiedNode && (
                 <button
                   type="button"
@@ -1774,7 +1812,10 @@ export const PageBuilder: React.FC = () => {
                       cursor: "grabbing",
                     }}
                   >
-                    <GripVertical size={13} style={{ color: "var(--accent)" }} />
+                    <GripVertical
+                      size={13}
+                      style={{ color: "var(--accent)" }}
+                    />
                     <span style={{ fontWeight: 600, color: "var(--accent)" }}>
                       {activeDragNode.type}
                     </span>
@@ -1873,7 +1914,9 @@ export const PageBuilder: React.FC = () => {
                         </button>
                       </div>
                     )}
-                    {renderNode(pageDetail.published.root)}
+                    <div className={`page-width-preview${pageDetail.published.width === "full" ? " page-width-preview-full" : ""}`}>
+                      {renderNode(pageDetail.published.root)}
+                    </div>
                   </>
                 ) : (
                   <div
@@ -1909,6 +1952,7 @@ export const PageBuilder: React.FC = () => {
                       }
                     }}
                     onMouseLeave={() => setHoveredNodeId(null)}
+                    className={`page-width-preview${draft.width === "full" ? " page-width-preview-full" : ""}`}
                   >
                     {renderNode(draft.root, { attachNodeId: true })}
                   </div>
@@ -2798,40 +2842,22 @@ export const PageBuilder: React.FC = () => {
                                         />
                                       </div>
                                       <div>
-                                        <label
-                                          style={{
-                                            color: "var(--text-muted)",
-                                            display: "block",
-                                            marginBottom: 2,
-                                          }}
-                                        >
-                                          Custom Icon (Optional)
-                                        </label>
-                                        <input
-                                          type="text"
-                                          className="form-input"
-                                          placeholder="e.g. User, Mail, DollarSign..."
-                                          value={fieldConfig.icon || ""}
-                                          onChange={(e) => {
+                                        <IconPicker
+                                          clearable
+                                          label="Custom Icon (Optional)"
+                                          placeholder="Default icon"
+                                          value={fieldConfig.icon}
+                                          onChange={(icon) => {
                                             const newFields =
                                               selectedFields.map((f) =>
                                                 f.fieldId === col.id
-                                                  ? {
-                                                      ...f,
-                                                      icon:
-                                                        e.target.value.trim() ||
-                                                        undefined,
-                                                    }
+                                                  ? { ...f, icon }
                                                   : f,
                                               );
                                             handleUpdateProps({
                                               ...selectedNode.props,
                                               fields: newFields,
                                             });
-                                          }}
-                                          style={{
-                                            fontSize: "var(--font-size-xs)",
-                                            padding: "0.25rem 0.5rem",
                                           }}
                                         />
                                       </div>
@@ -3232,7 +3258,10 @@ export const PageBuilder: React.FC = () => {
                     >
                       <input
                         type="checkbox"
-                        checked={selectedNode.props?.flex === 1 || selectedNode.props?.flex === "1"}
+                        checked={
+                          selectedNode.props?.flex === 1 ||
+                          selectedNode.props?.flex === "1"
+                        }
                         onChange={(e) =>
                           handleUpdateProps({
                             ...selectedNode.props,
@@ -3266,7 +3295,10 @@ export const PageBuilder: React.FC = () => {
                     }}
                   >
                     <div>
-                      <label className="form-label" htmlFor="prop-button-variant">
+                      <label
+                        className="form-label"
+                        htmlFor="prop-button-variant"
+                      >
                         Variant
                       </label>
                       <select
@@ -3307,33 +3339,21 @@ export const PageBuilder: React.FC = () => {
                       </select>
                     </div>
                   </div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "2fr 1fr",
-                      gap: "0.5rem",
-                    }}
-                  >
+                  <IconPicker
+                    clearable
+                    id="prop-button-icon"
+                    label="Button Icon (optional)"
+                    value={selectedNode.props?.icon}
+                    onChange={(icon) =>
+                      handleUpdateProps({ ...selectedNode.props, icon })
+                    }
+                  />
+                  {selectedNode.props?.icon && (
                     <div>
-                      <label className="form-label" htmlFor="prop-button-icon">
-                        Button Icon (optional)
-                      </label>
-                      <input
-                        id="prop-button-icon"
-                        type="text"
-                        className="form-input"
-                        placeholder="e.g. Plus, Download, Trash2..."
-                        value={selectedNode.props?.icon || ""}
-                        onChange={(e) =>
-                          handleUpdateProps({
-                            ...selectedNode.props,
-                            icon: e.target.value.trim() || undefined,
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="form-label" htmlFor="prop-button-icon-pos">
+                      <label
+                        className="form-label"
+                        htmlFor="prop-button-icon-pos"
+                      >
                         Icon Position
                       </label>
                       <select
@@ -3351,7 +3371,7 @@ export const PageBuilder: React.FC = () => {
                         <option value="right">Right</option>
                       </select>
                     </div>
-                  </div>
+                  )}
                   <div
                     style={{
                       display: "flex",
@@ -3430,7 +3450,10 @@ export const PageBuilder: React.FC = () => {
                   />
 
                   <div>
-                    <label className="form-label" htmlFor="prop-export-button-template">
+                    <label
+                      className="form-label"
+                      htmlFor="prop-export-button-template"
+                    >
                       Export Template
                     </label>
                     <select
@@ -3461,7 +3484,10 @@ export const PageBuilder: React.FC = () => {
                     }}
                   >
                     <div>
-                      <label className="form-label" htmlFor="prop-export-button-format">
+                      <label
+                        className="form-label"
+                        htmlFor="prop-export-button-format"
+                      >
                         Format
                       </label>
                       <select
@@ -3482,7 +3508,10 @@ export const PageBuilder: React.FC = () => {
                     </div>
 
                     <div>
-                      <label className="form-label" htmlFor="prop-export-button-variant">
+                      <label
+                        className="form-label"
+                        htmlFor="prop-export-button-variant"
+                      >
                         Variant
                       </label>
                       <select
@@ -3512,7 +3541,10 @@ export const PageBuilder: React.FC = () => {
                     }}
                   >
                     <div>
-                      <label className="form-label" htmlFor="prop-export-button-size">
+                      <label
+                        className="form-label"
+                        htmlFor="prop-export-button-size"
+                      >
                         Size
                       </label>
                       <select
@@ -3531,26 +3563,18 @@ export const PageBuilder: React.FC = () => {
                         <option value="lg">Large</option>
                       </select>
                     </div>
-
-                    <div>
-                      <label className="form-label" htmlFor="prop-export-button-icon">
-                        Icon (optional)
-                      </label>
-                      <input
-                        id="prop-export-button-icon"
-                        type="text"
-                        className="form-input"
-                        placeholder="e.g. Download, FileSpreadsheet"
-                        value={selectedNode.props?.icon || ""}
-                        onChange={(e) =>
-                          handleUpdateProps({
-                            ...selectedNode.props,
-                            icon: e.target.value.trim() || undefined,
-                          })
-                        }
-                      />
-                    </div>
                   </div>
+
+                  <IconPicker
+                    clearable
+                    id="prop-export-button-icon"
+                    label="Icon (optional)"
+                    placeholder="Default icon"
+                    value={selectedNode.props?.icon}
+                    onChange={(icon) =>
+                      handleUpdateProps({ ...selectedNode.props, icon })
+                    }
+                  />
 
                   <ExpressionInput
                     id="prop-export-button-parameters"
@@ -3559,8 +3583,8 @@ export const PageBuilder: React.FC = () => {
                       typeof selectedNode.props?.parameters === "string"
                         ? selectedNode.props.parameters
                         : selectedNode.props?.parameters
-                        ? JSON.stringify(selectedNode.props.parameters)
-                        : ""
+                          ? JSON.stringify(selectedNode.props.parameters)
+                          : ""
                     }
                     placeholder="e.g. {{ state.exportParams }}"
                     onChange={(val) =>
@@ -3578,8 +3602,8 @@ export const PageBuilder: React.FC = () => {
                       typeof selectedNode.props?.filters === "string"
                         ? selectedNode.props.filters
                         : selectedNode.props?.filters
-                        ? JSON.stringify(selectedNode.props.filters)
-                        : ""
+                          ? JSON.stringify(selectedNode.props.filters)
+                          : ""
                     }
                     placeholder="e.g. {{ state.exportFilters }}"
                     onChange={(val) =>
@@ -3624,13 +3648,7 @@ export const PageBuilder: React.FC = () => {
                       }
                     />
                   </div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: "0.5rem",
-                    }}
-                  >
+                  <div>
                     <div>
                       <label className="form-label">Input Type</label>
                       <select
@@ -3652,22 +3670,16 @@ export const PageBuilder: React.FC = () => {
                         <option value="date">Date</option>
                       </select>
                     </div>
-                    <div>
-                      <label className="form-label">Prefix Icon</label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        placeholder="e.g. Search, Mail..."
-                        value={selectedNode.props?.prefixIcon || ""}
-                        onChange={(e) =>
-                          handleUpdateProps({
-                            ...selectedNode.props,
-                            prefixIcon: e.target.value.trim() || undefined,
-                          })
-                        }
-                      />
-                    </div>
                   </div>
+                  <IconPicker
+                    clearable
+                    id="prop-input-prefix-icon"
+                    label="Prefix Icon (optional)"
+                    value={selectedNode.props?.prefixIcon}
+                    onChange={(prefixIcon) =>
+                      handleUpdateProps({ ...selectedNode.props, prefixIcon })
+                    }
+                  />
                   <div>
                     <label className="form-label">Placeholder</label>
                     <input
@@ -3936,6 +3948,16 @@ export const PageBuilder: React.FC = () => {
                       }
                     />
                   </div>
+                  <IconPicker
+                    clearable
+                    id="prop-modal-icon"
+                    label="Header Icon (optional)"
+                    placeholder="Entity icon or none"
+                    value={selectedNode.props?.icon}
+                    onChange={(icon) =>
+                      handleUpdateProps({ ...selectedNode.props, icon })
+                    }
+                  />
                   <div>
                     <label className="form-label">Open State Key</label>
                     <input
@@ -3993,87 +4015,28 @@ export const PageBuilder: React.FC = () => {
                       <span>Show Close Button (X)</span>
                     </label>
                   </div>
+                  <ContentLayoutSection>
+                    <ContentLayoutFields
+                      idPrefix="prop-modal"
+                      value={selectedNode.props || {}}
+                      onChange={(patch) =>
+                        handleUpdateProps({ ...selectedNode.props, ...patch })
+                      }
+                    />
+                  </ContentLayoutSection>
                 </>
               )}
 
               {/* Stack Properties */}
               {selectedNode.type === "stack" && (
                 <>
-                  <div>
-                    <label
-                      className="form-label"
-                      htmlFor="prop-stack-direction"
-                    >
-                      Direction
-                    </label>
-                    <select
-                      id="prop-stack-direction"
-                      className="form-select"
-                      value={selectedNode.props?.direction || "vertical"}
-                      onChange={(e) =>
-                        handleUpdateProps({
-                          ...selectedNode.props,
-                          direction: e.target.value,
-                        })
-                      }
-                    >
-                      <option value="vertical">Vertical (Column)</option>
-                      <option value="horizontal">Horizontal (Row)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label
-                      className="form-label"
-                      htmlFor="prop-stack-justify"
-                    >
-                      Justify Content
-                    </label>
-                    <select
-                      id="prop-stack-justify"
-                      className="form-select"
-                      value={selectedNode.props?.justify || ""}
-                      onChange={(e) =>
-                        handleUpdateProps({
-                          ...selectedNode.props,
-                          justify: e.target.value || undefined,
-                        })
-                      }
-                    >
-                      <option value="">Default (Start)</option>
-                      <option value="flex-start">Start</option>
-                      <option value="center">Center</option>
-                      <option value="flex-end">End</option>
-                      <option value="space-between">Space Between</option>
-                      <option value="space-around">Space Around</option>
-                      <option value="space-evenly">Space Evenly</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label
-                      className="form-label"
-                      htmlFor="prop-stack-align"
-                    >
-                      Align Items
-                    </label>
-                    <select
-                      id="prop-stack-align"
-                      className="form-select"
-                      value={selectedNode.props?.align || ""}
-                      onChange={(e) =>
-                        handleUpdateProps({
-                          ...selectedNode.props,
-                          align: e.target.value || undefined,
-                        })
-                      }
-                    >
-                      <option value="">Default (Stretch)</option>
-                      <option value="stretch">Stretch</option>
-                      <option value="flex-start">Start</option>
-                      <option value="center">Center</option>
-                      <option value="flex-end">End</option>
-                      <option value="baseline">Baseline</option>
-                    </select>
-                  </div>
+                  <ContentLayoutFields
+                    idPrefix="prop-stack"
+                    value={selectedNode.props || {}}
+                    onChange={(patch) =>
+                      handleUpdateProps({ ...selectedNode.props, ...patch })
+                    }
+                  />
                   <div
                     style={{
                       display: "grid",
@@ -4082,25 +4045,10 @@ export const PageBuilder: React.FC = () => {
                     }}
                   >
                     <div>
-                      <label className="form-label" htmlFor="prop-stack-gap">
-                        Gap (px)
-                      </label>
-                      <input
-                        id="prop-stack-gap"
-                        type="number"
-                        min={0}
-                        className="form-input"
-                        value={selectedNode.props?.gap ?? 16}
-                        onChange={(e) =>
-                          handleUpdateProps({
-                            ...selectedNode.props,
-                            gap: Number(e.target.value) || 0,
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="form-label" htmlFor="prop-stack-padding">
+                      <label
+                        className="form-label"
+                        htmlFor="prop-stack-padding"
+                      >
                         Padding (px)
                       </label>
                       <input
@@ -4113,7 +4061,10 @@ export const PageBuilder: React.FC = () => {
                         onChange={(e) =>
                           handleUpdateProps({
                             ...selectedNode.props,
-                            padding: e.target.value === "" ? undefined : Number(e.target.value),
+                            padding:
+                              e.target.value === ""
+                                ? undefined
+                                : Number(e.target.value),
                           })
                         }
                       />
@@ -4151,27 +4102,6 @@ export const PageBuilder: React.FC = () => {
                       paddingTop: "0.25rem",
                     }}
                   >
-                    <label
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.5rem",
-                        fontSize: "var(--font-size-sm)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedNode.props?.wrap ?? false}
-                        onChange={(e) =>
-                          handleUpdateProps({
-                            ...selectedNode.props,
-                            wrap: e.target.checked,
-                          })
-                        }
-                      />
-                      <span>Wrap items</span>
-                    </label>
                     <label
                       style={{
                         display: "flex",
@@ -4355,24 +4285,15 @@ export const PageBuilder: React.FC = () => {
                       }
                     />
                   </div>
-                  <div>
-                    <label className="form-label" htmlFor="prop-card-icon">
-                      Header Icon (optional)
-                    </label>
-                    <input
-                      id="prop-card-icon"
-                      type="text"
-                      className="form-input"
-                      placeholder="e.g. Folder, Layers, Shield..."
-                      value={selectedNode.props?.headerIcon || ""}
-                      onChange={(e) =>
-                        handleUpdateProps({
-                          ...selectedNode.props,
-                          headerIcon: e.target.value.trim() || undefined,
-                        })
-                      }
-                    />
-                  </div>
+                  <IconPicker
+                    clearable
+                    id="prop-card-icon"
+                    label="Header Icon (optional)"
+                    value={selectedNode.props?.headerIcon}
+                    onChange={(headerIcon) =>
+                      handleUpdateProps({ ...selectedNode.props, headerIcon })
+                    }
+                  />
                   <div
                     style={{
                       display: "grid",
@@ -4423,6 +4344,15 @@ export const PageBuilder: React.FC = () => {
                       </select>
                     </div>
                   </div>
+                  <ContentLayoutSection>
+                    <ContentLayoutFields
+                      idPrefix="prop-card"
+                      value={selectedNode.props || {}}
+                      onChange={(patch) =>
+                        handleUpdateProps({ ...selectedNode.props, ...patch })
+                      }
+                    />
+                  </ContentLayoutSection>
                 </>
               )}
 
@@ -4722,31 +4652,16 @@ export const PageBuilder: React.FC = () => {
                       }
                     />
                   </div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
-                      gap: "0.5rem",
-                    }}
-                  >
-                    <div>
-                      <label className="form-label" htmlFor="prop-stat-icon">
-                        Stat Icon (optional)
-                      </label>
-                      <input
-                        id="prop-stat-icon"
-                        type="text"
-                        className="form-input"
-                        placeholder="e.g. DollarSign, Users..."
-                        value={selectedNode.props?.icon || ""}
-                        onChange={(e) =>
-                          handleUpdateProps({
-                            ...selectedNode.props,
-                            icon: e.target.value.trim() || undefined,
-                          })
-                        }
-                      />
-                    </div>
+                  <IconPicker
+                    clearable
+                    id="prop-stat-icon"
+                    label="Stat Icon (optional)"
+                    value={selectedNode.props?.icon}
+                    onChange={(icon) =>
+                      handleUpdateProps({ ...selectedNode.props, icon })
+                    }
+                  />
+                  <div>
                     <div>
                       <label className="form-label" htmlFor="prop-stat-color">
                         Accent Color
@@ -4843,7 +4758,10 @@ export const PageBuilder: React.FC = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="form-label" htmlFor="prop-stat-trendval">
+                      <label
+                        className="form-label"
+                        htmlFor="prop-stat-trendval"
+                      >
                         Trend Value
                       </label>
                       <input
@@ -4959,6 +4877,15 @@ export const PageBuilder: React.FC = () => {
                       }
                     />
                   </div>
+                  <IconPicker
+                    clearable
+                    id="prop-chart-icon"
+                    label="Title Icon (optional)"
+                    value={selectedNode.props?.icon}
+                    onChange={(icon) =>
+                      handleUpdateProps({ ...selectedNode.props, icon })
+                    }
+                  />
                   <div>
                     <label className="form-label" htmlFor="prop-chart-type">
                       Chart Type
@@ -5075,6 +5002,110 @@ export const PageBuilder: React.FC = () => {
                       </select>
                     </div>
                   )}
+
+                  {/* Axis titles: on by default, derived from the fields unless customised */}
+                  {(() => {
+                    let activeEntityId = selectedNode.props?.entityId;
+                    if (selectedNode.props?.source) {
+                      activeEntityId = (draft.dataSources || []).find(
+                        (d) => d.id === selectedNode.props?.source,
+                      )?.entityId;
+                    }
+                    const columns = entities.find((e) => e.id === activeEntityId)?.columns || [];
+                    const labelOf = (id?: string) => columns.find((c) => c.id === id)?.label;
+                    const auto = defaultChartAxisTitles(
+                      labelOf(selectedNode.props?.groupByFieldId),
+                      selectedNode.props?.aggregateOp,
+                      labelOf(selectedNode.props?.aggregateFieldId),
+                    );
+                    const showAxisTitles = selectedNode.props?.showAxisTitles !== false;
+                    return (
+                      <div
+                        style={{
+                          borderTop: "1px solid var(--border)",
+                          paddingTop: "0.75rem",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "0.625rem",
+                        }}
+                      >
+                        <label
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "0.5rem",
+                            fontSize: "var(--font-size-sm)",
+                            fontWeight: 500,
+                            cursor: "pointer",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={showAxisTitles}
+                            onChange={(e) =>
+                              handleUpdateProps({
+                                ...selectedNode.props,
+                                // Default is on, so only "off" is stored
+                                showAxisTitles: e.target.checked ? undefined : false,
+                              })
+                            }
+                          />
+                          Show axis titles
+                        </label>
+                        {showAxisTitles && (
+                          <>
+                            <div>
+                              <label className="form-label" htmlFor="prop-chart-xtitle">
+                                X-axis title
+                              </label>
+                              <input
+                                id="prop-chart-xtitle"
+                                type="text"
+                                className="form-input"
+                                maxLength={120}
+                                placeholder={`Auto: ${auto.x}`}
+                                value={selectedNode.props?.xAxisTitle || ""}
+                                onChange={(e) =>
+                                  handleUpdateProps({
+                                    ...selectedNode.props,
+                                    xAxisTitle: e.target.value || undefined,
+                                  })
+                                }
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label" htmlFor="prop-chart-ytitle">
+                                Y-axis title
+                              </label>
+                              <input
+                                id="prop-chart-ytitle"
+                                type="text"
+                                className="form-input"
+                                maxLength={120}
+                                placeholder={`Auto: ${auto.y}`}
+                                value={selectedNode.props?.yAxisTitle || ""}
+                                onChange={(e) =>
+                                  handleUpdateProps({
+                                    ...selectedNode.props,
+                                    yAxisTitle: e.target.value || undefined,
+                                  })
+                                }
+                              />
+                            </div>
+                            <p
+                              style={{
+                                margin: 0,
+                                fontSize: "var(--font-size-xs)",
+                                color: "var(--text-muted)",
+                              }}
+                            >
+                              Leave empty to use the automatic title.
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </>
               )}
 
@@ -5440,7 +5471,9 @@ export const PageBuilder: React.FC = () => {
                 style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
               >
                 <Shield size={18} style={{ color: "var(--accent)" }} />
-                <h3 style={{ fontSize: "var(--font-size-lg)", fontWeight: 600 }}>
+                <h3
+                  style={{ fontSize: "var(--font-size-lg)", fontWeight: 600 }}
+                >
                   Page Access Permissions
                 </h3>
               </div>
@@ -5460,9 +5493,9 @@ export const PageBuilder: React.FC = () => {
                 marginBottom: "1.25rem",
               }}
             >
-              Control which signed-in roles are allowed to access this published
-              page. If no roles are selected, all authenticated roles have
-              access by default.
+              Choose which roles can open this page. With none selected, every
+              signed-in role can. Builders, admins and owners always have access.
+              Changes take effect when the page is published.
             </p>
             <div
               style={{
@@ -5472,9 +5505,9 @@ export const PageBuilder: React.FC = () => {
                 marginBottom: "1.5rem",
               }}
             >
-              {(["owner", "admin", "builder", "editor", "viewer"] as const).map(
+              {(["editor", "viewer"] as const).map(
                 (r) => {
-                  const currentRoles = (draft.allowedRoles || []) as string[];
+                  const currentRoles: PageRole[] = draft.allowedRoles || [];
                   const isChecked = currentRoles.includes(r);
                   return (
                     <label
@@ -5498,7 +5531,7 @@ export const PageBuilder: React.FC = () => {
                         type="checkbox"
                         checked={isChecked}
                         onChange={(e) => {
-                          let newRoles: string[];
+                          let newRoles: PageRole[];
                           if (e.target.checked) {
                             newRoles = [...currentRoles, r];
                           } else {

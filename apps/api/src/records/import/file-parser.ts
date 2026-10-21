@@ -1,6 +1,7 @@
 import { Readable } from 'node:stream';
 import { parse } from 'csv-parse/sync';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { inspectZipBuffer } from './zip-guard.js';
 
 export class InvalidFileContentError extends Error {
@@ -138,6 +139,39 @@ export function parseCsvContent(buffer: Buffer): ParsedTableData {
   }
 }
 
+const XML_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+
+/** Decodes XML entities plus Excel's _xHHHH_ escapes (used for control characters). */
+function decodeXmlText(text: string): string {
+  return text
+    .replace(/&(#x[0-9a-fA-F]+|#\d+|amp|lt|gt|quot|apos);/g, (_, e: string) => {
+      if (e.startsWith('#x')) return String.fromCodePoint(Number.parseInt(e.slice(2), 16));
+      if (e.startsWith('#')) return String.fromCodePoint(Number.parseInt(e.slice(1), 10));
+      return XML_ENTITIES[e];
+    })
+    .replace(/_x([0-9a-fA-F]{4})_/g, (_, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)));
+}
+
+/**
+ * Reads the shared strings table directly from the zip. ExcelJS's streaming reader filled it
+ * nondeterministically (sometimes not at all), leaving text cells unresolved. Rich text is
+ * flattened to plain text (as the importer does anyway); phonetic runs (<rPh>) are skipped.
+ */
+async function readSharedStrings(buffer: Buffer): Promise<string[]> {
+  const zip = await JSZip.loadAsync(buffer);
+  const file = zip.file('xl/sharedStrings.xml');
+  if (!file) return [];
+  const xml = await file.async('string');
+  const strings: string[] = [];
+  for (const si of xml.matchAll(/<si>([\s\S]*?)<\/si>|<si\/>/g)) {
+    const body = (si[1] ?? '').replace(/<rPh\b[\s\S]*?<\/rPh>/g, '');
+    let text = '';
+    for (const t of body.matchAll(/<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g)) text += t[1];
+    strings.push(decodeXmlText(text));
+  }
+  return strings;
+}
+
 /**
  * Parses an XLSX buffer using exceljs with zip-bomb protection.
  * Reads cached cell values/results, ignores formulas and hyperlinks, never executes macros.
@@ -151,11 +185,17 @@ export async function parseXlsxContent(
 
   // 2. Stream-parse workbook
   try {
+    // ExcelJS's streaming reader resolved text cells nondeterministically (headers read as
+    // "[object Object]" about half the time, so every mapped field came out empty). The shared
+    // strings are therefore read directly from the zip and pre-loaded; the worksheet itself is
+    // still streamed, keeping memory bounded for very large sheets.
+    const sharedStrings = await readSharedStrings(buffer);
     const reader = new ExcelJS.stream.xlsx.WorkbookReader(Readable.from(buffer), {
       worksheets: 'emit',
-      sharedStrings: 'cache',
+      sharedStrings: 'ignore', // keep the pre-read table below; don't reset it mid-stream
     });
     (reader as any).model = { sheets: [] };
+    (reader as any).sharedStrings = sharedStrings;
 
     const sheets: string[] = [];
     let selectedSheet = '';

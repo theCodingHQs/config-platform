@@ -23,3 +23,20 @@ export const DataSourceDefinitionSchema = z.object({
 });
 
 export type DataSourceDefinition = z.infer<typeof DataSourceDefinitionSchema>;
+
+/** Record filter operators understood by the records API (`filter[field][op]=value`). */
+export type FilterOp = 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'contains' | 'in' | 'isNull';
+
+/** Operators each field type accepts; the records API rejects any other combination. */
+export const FILTER_OPS_BY_FIELD_TYPE: Record<string, FilterOp[]> = {
+  text: ['eq', 'neq', 'contains', 'in', 'isNull'],
+  number: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'in', 'isNull'],
+  boolean: ['eq', 'neq', 'isNull'],
+  date: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'isNull'],
+  select: ['eq', 'neq', 'in', 'isNull'],
+  reference: ['eq', 'neq', 'in', 'isNull'],
+  // System fields
+  id: ['eq', 'neq', 'in'],
+  created_at: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'],
+  updated_at: ['eq', 'neq', 'gt', 'gte', 'lt', 'lte'],
+};

@@ -3,6 +3,10 @@ import { ActionDefinitionSchema, type ActionDefinition } from './action.js';
 import { DataSourceDefinitionSchema, type DataSourceDefinition } from './data-source.js';
 import { AllowedIconNameSchema } from './icons.js';
 
+/** Workspace roles a page can be restricted to. */
+export const PageRoleSchema = z.enum(['owner', 'admin', 'builder', 'editor', 'viewer']);
+export type PageRole = z.infer<typeof PageRoleSchema>;
+
 export const NodeTypeSchema = z.enum([
   'stack',
   'text',
@@ -30,6 +34,23 @@ export const LayoutPropsSchema = z.object({
   alignSelf: z.enum(['auto', 'flex-start', 'center', 'flex-end', 'stretch', 'baseline']).optional(),
 });
 export type LayoutProps = z.infer<typeof LayoutPropsSchema>;
+
+/** Default space between a container's children (px), shared by stack, card and modal. */
+export const DEFAULT_CONTENT_GAP = 16;
+
+/**
+ * How a container lays out its children: the same controls as a stack, so a card or a
+ * modal doesn't need a stack inside it just to space its content. All optional; defaults
+ * are a vertical column with DEFAULT_CONTENT_GAP between children.
+ */
+export const ContentLayoutPropsSchema = z.object({
+  direction: z.enum(['vertical', 'horizontal']).optional(),
+  gap: z.union([z.number(), z.string()]).optional(),
+  align: z.string().optional(),
+  justify: z.string().optional(),
+  wrap: z.boolean().optional(),
+});
+export type ContentLayoutProps = z.infer<typeof ContentLayoutPropsSchema>;
 
 export const StackPropsSchema = z.object({
   direction: z.enum(['vertical', 'horizontal']).default('vertical'),
@@ -173,7 +194,7 @@ export const ModalPropsSchema = z.object({
   openStateKey: z.string(),
   size: z.enum(['sm', 'md', 'lg', 'xl', 'full']).default('md'),
   showCloseButton: z.boolean().default(true),
-});
+}).merge(ContentLayoutPropsSchema);
 export type ModalProps = z.infer<typeof ModalPropsSchema>;
 
 export const DetailsPropsSchema = z
@@ -205,7 +226,7 @@ export const CardPropsSchema = z.object({
   headerIcon: z.string().optional(),
   variant: z.enum(['default', 'bordered', 'flat', 'elevated']).default('default'),
   padding: z.enum(['none', 'sm', 'md', 'lg']).default('md'),
-}).merge(LayoutPropsSchema);
+}).merge(LayoutPropsSchema).merge(ContentLayoutPropsSchema);
 export type CardProps = z.infer<typeof CardPropsSchema>;
 
 export const TabItemSchema = z.object({
@@ -245,6 +266,13 @@ export const ChartPropsSchema = z.object({
   aggregateOp: z.enum(['count', 'sum', 'avg', 'min', 'max']).default('count'),
   aggregateFieldId: z.string().optional(),
   title: z.string().optional(),
+  /** Icon shown before the title. */
+  icon: AllowedIconNameSchema.optional(),
+  /** Axis titles are shown unless explicitly turned off. */
+  showAxisTitles: z.boolean().optional(),
+  /** Custom axis titles; when empty they are derived from the group-by and aggregate fields. */
+  xAxisTitle: z.string().max(120).optional(),
+  yAxisTitle: z.string().max(120).optional(),
 }).merge(LayoutPropsSchema);
 export type ChartProps = z.infer<typeof ChartPropsSchema>;
 
@@ -289,6 +317,14 @@ function validateNodeFormIcons(node: NodeDefinition, ctx: z.RefinementCtx, path:
   }
 }
 
+/**
+ * Page width: 'theme' follows the workspace Layout content width (the default when
+ * absent); 'full' always uses the full window width. Deliberately limited to these two
+ * so published pages stay visually consistent.
+ */
+export const PageWidthSchema = z.enum(['theme', 'full']);
+export type PageWidth = z.infer<typeof PageWidthSchema>;
+
 export const PageDefinitionSchema = z
   .object({
     schemaVersion: z.number().int().default(2),
@@ -296,7 +332,14 @@ export const PageDefinitionSchema = z
     version: z.number().int().default(1),
     name: z.string().optional(),
     route: z.string(),
-    allowedRoles: z.array(z.string()).optional(),
+    /**
+     * Roles that may open the published page (in addition to builder, admin and owner, who see
+     * every page). Absent or empty = every signed-in role. Takes effect when the page is published.
+     */
+    allowedRoles: z.array(PageRoleSchema).optional(),
+    width: PageWidthSchema.optional(),
+    /** Navigation icon; when absent the sidebar derives one (bound entity icon, then name). */
+    icon: AllowedIconNameSchema.optional(),
     state: z.record(z.any()).optional().default({}),
     dataSources: z.array(DataSourceDefinitionSchema).optional().default([]),
     root: NodeSchema,

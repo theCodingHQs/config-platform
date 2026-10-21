@@ -4,11 +4,102 @@ import type {
   GridCellDefinition,
   GridMergeRange,
   GridCellStyle,
+  GridDataValidation,
 } from "@config-platform/schema";
 
 const DEFAULT_GRID_BORDER_COLOR = ["#", "CBD5E1"].join("");
 const REGION_BINDING_FILL = ["#", "F1F5F9"].join("");
 const REGION_BODY_FILL = ["#", "F8FAFC"].join("");
+
+/** Resource key the Univer data-validation plugin loads rules from. */
+export const UNIVER_DATA_VALIDATION_RESOURCE = "SHEET_DATA_VALIDATION_PLUGIN";
+
+export interface A1Range {
+  startRow: number;
+  endRow: number;
+  startColumn: number;
+  endColumn: number;
+}
+
+function colLettersToIndex(letters: string): number {
+  let n = 0;
+  for (const ch of letters.toUpperCase()) n = n * 26 + (ch.charCodeAt(0) - 64);
+  return n - 1;
+}
+
+export function colIndexToLetters(index: number): string {
+  let n = index + 1;
+  let s = "";
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - m) / 26);
+  }
+  return s;
+}
+
+/** Parses "C21:AG28" / "B4" (optionally sheet-prefixed) into 0-based Univer range coordinates. */
+export function parseA1(ref: string): A1Range | null {
+  const clean = ref.includes("!") ? ref.split("!").pop()! : ref;
+  const m = clean.trim().toUpperCase().replace(/\$/g, "").match(/^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/);
+  if (!m) return null;
+  const c1 = colLettersToIndex(m[1]);
+  const r1 = parseInt(m[2], 10) - 1;
+  const c2 = m[3] ? colLettersToIndex(m[3]) : c1;
+  const r2 = m[4] ? parseInt(m[4], 10) - 1 : r1;
+  return {
+    startRow: Math.min(r1, r2),
+    endRow: Math.max(r1, r2),
+    startColumn: Math.min(c1, c2),
+    endColumn: Math.max(c1, c2),
+  };
+}
+
+export function toA1(range: A1Range): string {
+  const start = `${colIndexToLetters(range.startColumn)}${range.startRow + 1}`;
+  const end = `${colIndexToLetters(range.endColumn)}${range.endRow + 1}`;
+  return start === end ? start : `${start}:${end}`;
+}
+
+/** Converts grid checkbox validations to Univer data-validation rules. */
+export function gridValidationsToUniverRules(validations: GridDataValidation[] = []): any[] {
+  return validations
+    .filter((dv) => dv.type === "checkbox")
+    .map((dv, idx) => {
+      const range = parseA1(dv.ref);
+      if (!range) return null;
+      return {
+        uid: dv.id || `dv_checkbox_${idx}`,
+        type: "checkbox",
+        ranges: [range],
+        // Numbers (not strings) so a click writes a numeric cell that SUM counts
+        formula1: dv.checkedValue ?? 1,
+        formula2: dv.uncheckedValue ?? 0,
+        showErrorMessage: false,
+      };
+    })
+    .filter(Boolean);
+}
+
+/** Converts Univer data-validation rules back to grid checkbox validations (one per range). */
+export function univerRulesToGridValidations(rules: any[] = []): GridDataValidation[] {
+  const out: GridDataValidation[] = [];
+  for (const rule of rules) {
+    if (rule?.type !== "checkbox") continue;
+    const checked = Number(rule.formula1 ?? 1);
+    const unchecked = Number(rule.formula2 ?? 0);
+    (rule.ranges || []).forEach((range: A1Range, i: number) => {
+      out.push({
+        id: (rule.ranges || []).length > 1 ? `${rule.uid}_${i}` : rule.uid,
+        ref: toA1(range),
+        type: "checkbox",
+        checkedValue: Number.isFinite(checked) ? checked : 1,
+        uncheckedValue: Number.isFinite(unchecked) ? unchecked : 0,
+      });
+    });
+  }
+  return out;
+}
 
 /**
  * Production Adapter between kind: "grid" schema and Univer IWorkbookData model.
@@ -36,10 +127,23 @@ export function gridTemplateToUniver(
   const isDesignView = options?.designView !== false;
   const sheets: Record<string, any> = {};
   const sheetOrder: string[] = [];
+  const validationResource: Record<string, any[]> = {};
 
   template.sheets.forEach((sheet, idx) => {
     const sheetId = sheet.id || `sheet_${idx}`;
     sheetOrder.push(sheetId);
+
+    // Checkbox cells only accept their checked/unchecked values, so a bound checkbox cell shows an
+    // unchecked box in design view instead of "{{ label }}" text (which validation flags invalid). Saved
+    // templates store that placeholder on bound cells, so it is replaced here as well.
+    const checkboxRanges = (sheet.dataValidations || [])
+      .filter((dv) => dv.type === "checkbox")
+      .map((dv) => ({ range: parseA1(dv.ref), unchecked: dv.uncheckedValue ?? 0 }))
+      .filter((x): x is { range: A1Range; unchecked: number } => x.range !== null);
+    const checkboxUncheckedAt = (r: number, c: number) =>
+      checkboxRanges.find(
+        ({ range }) => r >= range.startRow && r <= range.endRow && c >= range.startColumn && c <= range.endColumn,
+      )?.unchecked;
 
     const cellData: Record<number, Record<number, any>> = {};
     for (const [coordKey, cell] of Object.entries(sheet.cells)) {
@@ -73,6 +177,8 @@ export function gridTemplateToUniver(
               : String(cell.binding);
           univerCell.v = `{{ ${label} }}`;
         }
+        const unchecked = isDesignView ? checkboxUncheckedAt(r, c) : undefined;
+        if (unchecked !== undefined) univerCell.v = unchecked;
       }
 
       if (cell.style || cell.numFmt) {
@@ -147,7 +253,10 @@ export function gridTemplateToUniver(
         const uCell = cellData[r][c];
 
         const label = colMapping.displayLabel || colMapping.fieldId;
-        if (
+        const unchecked = isDesignView ? checkboxUncheckedAt(r, c) : undefined;
+        if (unchecked !== undefined) {
+          uCell.v = unchecked;
+        } else if (
           isDesignView &&
           (uCell.v === undefined || uCell.v === null || uCell.v === "")
         ) {
@@ -211,28 +320,66 @@ export function gridTemplateToUniver(
       }
     }
 
+    // Size the sheet to fit its content and any charts anchored on it (plus breathing room)
+    let maxRow = 0;
+    let maxCol = 0;
+    for (const coordKey of Object.keys(sheet.cells)) {
+      const [r, c] = coordKey.split(":").map((n) => parseInt(n, 10));
+      maxRow = Math.max(maxRow, r);
+      maxCol = Math.max(maxCol, c);
+    }
+    for (const chart of template.charts || []) {
+      if (chart.anchor.sheetId === sheetId || chart.anchor.sheetId === sheet.name) {
+        maxRow = Math.max(maxRow, chart.anchor.endRow);
+        maxCol = Math.max(maxCol, chart.anchor.endCol);
+      }
+    }
+    for (const m of sheet.merges || []) {
+      maxRow = Math.max(maxRow, m.endRow);
+      maxCol = Math.max(maxCol, m.endCol);
+    }
+
+    const rules = gridValidationsToUniverRules(sheet.dataValidations);
+    if (rules.length > 0) validationResource[sheetId] = rules;
+
     sheets[sheetId] = {
       id: sheetId,
       name: sheet.name,
-      rowCount: 100,
-      columnCount: 20,
+      rowCount: Math.max(100, maxRow + 30),
+      columnCount: Math.max(20, maxCol + 6),
       cellData,
       mergeData,
       rowData,
       columnData,
+      // Univer requires startRow/startColumn alongside the splits; omitting them yields NaN
+      // viewport math (float DOMs such as charts collapse to zero size on frozen sheets).
       freeze: sheet.freezePanes
         ? {
             xSplit: sheet.freezePanes.colSplit ?? 0,
             ySplit: sheet.freezePanes.rowSplit ?? 0,
+            startRow: (sheet.freezePanes.rowSplit ?? 0) > 0 ? sheet.freezePanes.rowSplit! : -1,
+            startColumn: (sheet.freezePanes.colSplit ?? 0) > 0 ? sheet.freezePanes.colSplit! : -1,
           }
         : undefined,
       conditionalFormats: sheet.conditionalFormats || [],
       regions: sheet.regions || [],
+      // Template-side copy; on save the live rules from the data-validation model win
+      ...(sheet.dataValidations ? { dataValidations: sheet.dataValidations } : {}),
     };
   });
 
   return {
     id: "workbook_grid",
+    ...(Object.keys(validationResource).length > 0
+      ? {
+          resources: [
+            {
+              name: UNIVER_DATA_VALIDATION_RESOURCE,
+              data: JSON.stringify(validationResource),
+            },
+          ],
+        }
+      : {}),
     schemaVersion: template.schemaVersion ?? 2,
     parameters: template.parameters || [],
     datasets: template.datasets || [],
@@ -246,10 +393,13 @@ export function gridTemplateToUniver(
 }
 
 /**
- * Converts Univer workbook snapshot back to kind: "grid" schema losslessly
+ * Converts Univer workbook snapshot back to kind: "grid" schema losslessly.
+ * `liveValidations` (sheetId → rules from the data-validation model) take precedence over the
+ * template copy kept on the snapshot, so checkboxes added or moved in the editor are saved.
  */
 export function univerToGridTemplate(
   univerSnapshot: any,
+  liveValidations?: Record<string, any[]>,
 ): GridExportTemplateDefinition {
   const sheets: GridSheetDefinition[] = [];
 
@@ -414,6 +564,10 @@ export function univerToGridTemplate(
       }
     }
 
+    const dataValidations: GridDataValidation[] | undefined = liveValidations
+      ? univerRulesToGridValidations(liveValidations[sheetId] || [])
+      : us.dataValidations;
+
     const hasRowHeights = Object.keys(rowHeights).length > 0;
     const hasColWidths = Object.keys(colWidths).length > 0;
     const hasFreeze =
@@ -437,6 +591,7 @@ export function univerToGridTemplate(
         : {}),
       ...(hasRowHeights ? { rowHeights } : {}),
       ...(hasColWidths ? { colWidths } : {}),
+      ...(dataValidations && dataValidations.length > 0 ? { dataValidations } : {}),
     };
 
     sheets.push(sheetDef);

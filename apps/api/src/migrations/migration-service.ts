@@ -529,6 +529,23 @@ export class MigrationService {
           await tx.execute(ddl);
         }
 
+        // Date fields: a calendar date (DATE column) and a date & time (TIMESTAMPTZ) are different
+        // column types, so that switch isn't a settings change. Switching a calendar date to month
+        // granularity moves stored values to the 1st, so month filters and grouping match them.
+        if (newType === 'date' && currentField.type === 'date') {
+          const before = (currentField.config || {}) as { includeTime?: boolean; granularity?: string };
+          const after = (newConfig || {}) as { includeTime?: boolean; granularity?: string };
+          if (Boolean(before.includeTime) !== Boolean(after.includeTime)) {
+            throw new UnsafeConversionError(
+              `Field '${currentField.name}' can't switch between a date and a date & time; add a new field instead.`
+            );
+          }
+          if (!after.includeTime && after.granularity === 'month' && before.granularity !== 'month') {
+            ddl = `UPDATE "${tx.schemaName}"."${entity.physical_table_name}" SET "${currentField.physical_column_name}" = date_trunc('month', "${currentField.physical_column_name}")::date WHERE "${currentField.physical_column_name}" IS NOT NULL;`;
+            await tx.execute(ddl);
+          }
+        }
+
         // Update metadata catalog
         const updatedFieldRes = await tx.client.query<FieldDef>(
           `UPDATE public.field_def

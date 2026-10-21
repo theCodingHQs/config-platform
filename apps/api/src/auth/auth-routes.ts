@@ -1,3 +1,4 @@
+import { UserDatePreferencesSchema } from '@config-platform/schema';
 /**
  * Auth routes: signup, login, logout, me, CSRF token, invites, members.
  *
@@ -69,7 +70,30 @@ export async function authRoutes(fastify: FastifyInstance) {
       tenantName: session.tenantName,
       role: session.role,
       themePreference: session.themePreference || 'system',
+      datePreferences: session.datePreferences || {},
     };
+  });
+
+  // ─── PATCH /auth/date-preferences ────────────────────────────
+  // The user's own date format, 12/24-hour time, week start and time zone (any role)
+  fastify.patch('/auth/date-preferences', { preHandler: [csrfCheckHook] }, async (req: FastifyRequest, reply: FastifyReply) => {
+    const sessionId = (req.cookies as Record<string, string>)?.[SESSION_COOKIE];
+    const session = sessionId ? await authService.resolveSession(sessionId) : null;
+    if (!session) {
+      return reply.status(401).send({ statusCode: 401, error: 'Unauthorized' });
+    }
+    // Replaces the saved preferences: send every choice the user made; a key left out (or
+    // sent as null) means "use the workspace default"
+    const body = Object.fromEntries(Object.entries((req.body as any) || {}).filter(([, v]) => v !== null));
+    const parsed = UserDatePreferencesSchema.strict().safeParse(body);
+    if (!parsed.success) {
+      return reply.status(422).send({ statusCode: 422, error: 'Unprocessable Entity', message: parsed.error.issues.map((i) => i.message).join('; ') });
+    }
+    await pool.query('UPDATE public.app_user SET date_preferences = $1, updated_at = NOW() WHERE id = $2', [
+      JSON.stringify(parsed.data),
+      session.userId,
+    ]);
+    return { success: true, datePreferences: parsed.data };
   });
 
   // ─── PATCH /auth/theme ───────────────────────────────────────

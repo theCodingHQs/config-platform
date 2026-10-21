@@ -253,7 +253,8 @@ export class AuthService {
     const res = await pool.query(
       `SELECT s.id AS "sessionId", s.user_id AS "userId", s.tenant_id AS "tenantId",
               t.name AS "tenantName", s.role, s.expires_at AS "expiresAt", u.email,
-              u.theme_preference AS "themePreference"
+              u.theme_preference AS "themePreference",
+              u.date_preferences AS "datePreferences"
        FROM public.app_session s
        JOIN public.app_user u ON u.id = s.user_id
        JOIN public.tenant t ON t.id = s.tenant_id
@@ -271,6 +272,7 @@ export class AuthService {
       role: row.role as TenantRole,
       email: row.email,
       themePreference: (row.themePreference as any) || 'system',
+      datePreferences: row.datePreferences || {},
       expiresAt: row.expiresAt,
     };
   }

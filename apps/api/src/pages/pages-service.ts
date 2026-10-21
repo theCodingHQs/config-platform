@@ -2,13 +2,24 @@ import type { Pool, PoolClient } from 'pg';
 import { pool } from '../db/pool.js';
 import {
   PageDefinitionSchema,
+  PageWidthSchema,
+  AllowedIconNameSchema,
   migratePageV1toV2,
   type PageDefinition,
+  type PageWidth,
   type NodeDefinition,
   type DataSourceDefinition,
 } from '@config-platform/schema';
 import { erdService } from '../schema/erd-service.js';
 import crypto from 'node:crypto';
+
+/** A page request the client can fix; the error handler answers with its status and message. */
+export class PageRequestError extends Error {
+  constructor(public readonly statusCode: 409 | 422, message: string) {
+    super(message);
+    this.name = statusCode === 409 ? 'Conflict' : 'Unprocessable Entity';
+  }
+}
 
 export interface PageSummary {
   id: string;
@@ -22,6 +33,10 @@ export interface PageSummary {
   folderId?: string | null;
   position?: number;
   allowedRoles?: string[] | null;
+  /** Navigation icon override (null = derived automatically). */
+  icon?: string | null;
+  /** 'full' = always full width; null = follows the theme content width. */
+  width?: 'full' | null;
 }
 
 export interface PageNavFolder {
@@ -30,6 +45,26 @@ export interface PageNavFolder {
   name: string;
   slug: string;
   position: number;
+  icon: string | null;
+}
+
+/** Page-level settings edited from the Pages screen; applied to draft and published at once. */
+export interface PageSettingsInput {
+  name?: string;
+  /** Last route segment; the full route is rebuilt from the page's group. */
+  slug?: string;
+  folderId?: string | null;
+  width?: PageWidth;
+  icon?: string | null;
+}
+
+const FOLDER_COLUMNS = `id, parent_id AS "parentId", name, slug, position, icon`;
+const ROUTE_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function assertIcon(icon: string | null | undefined): void {
+  if (icon !== null && icon !== undefined && !AllowedIconNameSchema.safeParse(icon).success) {
+    throw new Error(`'${icon}' is not an allowed icon`);
+  }
 }
 
 export interface PageNavigation {
@@ -242,6 +277,8 @@ export class PagesService {
     const res = await pool.query(
       `SELECT id, name, route, version, nav_folder_id AS "folderId", nav_position AS position,
               allowed_roles AS "allowedRoles",
+              COALESCE(draft->>'icon', published->>'icon') AS icon,
+              COALESCE(draft->>'width', published->>'width') AS width,
               (draft IS NOT NULL) AS "hasDraft",
               (published IS NOT NULL) AS "hasPublished",
               created_at AS "createdAt",
@@ -258,7 +295,7 @@ export class PagesService {
   async getNavigation(tenantId: string): Promise<PageNavigation> {
     const [folders, pages] = await Promise.all([
       pool.query(
-        `SELECT id, parent_id AS "parentId", name, slug, position
+        `SELECT ${FOLDER_COLUMNS}
          FROM public.page_nav_folder WHERE tenant_id = $1
          ORDER BY position ASC, name ASC`,
         [tenantId]
@@ -268,9 +305,13 @@ export class PagesService {
     return { folders: folders.rows, pages };
   }
 
-  async createFolder(tenantId: string, input: { name: string; parentId?: string | null }): Promise<PageNavFolder> {
+  async createFolder(
+    tenantId: string,
+    input: { name: string; parentId?: string | null; icon?: string | null }
+  ): Promise<PageNavFolder> {
     const name = input.name.trim();
     if (!name || name.length > 128) throw new Error('Folder name must be between 1 and 128 characters');
+    assertIcon(input.icon);
     if (input.parentId) await this.assertFolder(tenantId, input.parentId);
     const slug = this.slugify(name);
     const siblings = await pool.query<{ name: string; slug: string }>(
@@ -288,10 +329,10 @@ export class PagesService {
       [tenantId, input.parentId ?? null]
     );
     const res = await pool.query(
-      `INSERT INTO public.page_nav_folder (id, tenant_id, parent_id, name, slug, position)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, parent_id AS "parentId", name, slug, position`,
-      [id, tenantId, input.parentId ?? null, name, slug, nextPosition.rows[0].position]
+      `INSERT INTO public.page_nav_folder (id, tenant_id, parent_id, name, slug, position, icon)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING ${FOLDER_COLUMNS}`,
+      [id, tenantId, input.parentId ?? null, name, slug, nextPosition.rows[0].position, input.icon ?? null]
     );
     return res.rows[0];
   }
@@ -299,14 +340,15 @@ export class PagesService {
   async updateFolder(
     tenantId: string,
     folderId: string,
-    input: { name?: string; parentId?: string | null }
+    input: { name?: string; parentId?: string | null; icon?: string | null }
   ): Promise<PageNavFolder> {
+    assertIcon(input.icon);
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [tenantId]);
       const current = await client.query<PageNavFolder>(
-        `SELECT id, parent_id AS "parentId", name, slug, position
+        `SELECT ${FOLDER_COLUMNS}
          FROM public.page_nav_folder WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
         [tenantId, folderId]
       );
@@ -338,13 +380,14 @@ export class PagesService {
       );
       if (siblingCheck.rowCount) throw new Error('A folder with this name already exists at this level');
 
+      const icon = input.icon === undefined ? folder.icon : input.icon;
       await client.query(
-        `UPDATE public.page_nav_folder SET name = $3, slug = $4, parent_id = $5 WHERE tenant_id = $1 AND id = $2`,
-        [tenantId, folderId, newName, slug, parentId]
+        `UPDATE public.page_nav_folder SET name = $3, slug = $4, parent_id = $5, icon = $6 WHERE tenant_id = $1 AND id = $2`,
+        [tenantId, folderId, newName, slug, parentId, icon]
       );
       await this.rebuildFolderRoutes(client, tenantId, descendants.rows.map((entry) => entry.id));
       const updated = await client.query(
-        `SELECT id, parent_id AS "parentId", name, slug, position
+        `SELECT ${FOLDER_COLUMNS}
          FROM public.page_nav_folder WHERE tenant_id = $1 AND id = $2`,
         [tenantId, folderId]
       );
@@ -403,18 +446,117 @@ export class PagesService {
   }
 
   /**
+   * PUT /pages/:id/settings - Page-level settings (name, URL slug, group, width, icon).
+   * These are navigation/presentation settings rather than page content, so they apply to
+   * the draft and the published version together and take effect without republishing.
+   */
+  async updatePageSettings(tenantId: string, pageId: string, input: PageSettingsInput): Promise<PageSummary> {
+    const name = input.name === undefined ? undefined : input.name.trim();
+    if (name !== undefined && (!name || name.length > 128)) {
+      throw new Error('Page name must be between 1 and 128 characters');
+    }
+    if (input.slug !== undefined && !ROUTE_SLUG_PATTERN.test(input.slug)) {
+      throw new Error('URL slug may only contain lowercase letters, numbers and single hyphens');
+    }
+    if (input.width !== undefined && !PageWidthSchema.safeParse(input.width).success) {
+      throw new Error("Width must be 'theme' or 'full'");
+    }
+    assertIcon(input.icon);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [tenantId]);
+      const currentRes = await client.query<{ route: string; folderId: string | null }>(
+        `SELECT route, nav_folder_id AS "folderId" FROM public.page_def WHERE tenant_id = $1 AND id = $2 FOR UPDATE`,
+        [tenantId, pageId]
+      );
+      const current = currentRes.rows[0];
+      if (!current) throw new Error(`Page '${pageId}' not found`);
+
+      // Route = group path + slug; rebuilt when either changes (duplicate routes are rejected)
+      const folderId = input.folderId === undefined ? current.folderId : input.folderId;
+      if (folderId) await this.assertFolder(tenantId, folderId, client);
+      const slug = input.slug ?? current.route.split('/').filter(Boolean).pop()!;
+      const nextRoute = await this.routeForFolder(client, tenantId, folderId, slug);
+      if (nextRoute !== current.route) {
+        await this.applyRouteChanges(client, tenantId, new Map([[pageId, nextRoute]]));
+      }
+      if (folderId !== current.folderId) {
+        const nextPosition = await client.query<{ position: number }>(
+          `SELECT COALESCE(MAX(nav_position) + 1, 0) AS position FROM public.page_def
+           WHERE tenant_id = $1 AND nav_folder_id IS NOT DISTINCT FROM $2 AND id <> $3`,
+          [tenantId, folderId, pageId]
+        );
+        await client.query(
+          `UPDATE public.page_def SET nav_folder_id = $3, nav_position = $4 WHERE tenant_id = $1 AND id = $2`,
+          [tenantId, pageId, folderId, nextPosition.rows[0].position]
+        );
+      }
+
+      // Width/icon live in the page definition; set or remove the key in draft and published.
+      // 'theme' width and a null icon are the defaults, so they are stored as absent.
+      const params: unknown[] = [tenantId, pageId, name ?? null];
+      let iconParam = '';
+      if (typeof input.icon === 'string') {
+        params.push(input.icon);
+        iconParam = `$${params.length}::text`;
+      }
+      const definitionPatch = (column: 'draft' | 'published') => {
+        let expr: string = column;
+        if (input.width !== undefined) {
+          expr = input.width === 'full'
+            ? `jsonb_set(${expr}, '{width}', '"full"', true)`
+            : `(${expr} - 'width')`;
+        }
+        if (input.icon !== undefined) {
+          expr = input.icon === null ? `(${expr} - 'icon')` : `jsonb_set(${expr}, '{icon}', to_jsonb(${iconParam}), true)`;
+        }
+        return `CASE WHEN ${column} IS NULL THEN NULL ELSE ${expr} END`;
+      };
+      await client.query(
+        `UPDATE public.page_def
+         SET name = COALESCE($3::text, name),
+             draft = ${definitionPatch('draft')},
+             published = ${definitionPatch('published')},
+             version = version + 1,
+             updated_at = NOW()
+         WHERE tenant_id = $1 AND id = $2`,
+        params
+      );
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    const pages = await this.listPages(tenantId);
+    return pages.find((page) => page.id === pageId)!;
+  }
+
+  /**
    * GET /pages/published - Returns published pages for runtime app navigation & rendering
    */
   async listPublishedPages(tenantId: string): Promise<PageDefinition[]> {
-    const res = await pool.query<{ published: any }>(
-      `SELECT published
+    const res = await pool.query<{ published: any; allowedRoles: string[] | null }>(
+      `SELECT published, allowed_roles AS "allowedRoles"
        FROM public.page_def
        WHERE tenant_id = $1 AND published IS NOT NULL
        ORDER BY route ASC`,
       [tenantId]
     );
 
-    return res.rows.map((r) => migratePageV1toV2(r.published));
+    // Pages imported from a workspace bundle may carry their restriction only in the column
+    return res.rows.map((r) => {
+      const page = migratePageV1toV2(r.published);
+      if (!page.allowedRoles?.length && r.allowedRoles?.length) {
+        page.allowedRoles = r.allowedRoles as PageDefinition['allowedRoles'];
+      }
+      return page;
+    });
   }
 
   /**
@@ -423,6 +565,7 @@ export class PagesService {
   async getPage(tenantId: string, id: string): Promise<PageDetail> {
     const res = await pool.query(
       `SELECT id, name, route, draft, published, version,
+              allowed_roles AS "allowedRoles",
               (draft IS NOT NULL) AS "hasDraft",
               (published IS NOT NULL) AS "hasPublished",
               created_at AS "createdAt",
@@ -450,6 +593,8 @@ export class PagesService {
       hasPublished: row.hasPublished,
       draft: draft as PageDefinition,
       published: published as PageDefinition | null,
+      // Live access restriction (set on publish)
+      allowedRoles: row.allowedRoles ?? null,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       brokenBindings,
@@ -461,14 +606,21 @@ export class PagesService {
    */
   async createPage(
     tenantId: string,
-    input: { name: string; route: string; draft?: PageDefinition; folderId?: string | null }
+    input: {
+      name: string;
+      route: string;
+      draft?: PageDefinition;
+      folderId?: string | null;
+      width?: PageWidth;
+      icon?: string | null;
+    }
   ): Promise<PageDetail> {
     const id = `p_${crypto.randomBytes(4).toString('hex')}`;
     let formattedRoute = input.route.startsWith('/') ? input.route : `/${input.route}`;
     if (input.folderId) await this.assertFolder(tenantId, input.folderId);
 
     // Default blank page if no draft provided
-    const initialDraft: PageDefinition = input.draft
+    const baseDraft: PageDefinition = input.draft
       ? migratePageV1toV2(input.draft)
       : {
           schemaVersion: 2,
@@ -490,6 +642,12 @@ export class PagesService {
             ],
           },
         };
+    // Page settings chosen in the create dialog ('theme' width is the default, stored as absent)
+    const initialDraft: PageDefinition = {
+      ...baseDraft,
+      ...(input.width === 'full' ? { width: 'full' as const } : {}),
+      ...(input.icon ? { icon: input.icon as PageDefinition['icon'] } : {}),
+    };
 
     // Validate PageDefinition schema
     const parsed = PageDefinitionSchema.safeParse(initialDraft);
@@ -497,11 +655,28 @@ export class PagesService {
       throw new Error(`Invalid page definition: ${parsed.error.message}`);
     }
 
+    // New pages go to the end of their folder (all-zero positions fall back to updated_at order)
+    const nextPosition = await pool.query<{ position: number }>(
+      `SELECT COALESCE(MAX(nav_position) + 1, 0) AS position FROM public.page_def
+       WHERE tenant_id = $1 AND nav_folder_id IS NOT DISTINCT FROM $2`,
+      [tenantId, input.folderId ?? null]
+    );
+
+    // The definition id must equal the row id: the runtime matches navigation entries to
+    // published definitions by id, so a page with a different draft id never shows in the menu.
     const res = await pool.query(
-      `INSERT INTO public.page_def (id, tenant_id, name, route, draft, published, version, nav_folder_id, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, NULL, 1, $6, NOW(), NOW())
+      `INSERT INTO public.page_def (id, tenant_id, name, route, draft, published, version, nav_folder_id, nav_position, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, NULL, 1, $6, $7, NOW(), NOW())
        RETURNING id, name, route, draft, published, version, created_at AS "createdAt", updated_at AS "updatedAt"`,
-      [id, tenantId, input.name, formattedRoute, JSON.stringify({ ...parsed.data, route: formattedRoute }), input.folderId ?? null]
+      [
+        id,
+        tenantId,
+        input.name,
+        formattedRoute,
+        JSON.stringify({ ...parsed.data, id, route: formattedRoute }),
+        input.folderId ?? null,
+        nextPosition.rows[0].position,
+      ]
     );
 
     const row = res.rows[0];
@@ -543,7 +718,7 @@ export class PagesService {
 
     const current = checkRes.rows[0];
     if (input.expectedVersion !== undefined && input.expectedVersion !== current.version) {
-      throw new Error(`Version conflict: expected ${input.expectedVersion}, found ${current.version}`);
+      throw new PageRequestError(409, `Version conflict: expected ${input.expectedVersion}, found ${current.version}`);
     }
 
     const rawDraft = input.draft || current.draft;
@@ -554,20 +729,25 @@ export class PagesService {
     // Validate PageDefinition schema
     const parsed = PageDefinitionSchema.safeParse(newDraft);
     if (!parsed.success) {
-      throw new Error(`Invalid page definition: ${parsed.error.message}`);
+      throw new PageRequestError(422, `Invalid page definition: ${parsed.error.message}`);
     }
 
+    // The version is checked again in the UPDATE so two saves racing past the check above
+    // can't both apply (the second gets a conflict instead of silently overwriting)
     const res = await pool.query(
       `UPDATE public.page_def
        SET name = $1, route = $2, draft = $3, version = version + 1, updated_at = NOW()
-       WHERE tenant_id = $4 AND id = $5
+       WHERE tenant_id = $4 AND id = $5 AND ($6::int IS NULL OR version = $6)
        RETURNING id, name, route, draft, published, version,
                  (draft IS NOT NULL) AS "hasDraft",
                  (published IS NOT NULL) AS "hasPublished",
                  created_at AS "createdAt",
                  updated_at AS "updatedAt"`,
-      [newName, newRoute, JSON.stringify(parsed.data), tenantId, id]
+      [newName, newRoute, JSON.stringify({ ...parsed.data, id }), tenantId, id, input.expectedVersion ?? null]
     );
+    if (res.rows.length === 0) {
+      throw new PageRequestError(409, `Version conflict: the page was saved elsewhere (expected version ${input.expectedVersion})`);
+    }
 
     const row = res.rows[0];
     const draft = migratePageV1toV2(row.draft);
@@ -599,19 +779,22 @@ export class PagesService {
     const draftV2 = migratePageV1toV2(page.draft);
     const parsed = PageDefinitionSchema.safeParse(draftV2);
     if (!parsed.success) {
-      throw new Error(`Cannot publish invalid page: ${parsed.error.message}`);
+      throw new PageRequestError(422, `Cannot publish invalid page: ${parsed.error.message}`);
     }
 
+    // The access restriction goes live with the page: the column (used for listings and
+    // navigation) always matches the published definition
+    const publishedRoles = parsed.data.allowedRoles?.length ? parsed.data.allowedRoles : null;
     const res = await pool.query(
       `UPDATE public.page_def
-       SET published = $1, version = version + 1, updated_at = NOW()
+       SET published = $1, allowed_roles = $4, version = version + 1, updated_at = NOW()
        WHERE tenant_id = $2 AND id = $3
        RETURNING id, name, route, draft, published, version,
                  (draft IS NOT NULL) AS "hasDraft",
                  (published IS NOT NULL) AS "hasPublished",
                  created_at AS "createdAt",
                  updated_at AS "updatedAt"`,
-      [JSON.stringify(parsed.data), tenantId, id]
+      [JSON.stringify({ ...parsed.data, id }), tenantId, id, publishedRoles]
     );
 
     const row = res.rows[0];

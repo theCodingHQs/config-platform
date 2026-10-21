@@ -4,6 +4,7 @@ import { usePageRuntime } from '../context/page-runtime-context';
 import { useOptionalMetadata } from '../context/metadata-context';
 import { X } from 'lucide-react';
 import { DynamicIcon } from './dynamic-icon';
+import { contentLayout } from './content-layout';
 
 export function ModalComponent({
   title = 'Modal',
@@ -13,10 +14,16 @@ export function ModalComponent({
   openStateKey,
   size = 'md',
   showCloseButton = true,
+  direction,
+  gap,
+  align,
+  justify,
+  wrap,
   children,
 }: ModalProps & { children?: React.ReactNode }) {
   const runtime = usePageRuntime();
   const metadata = useOptionalMetadata();
+  const body = contentLayout({ direction, gap, align, justify, wrap });
   const entity = entityId && metadata ? metadata.resolveEntity(entityId) : undefined;
   const effectiveIcon =
     icon ||
@@ -174,10 +181,13 @@ export function ModalComponent({
 
         {/* Modal Body */}
         <div
+          data-testid="modal-body"
+          className={body.className}
           style={{
             padding: 'var(--space-6)',
             overflowY: 'auto',
             maxHeight: 'calc(85vh - 120px)',
+            ...body.style,
           }}
         >
           {children}

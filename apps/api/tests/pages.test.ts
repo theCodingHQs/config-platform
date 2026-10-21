@@ -241,6 +241,89 @@ describe('Pages Service & Publishing', () => {
     expect(body.hasPublished).toBe(true);
   });
 
+  it('answers a stale save with 409 and an invalid draft with 422 (with the reason), not a 500', async () => {
+    const current = await pagesService.getPage(tenantId, createdPageId);
+    const stale = await server.inject({
+      method: 'PUT',
+      url: `/api/pages/${createdPageId}`,
+      headers: auth.headers,
+      payload: { draft: current.draft, expectedVersion: current.version - 1 },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(JSON.parse(stale.body).message).toMatch(/Version conflict/);
+
+    const invalid = await server.inject({
+      method: 'PUT',
+      url: `/api/pages/${createdPageId}`,
+      headers: auth.headers,
+      payload: { draft: { ...current.draft, root: { id: 'r', type: 'not-a-component' } }, expectedVersion: current.version },
+    });
+    expect(invalid.statusCode).toBe(422);
+    expect(JSON.parse(invalid.body).message).toMatch(/Invalid page definition/);
+
+    // Two saves sent with the same version: exactly one applies, the other conflicts
+    const both = await Promise.all([0, 1].map(() => server.inject({
+      method: 'PUT',
+      url: `/api/pages/${createdPageId}`,
+      headers: auth.headers,
+      payload: { draft: current.draft, expectedVersion: current.version },
+    })));
+    expect(both.map((r) => r.statusCode).sort()).toEqual([200, 409]);
+  });
+
+  it('enforces Allowed Roles once published: restricted roles cannot list, navigate to or open the page', async () => {
+    const draft = (roles?: string[]) => ({
+      schemaVersion: 2, id: 'p_restricted', version: 1, route: '/restricted-report',
+      ...(roles ? { allowedRoles: roles } : {}),
+      root: { id: 'root', type: 'stack', props: {}, children: [] },
+    }) as PageDefinition;
+    const page = await pagesService.createPage(tenantId, { name: 'Restricted Report', route: '/restricted-report', draft: draft() });
+    await pagesService.publishPage(tenantId, page.id);
+
+    const viewer = await createTestSession(tenantId, 'viewer', 'page_viewer_roles');
+    const editor = await createTestSession(tenantId, 'editor', 'page_editor_roles');
+    const sees = async (session: TestSession) => {
+      const get = (url: string) => server.inject({ method: 'GET', url, headers: session.headers });
+      const list = JSON.parse((await get('/api/pages')).body).some((p: any) => p.id === page.id);
+      const published = JSON.parse((await get('/api/pages/published')).body).some((p: any) => p.route === '/restricted-report');
+      const nav = JSON.parse((await get('/api/pages/navigation')).body).pages.some((p: any) => p.id === page.id);
+      const open = (await get(`/api/pages/${page.id}`)).statusCode;
+      return { list, published, nav, open };
+    };
+    try {
+      // No restriction: everyone signed in sees it
+      expect(await sees(viewer)).toEqual({ list: true, published: true, nav: true, open: 200 });
+
+      // Restrict to editors; the saved draft keeps the setting (it used to be stripped on save)
+      const current = await pagesService.getPage(tenantId, page.id);
+      const saved = await pagesService.updatePage(tenantId, page.id, { draft: draft(['editor']), expectedVersion: current.version });
+      expect(saved.draft.allowedRoles).toEqual(['editor']);
+      // Not live until published
+      expect((await sees(viewer)).open).toBe(200);
+
+      await pagesService.publishPage(tenantId, page.id);
+      expect(await sees(viewer)).toEqual({ list: false, published: false, nav: false, open: 403 });
+      expect(await sees(editor)).toEqual({ list: true, published: true, nav: true, open: 200 });
+      // Builders and above always see every page
+      expect((await sees(auth)).open).toBe(200);
+
+      // Removing the restriction and publishing opens it again
+      const restricted = await pagesService.getPage(tenantId, page.id);
+      await pagesService.updatePage(tenantId, page.id, { draft: draft(), expectedVersion: restricted.version });
+      await pagesService.publishPage(tenantId, page.id);
+      expect((await sees(viewer)).open).toBe(200);
+
+      // Only real roles are accepted
+      const latest = await pagesService.getPage(tenantId, page.id);
+      await expect(pagesService.updatePage(tenantId, page.id, { draft: draft(['superuser']), expectedVersion: latest.version }))
+        .rejects.toThrow(/Invalid page definition/);
+    } finally {
+      await cleanupTestUser(viewer.userId);
+      await cleanupTestUser(editor.userId);
+      await pagesService.deletePage(tenantId, page.id);
+    }
+  });
+
   it('keeps nested page routes and published JSON in sync when groups are renamed or pages move', async () => {
     const sales = await pagesService.createFolder(tenantId, { name: 'Sales' });
     const orders = await pagesService.createFolder(tenantId, { name: 'Orders', parentId: sales.id });
@@ -270,6 +353,50 @@ describe('Pages Service & Publishing', () => {
     await pagesService.deleteFolder(tenantId, orders.id);
     await pagesService.deleteFolder(tenantId, sales.id);
     await pagesService.deletePage(tenantId, nestedPage.id);
+  });
+
+  it('updates page settings (name, slug, group, width, icon) on draft and published without republishing', async () => {
+    const group = await pagesService.createFolder(tenantId, { name: 'Ops', icon: 'Factory' });
+    expect(group.icon).toBe('Factory');
+    const page = await pagesService.createPage(tenantId, { name: 'Line View', route: '/line-view', width: 'full', icon: 'Gauge' });
+    expect(page.draft.width).toBe('full');
+    expect(page.draft.icon).toBe('Gauge');
+    await pagesService.publishPage(tenantId, page.id);
+
+    const res = await server.inject({
+      method: 'PUT',
+      url: `/api/pages/${page.id}/settings`,
+      headers: auth.headers,
+      payload: { name: 'Line Overview', slug: 'line-overview', folderId: group.id, width: 'theme', icon: 'Activity' },
+    });
+    expect(res.statusCode).toBe(200);
+    const summary = JSON.parse(res.body);
+    expect(summary).toMatchObject({ name: 'Line Overview', route: '/ops/line-overview', folderId: group.id, icon: 'Activity', width: null });
+
+    const detail = await pagesService.getPage(tenantId, page.id);
+    for (const def of [detail.draft, detail.published!]) {
+      expect(def.route).toBe('/ops/line-overview');
+      expect(def.width).toBeUndefined();
+      expect(def.icon).toBe('Activity');
+    }
+
+    // null icon clears the override; omitted fields stay as they are
+    await pagesService.updatePageSettings(tenantId, page.id, { icon: null });
+    const cleared = await pagesService.getPage(tenantId, page.id);
+    expect(cleared.published?.icon).toBeUndefined();
+    expect(cleared.name).toBe('Line Overview');
+    expect(cleared.route).toBe('/ops/line-overview');
+
+    await expect(pagesService.updatePageSettings(tenantId, page.id, { slug: 'Bad Slug' })).rejects.toThrow(/URL slug/);
+    await expect(pagesService.updatePageSettings(tenantId, page.id, { icon: 'NotAnIcon' })).rejects.toThrow(/not an allowed icon/);
+    await expect(pagesService.updatePageSettings(tenantId, page.id, { width: 'wide' as any })).rejects.toThrow(/Width/);
+
+    const updatedGroup = await pagesService.updateFolder(tenantId, group.id, { icon: null });
+    expect(updatedGroup.icon).toBeNull();
+    expect((await pagesService.updateFolder(tenantId, group.id, { name: 'Operations' })).icon).toBeNull();
+
+    await pagesService.deletePage(tenantId, page.id);
+    await pagesService.deleteFolder(tenantId, group.id);
   });
 
   it('deletes a page definition', async () => {

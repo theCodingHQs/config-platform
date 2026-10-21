@@ -146,6 +146,19 @@ export const GridConditionalFormatRuleSchema = z.object({
 });
 export type GridConditionalFormatRule = z.infer<typeof GridConditionalFormatRuleSchema>;
 
+/**
+ * Cell input rules. `checkbox` cells store checkedValue/uncheckedValue (1/0 by default) so plain
+ * SUM/COUNT formulas, and charts over those formulas, react when a box is ticked.
+ */
+export const GridDataValidationSchema = z.object({
+  id: z.string().optional(),
+  ref: z.string().min(1, 'ref is required'), // e.g. "C21:AG28"
+  type: z.literal('checkbox'),
+  checkedValue: z.number().optional().default(1),
+  uncheckedValue: z.number().optional().default(0),
+});
+export type GridDataValidation = z.infer<typeof GridDataValidationSchema>;
+
 export const GridSheetDefinitionSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -162,6 +175,7 @@ export const GridSheetDefinitionSchema = z.object({
   cells: z.record(z.string(), GridCellDefinitionSchema).default({}), // key: `${row}:${col}`
   regions: z.array(GridRegionDefinitionSchema).optional().default([]),
   conditionalFormats: z.array(GridConditionalFormatRuleSchema).optional().default([]),
+  dataValidations: z.array(GridDataValidationSchema).optional(),
 });
 export type GridSheetDefinition = z.infer<typeof GridSheetDefinitionSchema>;
 
@@ -346,7 +360,8 @@ export function detectUnsupportedContent(univerSnapshotOrSheet: any): string[] {
     if (s.drawings?.length || s.images?.length || s.image) unsupported.add('Images / Drawings');
     if (s.charts?.length || s.chart) unsupported.add('Charts');
     if (s.comments?.length || s.threadComments?.length || s.comment) unsupported.add('Comments');
-    if (s.dataValidation?.length || s.dataValidations?.length) unsupported.add('Data Validation');
+    const validations = [...(s.dataValidation || []), ...(s.dataValidations || [])];
+    if (validations.some((v: any) => v?.type !== 'checkbox')) unsupported.add('Data Validation');
     if (s.pivotTable || s.pivots?.length) unsupported.add('Pivot Tables');
     if (s.protection || s.rangeProtection?.length || s.worksheetProtection) unsupported.add('Sheet Protection');
   }
@@ -1084,32 +1099,44 @@ export interface ExecutiveReportEntityInput {
   fields?: Array<{ id: string; name: string; type?: string; label?: string }>;
 }
 
-export type GridStarterTemplateId = 'executive' | 'operations' | 'financial' | 'audit';
+export type GridStarterTemplateId = 'executive' | 'operations' | 'financial' | 'audit' | 'production';
 
 export const GRID_STARTER_TEMPLATES: Array<{
   id: GridStarterTemplateId;
   name: string;
   description: string;
+  /** 'interactive' starters are self-contained sheets driven by checkbox cells rather than entity data. */
+  category: 'data' | 'interactive';
 }> = [
   {
     id: 'executive',
     name: 'Executive Dashboard',
-    description: 'Four KPI cards, a polished summary banner, and a formatted detail table.',
+    description: 'KPI cards, a detail table, and charts of record distribution and trends.',
+    category: 'data',
   },
   {
     id: 'operations',
     name: 'Operations Board',
-    description: 'Prioritizes status, ownership, and date fields for an at-a-glance work queue.',
+    description: 'Status and ownership first, with a status breakdown donut and a weekly volume chart.',
+    category: 'data',
   },
   {
     id: 'financial',
     name: 'Financial Overview',
-    description: 'Emphasizes numeric measures with formatted totals, averages, and a detail table.',
+    description: 'Formatted totals and averages, with a monthly trend chart and a category split.',
+    category: 'data',
   },
   {
     id: 'audit',
     name: 'Audit Register',
-    description: 'A clean, date-first register suited to reviewing recent records and changes.',
+    description: 'A date-first register with daily activity and change-breakdown charts.',
+    category: 'data',
+  },
+  {
+    id: 'production',
+    name: 'Production Target Tracker',
+    description: 'Machines × days checkbox grid: tick when a machine hits its daily target and the KPIs plus four charts update live, in the designer and in Excel.',
+    category: 'interactive',
   },
 ];
 
@@ -1495,7 +1522,7 @@ export function buildExecutiveReportTemplate(entity: ExecutiveReportEntityInput)
 
 function prioritizeStarterFields(
   entity: ExecutiveReportEntityInput,
-  kind: Exclude<GridStarterTemplateId, 'executive'>,
+  kind: Exclude<GridStarterTemplateId, 'executive' | 'production'>,
 ): ExecutiveReportEntityInput {
   const fields = entity.columns || entity.fields || [];
   const rank = (field: { name: string; type?: string }) => {
@@ -1521,17 +1548,19 @@ export function buildGridStarterTemplate(
   entity: ExecutiveReportEntityInput,
   kind: GridStarterTemplateId,
 ): GridExportTemplateDefinition {
+  if (kind === 'production') return buildProductionTrackerTemplate();
+
   const template = buildExecutiveReportTemplate(
     kind === 'executive' ? entity : prioritizeStarterFields(entity, kind),
   );
   const sheet = template.sheets[0];
-  const titles: Record<GridStarterTemplateId, string> = {
+  const titles: Record<Exclude<GridStarterTemplateId, 'production'>, string> = {
     executive: `${entity.label || entity.name} EXECUTIVE DASHBOARD`,
     operations: `${entity.label || entity.name} OPERATIONS BOARD`,
     financial: `${entity.label || entity.name} FINANCIAL OVERVIEW`,
     audit: `${entity.label || entity.name} AUDIT REGISTER`,
   };
-  const palettes: Record<Exclude<GridStarterTemplateId, 'executive'>, Record<string, string>> = {
+  const palettes: Record<Exclude<GridStarterTemplateId, 'executive' | 'production'>, Record<string, string>> = {
     operations: { '#0F172A': '#123047', '#1E293B': '#1D4ED8', '#4F46E5': '#2563EB', '#EEF2FF': '#EFF6FF', '#059669': '#0F766E', '#ECFDF5': '#F0FDFA', '#7C3AED': '#D97706', '#F5F3FF': '#FFFBEB' },
     financial: { '#0F172A': '#14291F', '#1E293B': '#1F5137', '#4F46E5': '#15803D', '#EEF2FF': '#ECFDF3', '#059669': '#047857', '#ECFDF5': '#D1FAE5', '#7C3AED': '#0F766E', '#F5F3FF': '#F0FDFA' },
     audit: { '#0F172A': '#1F2937', '#1E293B': '#374151', '#4F46E5': '#475569', '#EEF2FF': '#F1F5F9', '#059669': '#0F766E', '#ECFDF5': '#F0FDFA', '#7C3AED': '#334155', '#F5F3FF': '#F1F5F9' },
@@ -1568,5 +1597,594 @@ export function buildGridStarterTemplate(
     }
   }
 
+  addStarterCharts(template, entity, kind);
   return template;
+}
+
+// ─── Starter Charts ──────────────────────────────────────────────────────────
+
+type StarterField = { id: string; name: string; type?: string; label?: string };
+
+const STARTER_CHART_COLORS: Record<Exclude<GridStarterTemplateId, 'production'>, [string, string]> = {
+  executive: ['#4F46E5', '#059669'],
+  operations: ['#2563EB', '#D97706'],
+  financial: ['#15803D', '#0F766E'],
+  audit: ['#475569', '#0F766E'],
+};
+
+const isNumericStarterField = (f: StarterField) =>
+  ['number', 'integer', 'decimal', 'float', 'currency'].includes((f.type || '').toLowerCase()) ||
+  /price|amount|cost|total|quantity|units|volume|value|score|salary|revenue|budget/i.test(f.name);
+
+const isDateStarterField = (f: StarterField) =>
+  ['date', 'datetime', 'timestamp'].includes((f.type || '').toLowerCase()) || /date|time|created|updated|due/i.test(f.name);
+
+const STATUS_FIELD_PATTERN = /status|state|stage|priority/i;
+const CATEGORY_FIELD_PATTERN = /status|state|stage|priority|category|type|kind|department|team|region|owner|assignee|user|actor|action|group|segment/i;
+
+interface StarterChartIntent {
+  title: string;
+  type: GridChartDefinition['type'];
+  groupBy: GridDatasetGroupBy;
+  aggregate: GridDatasetAggregate;
+  /** Category charts show the top 10 by value; time series stay in date order. */
+  timeSeries: boolean;
+  options?: GridChartDefinition['options'];
+}
+
+/**
+ * Adds up to two dataset-driven charts to an entity starter template: one beside the KPI cards
+ * and table, one below the totals row. Each chart gets its own grouped dataset. Charts are only
+ * added when the entity has suitable fields (a category, date, or numeric field).
+ */
+function addStarterCharts(
+  template: GridExportTemplateDefinition,
+  entity: ExecutiveReportEntityInput,
+  kind: Exclude<GridStarterTemplateId, 'production'>,
+): void {
+  const sheet = template.sheets[0];
+  const baseDataset = template.datasets[0];
+  if (!sheet || !baseDataset) return;
+
+  const fields = (entity.columns || entity.fields || []).filter((f): f is StarterField => Boolean(f?.name));
+  const label = (f: StarterField) => f.label || f.name;
+  const numeric = fields.find((f) => isNumericStarterField(f) && !isDateStarterField(f));
+  const date =
+    fields.find((f) => isDateStarterField(f) && /due|date/i.test(f.name) && kind === 'operations') ||
+    fields.find((f) => isDateStarterField(f) && !/updated|deleted/i.test(f.name)) ||
+    fields.find(isDateStarterField);
+  const textFields = fields.filter((f) => !isNumericStarterField(f) && !isDateStarterField(f) && f.name.toLowerCase() !== 'id');
+  const status = textFields.find((f) => STATUS_FIELD_PATTERN.test(f.name));
+  const category = status || textFields.find((f) => CATEGORY_FIELD_PATTERN.test(f.name));
+
+  const countAgg: GridDatasetAggregate = { id: 'agg_value', name: 'Records', fn: 'count' };
+  const sumAgg = numeric
+    ? { id: 'agg_value', name: `Total ${label(numeric)}`, fn: 'sum' as const, fieldPath: numeric.name }
+    : null;
+
+  const byCategory = (f: StarterField | undefined, type: GridChartDefinition['type'], agg = countAgg): StarterChartIntent | null =>
+    f
+      ? {
+          title: `${agg.fn === 'count' ? 'Records' : agg.name} by ${label(f)}`,
+          type,
+          groupBy: { fieldPath: f.name },
+          aggregate: agg,
+          timeSeries: false,
+        }
+      : null;
+  const overTime = (
+    bucket: GridDatasetTimeBucket,
+    type: GridChartDefinition['type'],
+    agg = countAgg,
+  ): StarterChartIntent | null =>
+    date
+      ? {
+          title: `${agg.fn === 'count' ? 'Records' : agg.name} per ${bucket}`,
+          type,
+          groupBy: { fieldPath: date.name, dateBucket: bucket },
+          aggregate: agg,
+          timeSeries: true,
+          options: { smooth: true, legend: false },
+        }
+      : null;
+
+  const intentsByKind: Record<typeof kind, Array<StarterChartIntent | null>> = {
+    executive: [
+      byCategory(category, 'bar'),
+      sumAgg ? overTime('month', 'area', sumAgg) : overTime('month', 'line'),
+      overTime('month', 'line'),
+    ],
+    operations: [
+      byCategory(status || category, 'donut'),
+      overTime('week', 'bar'),
+      byCategory(textFields.find((f) => /owner|assignee|team/i.test(f.name)), 'bar'),
+    ],
+    financial: [
+      sumAgg ? overTime('month', 'area', sumAgg) : null,
+      sumAgg ? byCategory(category, 'donut', sumAgg) : byCategory(category, 'donut'),
+      overTime('month', 'line'),
+    ],
+    audit: [
+      overTime('day', 'line'),
+      byCategory(textFields.find((f) => /user|actor|owner|action|status/i.test(f.name)) || category, 'bar'),
+    ],
+  };
+
+  const intents = intentsByKind[kind].filter((i): i is StarterChartIntent => Boolean(i)).slice(0, 2);
+  if (intents.length === 0) return;
+
+  // Layout: chart 1 sits right of the KPI cards and table (rows above the repeating region never
+  // shift), chart 2 sits below the totals row and moves down as the region grows at export time.
+  const colCount = Math.max(baseDataset.fields.length, 8);
+  const tableEndCol = colCount - 1;
+  const totalsRow = Math.max(...Object.keys(sheet.cells).map((k) => parseInt(k.split(':')[0], 10)));
+  const anchors = [
+    { startRow: 0, endRow: 17, startCol: colCount + 1, endCol: colCount + 7 },
+    { startRow: totalsRow + 2, endRow: totalsRow + 16, startCol: 0, endCol: Math.min(tableEndCol, 7) },
+  ];
+  sheet.colWidths = { ...(sheet.colWidths || {}) };
+  for (let c = colCount; c <= colCount + 7; c++) sheet.colWidths[String(c)] = c === colCount ? 24 : 90;
+
+  const colors = STARTER_CHART_COLORS[kind];
+  template.charts = intents.map((intent, idx) => {
+    const datasetId = `ds_chart_${idx + 1}`;
+    template.datasets.push({
+      id: datasetId,
+      name: `${intent.title} (chart)`,
+      source: { baseEntityId: baseDataset.source.baseEntityId, joins: [] },
+      fields: [],
+      filters: [],
+      sort: intent.timeSeries
+        ? [{ fieldPath: intent.groupBy.fieldPath, direction: 'asc' }]
+        : [{ fieldPath: intent.aggregate.id, direction: 'desc' }],
+      ...(intent.timeSeries ? {} : { limit: 10 }),
+      groupBy: [intent.groupBy],
+      aggregates: [intent.aggregate],
+      having: [],
+    });
+    return {
+      id: `chart_${kind}_${idx + 1}`,
+      title: intent.title,
+      type: intent.type,
+      source: {
+        kind: 'dataset',
+        datasetId,
+        category: intent.groupBy.fieldPath,
+        series: [{ aggregateId: intent.aggregate.id, name: intent.aggregate.name, color: colors[idx] }],
+      },
+      anchor: { sheetId: sheet.id, ...anchors[idx] },
+      options: intent.options || { legend: intent.type === 'donut' || intent.type === 'pie' },
+    };
+  });
+  template.schemaVersion = 3;
+}
+
+// ─── Production Target Tracker (interactive checkbox template) ──────────────
+
+/** Machines on the line and their planned production days this month. */
+const PRODUCTION_TRACKER_MACHINES: Array<{ name: string; planned: number }> = [
+  { name: 'CNC Mill 01', planned: 26 },
+  { name: 'CNC Mill 02', planned: 26 },
+  { name: 'Lathe L-03', planned: 24 },
+  { name: 'Press P-04', planned: 22 },
+  { name: 'Injection Mold M-05', planned: 26 },
+  { name: 'Welding Cell W-06', planned: 20 },
+  { name: 'Paint Line PL-07', planned: 18 },
+  { name: 'Assembly A-08', planned: 26 },
+];
+
+const PRODUCTION_WEEK_COLORS = ['#F43F5E', '#8B5CF6', '#0EA5E9', '#F59E0B', '#10B981'];
+
+/** 0-based column index → A1 column letters. */
+function gridColLetter(col: number): string {
+  let n = col + 1;
+  let s = '';
+  while (n > 0) {
+    const m = (n - 1) % 26;
+    s = String.fromCharCode(65 + m) + s;
+    n = Math.floor((n - m) / 26);
+  }
+  return s;
+}
+
+const PRODUCTION_DATASET_ID = 'ds_production';
+
+/** Field name for a production_sheet day column: 1 → "day_01". */
+export function productionDayField(day: number): string {
+  return `day_${String(day).padStart(2, '0')}`;
+}
+
+export interface ProductionTrackerBinding {
+  /** production_sheet entity: one record per machine per month. */
+  productionEntityId: string;
+  machineEntityId: string;
+  /** production_sheet field referencing machine. */
+  machineRefFieldId: string;
+  /** Default for the month parameter, e.g. "2026-10-01". */
+  defaultMonth: string;
+}
+
+/** production_sheet records for the month parameter, joined to machine for its name. */
+function buildProductionTrackerDataset(binding: ProductionTrackerBinding): GridDatasetDefinition {
+  return {
+    id: PRODUCTION_DATASET_ID,
+    name: 'Production sheets (selected month)',
+    source: {
+      baseEntityId: binding.productionEntityId,
+      joins: [
+        {
+          id: 'j_machine',
+          name: 'machine',
+          referenceFieldId: binding.machineRefFieldId,
+          targetEntityId: binding.machineEntityId,
+          joinType: 'inner',
+        },
+      ],
+    },
+    fields: [
+      { id: 'machine_name', name: 'Machine', fieldPath: 'machine.name' },
+      { id: 'planned_days', name: 'Planned days', fieldPath: 'planned_days' },
+      ...Array.from({ length: 31 }, (_, d) => ({
+        id: productionDayField(d + 1),
+        name: `Day ${d + 1}`,
+        fieldPath: productionDayField(d + 1),
+      })),
+    ],
+    filters: [{ fieldPath: 'month', operator: 'eq', parameterId: 'p_month' }],
+    sort: [{ fieldPath: 'machine.name', direction: 'asc' }],
+    groupBy: [],
+    aggregates: [],
+    having: [],
+  };
+}
+
+/**
+ * A self-contained monthly production target tracker. Each machine-day is a checkbox cell
+ * (1 = daily production target met, 0 = missed or not run); every KPI, total and chart is a plain
+ * SUM/IF/ROUND formula or a range chart over those formulas, so ticking a box updates everything
+ * live in the designer and in the exported workbook.
+ *
+ * Layout (0-based rows):
+ *   0-1   title + instructions          2-3  KPI cards
+ *   5-16  charts: daily completion %, overall progress donut
+ *   18    week bands                    19   header (machine, planned, days 1-31, met, gap, attainment)
+ *   20-27 machines × 31 checkbox days   28   targets met per day   29  daily line attainment %
+ *   30-34 per-week rows (feed the week-coloured bar chart)
+ *   36-47 charts: targets met per day by week, machine attainment vs plan
+ *   AL2:AM4 hold the two-cell data block behind the donut (kept above the machine rows).
+ *
+ * With `binding`, the machine rows come from a production_sheet dataset instead: row 20 becomes
+ * a one-row repeating region (machine name, planned days, day_01..day_31 booleans) filtered by a
+ * month parameter, and everything below it moves up so the region expands into place at export.
+ * Range formulas, charts and the checkbox range that end on the region row grow with it.
+ */
+export function buildProductionTrackerTemplate(binding?: ProductionTrackerBinding): GridExportTemplateDefinition {
+  const SHEET_ID = 'sheet_production';
+  const NAVY = '#1E293B';
+  const SLATE = '#334155';
+  const MUTED = '#64748B';
+  const LINE = '#E2E8F0';
+  const SOFT = '#F8FAFC';
+  const WHITE = '#FFFFFF';
+  const EMERALD = '#10B981';
+  const font = (size: number, color: string, bold = false) => ({ name: 'Calibri', size, color, bold });
+  const thinBorder = { style: 'thin' as const, color: LINE };
+  const boxBorder = { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder };
+
+  // Bound templates hold a single region row that expands to one row per production_sheet record
+  const MACHINE_COUNT = binding ? 1 : PRODUCTION_TRACKER_MACHINES.length;
+  const DAYS = 31;
+  const FIRST_DAY_COL = 2; // C
+  const LAST_DAY_COL = FIRST_DAY_COL + DAYS - 1; // AG
+  const DONE_COL = LAST_DAY_COL + 1; // AH
+  const LEFT_COL = DONE_COL + 1; // AI
+  const PROGRESS_COL = LEFT_COL + 1; // AJ
+  const LAST_COL = PROGRESS_COL;
+  const DATA_LABEL_COL = LAST_COL + 2; // AL
+  const DATA_VALUE_COL = DATA_LABEL_COL + 1; // AM
+
+  const WEEK_ROW = 18;
+  const HEADER_ROW = 19;
+  const FIRST_MACHINE_ROW = 20;
+  const LAST_MACHINE_ROW = FIRST_MACHINE_ROW + MACHINE_COUNT - 1; // 27
+  const COMPLETED_ROW = LAST_MACHINE_ROW + 1; // 28
+  const PERCENT_ROW = COMPLETED_ROW + 1; // 29
+  const FIRST_WEEK_SERIES_ROW = PERCENT_ROW + 1; // 30..34
+
+  const L = gridColLetter;
+  const A1 = (row: number, col: number) => `${L(col)}${row + 1}`;
+  const rangeA1 = (r1: number, c1: number, r2: number, c2: number) => `${A1(r1, c1)}:${A1(r2, c2)}`;
+
+  const cells: Record<string, GridCellDefinition> = {};
+  const merges: GridMergeRange[] = [];
+  const set = (row: number, col: number, cell: GridCellDefinition) => {
+    cells[`${row}:${col}`] = cell;
+  };
+  const band = (row: number, c1: number, c2: number, cell: GridCellDefinition) => {
+    for (let c = c1; c <= c2; c++) set(row, c, c === c1 ? cell : { style: cell.style });
+    if (c2 > c1) merges.push({ startRow: row, startCol: c1, endRow: row, endCol: c2 });
+  };
+
+  // Title + instructions
+  band(0, 0, LAST_COL, {
+    value: 'PRODUCTION TARGET TRACKER',
+    style: { font: font(18, WHITE, true), fill: { fgColor: NAVY }, alignment: { horizontal: 'left', vertical: 'middle' } },
+  });
+  band(1, 0, LAST_COL, {
+    value: 'Tick a box when a machine meets its daily production target. Every total, KPI and chart on this sheet updates instantly.',
+    style: { font: { ...font(10, '#CBD5E1'), italic: true }, fill: { fgColor: SLATE }, alignment: { horizontal: 'left', vertical: 'middle' } },
+  });
+
+  // KPI cards (labels row 2, values row 3)
+  const machinesRef = rangeA1(FIRST_MACHINE_ROW, 0, LAST_MACHINE_ROW, 0);
+  const kpis: Array<{ label: string; c1: number; c2: number; formula: string; numFmt: string; color: string; bg: string }> = [
+    { label: 'MACHINES', c1: 0, c2: 1, formula: `COUNTA(${machinesRef})`, numFmt: '0', color: NAVY, bg: SOFT },
+    { label: 'PLANNED RUN DAYS', c1: 2, c2: 9, formula: `SUM(${rangeA1(FIRST_MACHINE_ROW, 1, LAST_MACHINE_ROW, 1)})`, numFmt: '#,##0', color: '#4F46E5', bg: '#EEF2FF' },
+    { label: 'TARGETS MET', c1: 10, c2: 17, formula: `SUM(${rangeA1(FIRST_MACHINE_ROW, DONE_COL, LAST_MACHINE_ROW, DONE_COL)})`, numFmt: '#,##0', color: '#047857', bg: '#ECFDF5' },
+    { label: 'TARGETS MISSED', c1: 18, c2: 25, formula: `SUM(${rangeA1(FIRST_MACHINE_ROW, LEFT_COL, LAST_MACHINE_ROW, LEFT_COL)})`, numFmt: '#,##0', color: '#B45309', bg: '#FFFBEB' },
+    { label: 'TARGET ATTAINMENT', c1: 26, c2: LAST_COL, formula: `IF(C4>0,ROUND(K4/MAX(C4,1),3),0)`, numFmt: '0.0%', color: '#7C3AED', bg: '#F5F3FF' },
+  ];
+  for (const k of kpis) {
+    band(2, k.c1, k.c2, {
+      value: k.label,
+      style: { font: font(9, MUTED, true), fill: { fgColor: k.bg }, alignment: { horizontal: 'center', vertical: 'middle' } },
+    });
+    band(3, k.c1, k.c2, {
+      value: 0,
+      formula: k.formula,
+      numFmt: k.numFmt,
+      style: { font: font(18, k.color, true), fill: { fgColor: k.bg }, alignment: { horizontal: 'center', vertical: 'middle' } },
+    });
+  }
+
+  // Week bands + header row
+  const headerStyle = (horizontal: 'left' | 'center' = 'center'): GridCellStyle => ({
+    font: font(9, WHITE, true),
+    fill: { fgColor: NAVY },
+    alignment: { horizontal, vertical: 'middle' },
+  });
+  for (let w = 0; w < 5; w++) {
+    const c1 = FIRST_DAY_COL + w * 7;
+    const c2 = Math.min(c1 + 6, LAST_DAY_COL);
+    band(WEEK_ROW, c1, c2, {
+      value: `WEEK ${w + 1}`,
+      style: {
+        font: font(9, PRODUCTION_WEEK_COLORS[w], true),
+        alignment: { horizontal: 'center', vertical: 'middle' },
+        border: { bottom: { style: 'medium', color: PRODUCTION_WEEK_COLORS[w] } },
+      },
+    });
+  }
+  set(HEADER_ROW, 0, { value: 'MACHINE / WORK CENTER', style: headerStyle('left') });
+  set(HEADER_ROW, 1, { value: 'PLAN', style: headerStyle() });
+  for (let d = 0; d < DAYS; d++) set(HEADER_ROW, FIRST_DAY_COL + d, { value: d + 1, style: headerStyle() });
+  set(HEADER_ROW, DONE_COL, { value: 'MET', style: headerStyle() });
+  set(HEADER_ROW, LEFT_COL, { value: 'GAP', style: headerStyle() });
+  set(HEADER_ROW, PROGRESS_COL, { value: 'ATTAIN.', style: headerStyle() });
+
+  // Machine rows: sample ticks for the first 20 days so the charts read well out of the box.
+  // Row formulas read the plan as MAX(B21:B21,0) so a bound template's text placeholder
+  // ("{{ Plan }}" in design view) evaluates to 0 rather than #VALUE! / #DIV/0!. (Univer's SUM over
+  // text-only cells returns the string "0", which then fails comparisons and subtraction.)
+  // A bound template has one empty region row whose values come from the dataset.
+  const machineRows = binding ? [null] : PRODUCTION_TRACKER_MACHINES;
+  machineRows.forEach((machine, h) => {
+    const row = FIRST_MACHINE_ROW + h;
+    const fill = { fgColor: h % 2 === 0 ? WHITE : SOFT };
+    const rate = machine ? Math.round((machine.planned / DAYS) * 10) : 0;
+    set(row, 0, { value: machine ? machine.name : '', style: { font: font(10, NAVY, true), fill, border: boxBorder, alignment: { horizontal: 'left', vertical: 'middle' } } });
+    set(row, 1, { value: machine ? machine.planned : '', numFmt: '0', style: { font: font(10, SLATE), fill, border: boxBorder, alignment: { horizontal: 'center', vertical: 'middle' } } });
+    for (let d = 0; d < DAYS; d++) {
+      const ticked = d < 20 && (h * 7 + d * 3) % 10 < rate;
+      set(row, FIRST_DAY_COL + d, {
+        value: machine ? (ticked ? 1 : 0) : '',
+        style: { font: font(10, EMERALD, true), fill, border: boxBorder, alignment: { horizontal: 'center', vertical: 'middle' } },
+      });
+    }
+    const r1 = row + 1;
+    set(row, DONE_COL, {
+      value: 0,
+      formula: `SUM(${L(FIRST_DAY_COL)}${r1}:${L(LAST_DAY_COL)}${r1})`,
+      numFmt: '0',
+      style: { font: font(10, '#047857', true), fill, border: boxBorder, alignment: { horizontal: 'center', vertical: 'middle' } },
+    });
+    set(row, LEFT_COL, {
+      value: 0,
+      formula: `IF(MAX(B${r1}:B${r1},0)>${L(DONE_COL)}${r1},MAX(B${r1}:B${r1},0)-${L(DONE_COL)}${r1},0)`,
+      numFmt: '0',
+      style: { font: font(10, '#B45309'), fill, border: boxBorder, alignment: { horizontal: 'center', vertical: 'middle' } },
+    });
+    set(row, PROGRESS_COL, {
+      value: 0,
+      formula: `IF(MAX(B${r1}:B${r1},0)>0,ROUND(${L(DONE_COL)}${r1}/MAX(B${r1}:B${r1},1),2),0)`,
+      numFmt: '0%',
+      style: { font: font(10, '#7C3AED', true), fill, border: boxBorder, alignment: { horizontal: 'center', vertical: 'middle' } },
+    });
+  });
+
+  // Daily totals, daily completion %, and per-week rows behind the week-coloured bar chart
+  const summaryLabel = (row: number, text: string, color = SLATE) =>
+    set(row, 0, { value: text, style: { font: font(9, color, true), fill: { fgColor: '#F1F5F9' }, alignment: { horizontal: 'left', vertical: 'middle' } } });
+  summaryLabel(COMPLETED_ROW, 'TARGETS MET');
+  summaryLabel(PERCENT_ROW, 'LINE ATTAIN. %');
+  set(COMPLETED_ROW, 1, { style: { fill: { fgColor: '#F1F5F9' } } });
+  set(PERCENT_ROW, 1, { style: { fill: { fgColor: '#F1F5F9' } } });
+  for (let d = 0; d < DAYS; d++) {
+    const col = FIRST_DAY_COL + d;
+    const colL = L(col);
+    set(COMPLETED_ROW, col, {
+      value: 0,
+      formula: `SUM(${colL}${FIRST_MACHINE_ROW + 1}:${colL}${LAST_MACHINE_ROW + 1})`,
+      numFmt: '0',
+      style: { font: font(9, NAVY, true), fill: { fgColor: '#F1F5F9' }, alignment: { horizontal: 'center', vertical: 'middle' } },
+    });
+    set(PERCENT_ROW, col, {
+      value: 0,
+      formula: `IF(A4>0,ROUND(${colL}${COMPLETED_ROW + 1}*100/MAX(A4,1),0),0)`,
+      numFmt: '0',
+      style: { font: font(8, MUTED), fill: { fgColor: '#F1F5F9' }, alignment: { horizontal: 'center', vertical: 'middle' } },
+    });
+  }
+  for (let w = 0; w < 5; w++) {
+    const row = FIRST_WEEK_SERIES_ROW + w;
+    summaryLabel(row, `Week ${w + 1}`, PRODUCTION_WEEK_COLORS[w]);
+    for (let d = w * 7; d < Math.min(w * 7 + 7, DAYS); d++) {
+      const col = FIRST_DAY_COL + d;
+      set(row, col, {
+        value: 0,
+        formula: `${L(col)}${COMPLETED_ROW + 1}`,
+        numFmt: '0',
+        style: { font: font(8, PRODUCTION_WEEK_COLORS[w]), alignment: { horizontal: 'center', vertical: 'middle' } },
+      });
+    }
+  }
+
+  // Donut data block (AL2:AM4), above the machine rows so a repeating region never touches it
+  const DONUT_FIRST_ROW = 2;
+  set(1, DATA_LABEL_COL, { value: 'CHART DATA', style: headerStyle('left') });
+  set(1, DATA_VALUE_COL, { value: '', style: headerStyle() });
+  set(DONUT_FIRST_ROW, DATA_LABEL_COL, { value: 'Target met', style: { font: font(9, SLATE), border: boxBorder } });
+  set(DONUT_FIRST_ROW, DATA_VALUE_COL, { value: 0, formula: 'K4', numFmt: '0', style: { font: font(9, SLATE, true), border: boxBorder } });
+  set(DONUT_FIRST_ROW + 1, DATA_LABEL_COL, { value: 'Target missed', style: { font: font(9, SLATE), border: boxBorder } });
+  set(DONUT_FIRST_ROW + 1, DATA_VALUE_COL, { value: 0, formula: 'S4', numFmt: '0', style: { font: font(9, SLATE, true), border: boxBorder } });
+
+  const CHART2_START_ROW = FIRST_WEEK_SERIES_ROW + 6; // 36 for the sample layout
+  const CHART2_END_ROW = CHART2_START_ROW + 11;
+
+  const dayCategories = rangeA1(HEADER_ROW, FIRST_DAY_COL, HEADER_ROW, LAST_DAY_COL);
+  const rangeChart = (
+    id: string,
+    title: string,
+    type: GridChartDefinition['type'],
+    categoryRange: string,
+    series: Array<{ name: string; range: string; color: string }>,
+    anchor: { startRow: number; endRow: number; startCol: number; endCol: number },
+    options: GridChartDefinition['options'],
+  ): GridChartDefinition => ({
+    id,
+    title,
+    type,
+    source: { kind: 'range', sheetId: SHEET_ID, categoryRange, series },
+    anchor: { sheetId: SHEET_ID, ...anchor },
+    options,
+  });
+
+  const charts: GridChartDefinition[] = [
+    rangeChart(
+      'chart_production_daily_pct',
+      'Daily Line Attainment %',
+      'area',
+      dayCategories,
+      [{ name: 'Attainment %', range: rangeA1(PERCENT_ROW, FIRST_DAY_COL, PERCENT_ROW, LAST_DAY_COL), color: EMERALD }],
+      { startRow: 5, endRow: 16, startCol: 0, endCol: 23 },
+      { legend: false, yAxisTitle: '% of machines on target' },
+    ),
+    rangeChart(
+      'chart_production_overall',
+      'Monthly Target Attainment',
+      'donut',
+      rangeA1(DONUT_FIRST_ROW, DATA_LABEL_COL, DONUT_FIRST_ROW + 1, DATA_LABEL_COL),
+      [{ name: 'Machine-days', range: rangeA1(DONUT_FIRST_ROW, DATA_VALUE_COL, DONUT_FIRST_ROW + 1, DATA_VALUE_COL), color: EMERALD }],
+      { startRow: 5, endRow: 16, startCol: 24, endCol: LAST_COL },
+      { legend: true, sliceColors: [EMERALD, '#CBD5E1'] },
+    ),
+    rangeChart(
+      'chart_production_per_day',
+      'Machines on Target per Day',
+      'bar',
+      dayCategories,
+      PRODUCTION_WEEK_COLORS.map((color, w) => ({
+        name: `Week ${w + 1}`,
+        range: rangeA1(FIRST_WEEK_SERIES_ROW + w, FIRST_DAY_COL, FIRST_WEEK_SERIES_ROW + w, LAST_DAY_COL),
+        color,
+      })),
+      { startRow: CHART2_START_ROW, endRow: CHART2_END_ROW, startCol: 0, endCol: 23 },
+      { stacked: true, legend: true },
+    ),
+    rangeChart(
+      'chart_production_progress',
+      'Machine Days on Target vs Plan',
+      'bar',
+      machinesRef,
+      [
+        { name: 'Met', range: rangeA1(FIRST_MACHINE_ROW, DONE_COL, LAST_MACHINE_ROW, DONE_COL), color: EMERALD },
+        { name: 'Planned', range: rangeA1(FIRST_MACHINE_ROW, 1, LAST_MACHINE_ROW, 1), color: '#94A3B8' },
+      ],
+      { startRow: CHART2_START_ROW, endRow: CHART2_END_ROW, startCol: 24, endCol: LAST_COL },
+      { legend: true },
+    ),
+  ];
+
+  const colWidths: Record<string, number> = { '0': 150, '1': 50 };
+  for (let c = FIRST_DAY_COL; c <= LAST_DAY_COL; c++) colWidths[String(c)] = 30;
+  colWidths[String(DONE_COL)] = 56;
+  colWidths[String(LEFT_COL)] = 56;
+  colWidths[String(PROGRESS_COL)] = 76;
+  colWidths[String(LAST_COL + 1)] = 20;
+  colWidths[String(DATA_LABEL_COL)] = 90;
+  colWidths[String(DATA_VALUE_COL)] = 60;
+
+  const rowHeights: Record<string, number> = { '0': 40, '1': 22, '2': 20, '3': 34, '4': 10, '17': 14 };
+  rowHeights[String(CHART2_START_ROW - 1)] = 14;
+  for (let r = 5; r <= 16; r++) rowHeights[String(r)] = 22;
+  for (let r = CHART2_START_ROW; r <= CHART2_END_ROW; r++) rowHeights[String(r)] = 22;
+  rowHeights[String(WEEK_ROW)] = 20;
+  rowHeights[String(HEADER_ROW)] = 24;
+  for (let r = FIRST_MACHINE_ROW; r <= LAST_MACHINE_ROW; r++) rowHeights[String(r)] = 24;
+
+  return {
+    kind: 'grid',
+    version: 1,
+    schemaVersion: 3,
+    parameters: binding
+      ? [{ id: 'p_month', name: 'month', label: 'Month', type: 'date', required: false, defaultValue: binding.defaultMonth }]
+      : [],
+    datasets: binding ? [buildProductionTrackerDataset(binding)] : [],
+    charts,
+    sheets: [
+      {
+        id: SHEET_ID,
+        name: 'Production Tracker',
+        order: 0,
+        rowHeights,
+        colWidths,
+        merges,
+        cells,
+        regions: binding
+          ? [
+              {
+                id: 'reg_machines',
+                datasetId: PRODUCTION_DATASET_ID,
+                displayLabel: 'Machines',
+                startRow: FIRST_MACHINE_ROW,
+                endRow: FIRST_MACHINE_ROW,
+                startCol: 0,
+                endCol: LAST_DAY_COL,
+                columns: [
+                  { col: 0, fieldId: 'machine_name', displayLabel: 'Machine' },
+                  { col: 1, fieldId: 'planned_days', displayLabel: 'Plan' },
+                  ...Array.from({ length: DAYS }, (_, d) => ({
+                    col: FIRST_DAY_COL + d,
+                    fieldId: productionDayField(d + 1),
+                    displayLabel: String(d + 1),
+                  })),
+                ],
+              },
+            ]
+          : [],
+        conditionalFormats: [],
+        dataValidations: [
+          {
+            id: 'dv_production_checks',
+            ref: rangeA1(FIRST_MACHINE_ROW, FIRST_DAY_COL, LAST_MACHINE_ROW, LAST_DAY_COL),
+            type: 'checkbox',
+            checkedValue: 1,
+            uncheckedValue: 0,
+          },
+        ],
+      },
+    ],
+    filenameExpression: '"production_target_tracker"',
+    pdf: { mode: 'table' },
+  };
 }

@@ -11,7 +11,7 @@ import {
   datasetQueryBuilder,
   GridHydrationForbiddenError,
 } from './dataset-query-builder.js';
-import { readRangeValues } from './chart-range-helper.js';
+import { extractRangeChartData } from './chart-range-helper.js';
 import type { TenantRole } from '../../auth/auth-types.js';
 
 export class ChartDataExtractor {
@@ -132,44 +132,7 @@ export class ChartDataExtractor {
 
     // Range-based chart source
     if (chart.source.kind === 'range') {
-      const sheetId = chart.source.sheetId;
-      const targetSheet = hydratedSheets.find((s) => s.id === sheetId || s.name === sheetId);
-      if (!targetSheet) {
-        throw new Error(`Sheet '${sheetId}' referenced by chart '${chart.id}' not found`);
-      }
-
-      let categories: string[] = [];
-      if (chart.source.categoryRange) {
-        const rawCats = readRangeValues(targetSheet.cells, chart.source.categoryRange);
-        categories = rawCats.map((v) => (v !== null && v !== undefined ? String(v) : ''));
-      }
-
-      const series = chart.source.series.map((s) => {
-        const rawData = readRangeValues(targetSheet.cells, s.range);
-        if (rawData.length > CHART_LIMITS.MAX_POINTS_PER_SERIES) {
-          throw new Error(
-            `Series '${s.name}' range '${s.range}' has ${rawData.length} cells, exceeding maximum limit of ${CHART_LIMITS.MAX_POINTS_PER_SERIES} points`
-          );
-        }
-        const numericData = rawData.map((v) => {
-          const num = Number(v);
-          return isFinite(num) ? num : 0;
-        });
-        return {
-          name: s.name,
-          data: numericData,
-          color: s.color,
-          type: s.type,
-        };
-      });
-
-      // If categoryRange was omitted, generate 1-based index categories
-      if (categories.length === 0 && series.length > 0) {
-        const maxLen = Math.max(...series.map((s) => s.data.length), 0);
-        categories = Array.from({ length: maxLen }, (_, i) => String(i + 1));
-      }
-
-      return { categories, series };
+      return extractRangeChartData(chart, hydratedSheets);
     }
 
     throw new Error(`Unsupported chart source kind`);

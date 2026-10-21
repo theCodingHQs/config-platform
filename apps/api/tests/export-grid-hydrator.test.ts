@@ -102,6 +102,18 @@ describe('Phase 2B: Grid Export Hydrator & Repeating Regions Engine', () => {
     expect(rewritten4).toBe('=A1+B2');
   });
 
+  it('shifts a reference at the end of a formula, including bare references (regression)', () => {
+    // The tracker's week rows are just "C22" (TARGETS MET); left unshifted they read a machine row
+    expect(rewriteFormulaCoordinates('C22', 21, 21, 7)).toBe('C29');
+    expect(rewriteFormulaCoordinates('=C22', 21, 21, 7)).toBe('=C29');
+    expect(rewriteFormulaCoordinates('=A1+C22', 21, 21, 7)).toBe('=A1+C29');
+    expect(rewriteFormulaCoordinates('ROUND(C22*100/MAX(A4,1),0)', 21, 21, 7)).toBe('ROUND(C29*100/MAX(A4,1),0)');
+    // Absolute rows move too, as when Excel inserts rows; references inside the region stay
+    expect(rewriteFormulaCoordinates('=$C$22+C21', 21, 21, 7)).toBe('=$C$29+C21');
+    // Function names that look like references are untouched
+    expect(rewriteFormulaCoordinates('=ATAN2(C22,1)+LOG10(C22)', 21, 21, 7)).toBe('=ATAN2(C29,1)+LOG10(C29)');
+  });
+
   // ─── 2. Band Shifting with 40 rows (N > minRows) ──────────────────────────
   it('hydrates template with 40 records (band shifting N > minRows) and shifts rows below region', async () => {
     // Region rows 2 to 7 (0-based: startRow 2, endRow 7 -> minRows = 6)

@@ -145,6 +145,38 @@ export async function pagesRoutes(fastify: FastifyInstance) {
     return reply.status(201).send(page);
   });
 
+  // PUT /pages/:id/settings - Name, URL slug, group, width and icon (builder+)
+  fastify.put('/pages/:id/settings', {
+    preHandler: csrfCheckHook,
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!hasMinRole(req.session.role, 'builder')) {
+      return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'Builder role or higher required' });
+    }
+    const { tenantId } = req.session;
+    const { id } = req.params as { id: string };
+    const body = (req.body as any) || {};
+    if (body.folderId !== undefined && body.folderId !== null && typeof body.folderId !== 'string') {
+      return reply.status(400).send({ error: 'folderId must be a folder ID or null' });
+    }
+    if (body.icon !== undefined && body.icon !== null && typeof body.icon !== 'string') {
+      return reply.status(400).send({ error: 'icon must be an icon name or null' });
+    }
+    const { name, slug, folderId, width, icon } = body;
+    const updated = await pagesService.updatePageSettings(tenantId, id, { name, slug, folderId, width, icon });
+
+    await auditLogService.log({
+      tenantId,
+      userId: req.session.userId,
+      userEmail: req.session.email,
+      action: 'page.settings',
+      entityType: 'page',
+      entityId: id,
+      afterState: { name: updated.name, route: updated.route, folderId: updated.folderId, width: updated.width, icon: updated.icon },
+    });
+
+    return updated;
+  });
+
   // PUT /pages/:id - Update page draft / metadata (builder+)
   fastify.put('/pages/:id', {
     preHandler: csrfCheckHook,

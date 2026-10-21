@@ -149,13 +149,71 @@ export type ThemePreference = z.infer<typeof ThemePreferenceSchema>;
 export const ThemeRadiusOverrideSchema = z.enum(['none', 'sm', 'md', 'lg', 'xl', 'full']);
 export type ThemeRadiusOverride = z.infer<typeof ThemeRadiusOverrideSchema>;
 
-export const ThemeDensityOverrideSchema = z.enum(['compact', 'normal', 'comfortable']);
+export const ThemeDensityOverrideSchema = z.enum(['dense', 'compact', 'normal', 'comfortable']);
 export type ThemeDensityOverride = z.infer<typeof ThemeDensityOverrideSchema>;
+
+/** Body text size in px; every other font-size token is derived from it. */
+export const TEXT_SIZE_MIN = 12;
+export const TEXT_SIZE_MAX = 18;
+export const TEXT_SIZE_DEFAULT = 14;
+
+export const ThemeTextSizeOverrideSchema = z
+  .number()
+  .min(TEXT_SIZE_MIN, `Text size must be at least ${TEXT_SIZE_MIN}px`)
+  .max(TEXT_SIZE_MAX, `Text size must be at most ${TEXT_SIZE_MAX}px`)
+  .multipleOf(0.5, 'Text size must be in 0.5px steps');
+
+export const TEXT_SIZE_PRESETS: ReadonlyArray<{ id: string; label: string; value: number }> = [
+  { id: 'small', label: 'Small', value: 13 },
+  { id: 'default', label: 'Default', value: TEXT_SIZE_DEFAULT },
+  { id: 'large', label: 'Large', value: 15 },
+  { id: 'x-large', label: 'Extra Large', value: 16 },
+];
+
+/**
+ * Layout Overrides (Tenant level)
+ * Shared by every standard screen (studio managers and runtime pages). Full-bleed
+ * workspaces such as the Page Builder and Grid Designer ignore the content width.
+ */
+export const LAYOUT_CONTENT_WIDTH_MIN = 640;
+export const LAYOUT_CONTENT_WIDTH_MAX = 2560;
+export const LAYOUT_PAGE_PADDING_MAX = 64;
+export const LAYOUT_SIDEBAR_WIDTH_MIN = 180;
+export const LAYOUT_SIDEBAR_WIDTH_MAX = 360;
+
+export const ThemeContentWidthSchema = z.union([
+  z.literal('full'),
+  z.number()
+    .int('Content width must be a whole number of pixels')
+    .min(LAYOUT_CONTENT_WIDTH_MIN, `Content width must be at least ${LAYOUT_CONTENT_WIDTH_MIN}px`)
+    .max(LAYOUT_CONTENT_WIDTH_MAX, `Content width must be at most ${LAYOUT_CONTENT_WIDTH_MAX}px`),
+]);
+export type ThemeContentWidth = z.infer<typeof ThemeContentWidthSchema>;
+
+export const ThemeContentAlignSchema = z.enum(['center', 'start']);
+export type ThemeContentAlign = z.infer<typeof ThemeContentAlignSchema>;
+
+export const ThemeLayoutOverrideSchema = z.object({
+  /** Max width of the main content area in px, or 'full' to use the whole viewport. */
+  contentWidth: ThemeContentWidthSchema.optional(),
+  /** Where a width-limited content area sits on wide screens. */
+  contentAlign: ThemeContentAlignSchema.optional(),
+  /** Horizontal page padding in px; vertical padding is derived. Defaults per density. */
+  pagePadding: z.number().int().min(0).max(LAYOUT_PAGE_PADDING_MAX, `Page padding must be at most ${LAYOUT_PAGE_PADDING_MAX}px`).optional(),
+  /** Expanded width of the runtime navigation sidebar in px. */
+  sidebarWidth: z.number().int()
+    .min(LAYOUT_SIDEBAR_WIDTH_MIN, `Sidebar width must be at least ${LAYOUT_SIDEBAR_WIDTH_MIN}px`)
+    .max(LAYOUT_SIDEBAR_WIDTH_MAX, `Sidebar width must be at most ${LAYOUT_SIDEBAR_WIDTH_MAX}px`)
+    .optional(),
+}).strict();
+export type ThemeLayoutOverride = z.infer<typeof ThemeLayoutOverrideSchema>;
 
 export const ThemeOverridesSchema = z.object({
   accent: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Accent must be a 6-digit hex color (#rrggbb)').optional(),
   radius: ThemeRadiusOverrideSchema.optional(),
   density: ThemeDensityOverrideSchema.optional(),
+  textSize: ThemeTextSizeOverrideSchema.optional(),
+  layout: ThemeLayoutOverrideSchema.optional(),
 }).strict();
 export type ThemeOverrides = z.infer<typeof ThemeOverridesSchema>;
 
@@ -168,9 +226,10 @@ export type WorkspaceThemeConfig = z.infer<typeof WorkspaceThemeConfigSchema>;
 /**
  * Density Scale Options & Calculations
  */
-export type DensityMultiplier = 'compact' | 'normal' | 'comfortable';
+export type DensityMultiplier = 'dense' | 'compact' | 'normal' | 'comfortable';
 
 export const DENSITY_FACTORS: Record<DensityMultiplier, number> = {
+  dense: 0.6,
   compact: 0.8,
   normal: 1.0,
   comfortable: 1.25,
@@ -198,6 +257,131 @@ export function getDensitySpacing(multiplier: DensityMultiplier = 'normal'): Rec
     } else {
       result[key] = `${(rem * factor).toFixed(3).replace(/\.?0+$/, '')}rem`;
     }
+  }
+  return result;
+}
+
+/**
+ * Control heights per density. Only 'dense' shrinks controls; spacing alone can't,
+ * because inputs and buttons size themselves from these tokens.
+ */
+const DENSE_CONTROL_HEIGHTS = { sm: '24px', md: '28px', lg: '36px' };
+
+export function getDensityControlHeights(multiplier: DensityMultiplier = 'normal'): Record<'sm' | 'md' | 'lg', string> {
+  return multiplier === 'dense' ? DENSE_CONTROL_HEIGHTS : defaultSharedTokens.controlHeight;
+}
+
+/**
+ * Recommended body text size per density. Applied automatically when the workspace
+ * has no explicit textSize override, so changing density also retunes the text.
+ */
+export const DENSITY_DEFAULT_TEXT_SIZE: Record<DensityMultiplier, number> = {
+  dense: 13,
+  compact: 13.5,
+  normal: TEXT_SIZE_DEFAULT,
+  comfortable: 15,
+};
+
+export function getDensityDefaultTextSize(density: DensityMultiplier = 'normal'): number {
+  return DENSITY_DEFAULT_TEXT_SIZE[density];
+}
+
+/** Effective body text size: an explicit override wins, otherwise the density's default. */
+export function resolveTextSize(density?: DensityMultiplier, textSize?: number): number {
+  return textSize ?? getDensityDefaultTextSize(density);
+}
+
+/**
+ * Layout Defaults & Resolution
+ */
+export const CONTENT_WIDTH_PRESETS: ReadonlyArray<{ id: string; label: string; value: ThemeContentWidth }> = [
+  { id: 'narrow', label: 'Narrow', value: 960 },
+  { id: 'default', label: 'Default', value: 1280 },
+  { id: 'wide', label: 'Wide', value: 1440 },
+  { id: 'x-wide', label: 'Extra Wide', value: 1680 },
+  { id: 'full', label: 'Full Width', value: 'full' },
+];
+
+/** Page padding follows density unless set explicitly, like text size. */
+export const DENSITY_DEFAULT_PAGE_PADDING: Record<DensityMultiplier, number> = {
+  dense: 16,
+  compact: 20,
+  normal: 24,
+  comfortable: 32,
+};
+
+export const LAYOUT_DEFAULTS = {
+  contentWidth: 1280 as ThemeContentWidth,
+  contentAlign: 'center' as ThemeContentAlign,
+  sidebarWidth: 240,
+};
+
+export interface ResolvedLayout {
+  contentWidth: ThemeContentWidth;
+  contentAlign: ThemeContentAlign;
+  pagePadding: number;
+  sidebarWidth: number;
+}
+
+/** Fills every layout setting: explicit override, else density default, else global default. */
+export function resolveLayout(layout?: ThemeLayoutOverride, density?: DensityMultiplier): ResolvedLayout {
+  return {
+    contentWidth: layout?.contentWidth ?? LAYOUT_DEFAULTS.contentWidth,
+    contentAlign: layout?.contentAlign ?? LAYOUT_DEFAULTS.contentAlign,
+    pagePadding: layout?.pagePadding ?? DENSITY_DEFAULT_PAGE_PADDING[density ?? 'normal'],
+    sidebarWidth: layout?.sidebarWidth ?? LAYOUT_DEFAULTS.sidebarWidth,
+  };
+}
+
+/**
+ * Text Size Scale
+ * The default scale (px) at a 14px body size; other body sizes scale it proportionally.
+ */
+const BASE_FONT_SCALE_PX = { xs: 12, sm: 14, md: 16, lg: 18, xl: 20, '2xl': 24, '3xl': 30 } as const;
+type FontSizeKey = keyof typeof BASE_FONT_SCALE_PX;
+const MIN_LEGIBLE_FONT_PX = 11;
+
+const pxToRem = (px: number) => `${(px / 16).toFixed(4).replace(/\.?0+$/, '')}rem`;
+
+/** Font sizes in px for a given body size, rounded to 0.5px. */
+export function getTextSizeScalePx(textSize: number = TEXT_SIZE_DEFAULT): Record<FontSizeKey, number> {
+  const factor = textSize / TEXT_SIZE_DEFAULT;
+  const result = {} as Record<FontSizeKey, number>;
+  for (const [key, px] of Object.entries(BASE_FONT_SCALE_PX) as Array<[FontSizeKey, number]>) {
+    result[key] = Math.max(MIN_LEGIBLE_FONT_PX, Math.round(px * factor * 2) / 2);
+  }
+  return result;
+}
+
+/** Font-size tokens (rem, so browser zoom and user font settings still apply). */
+export function getTextSizeScale(textSize: number = TEXT_SIZE_DEFAULT): Record<FontSizeKey, string> {
+  const px = getTextSizeScalePx(textSize);
+  const result = {} as Record<FontSizeKey, string>;
+  for (const key of Object.keys(px) as FontSizeKey[]) result[key] = pxToRem(px[key]);
+  return result;
+}
+
+/**
+ * Control heights are the density height, raised when needed so the text a control
+ * carries (sm → xs text, md → sm text, lg → md text) keeps a minimum vertical padding.
+ * Any density/text-size combination therefore stays usable.
+ */
+export function resolveControlHeights(
+  density: DensityMultiplier = 'normal',
+  textSize: number = TEXT_SIZE_DEFAULT,
+): Record<'sm' | 'md' | 'lg', string> {
+  const heights = getDensityControlHeights(density);
+  const font = getTextSizeScalePx(textSize);
+  const LINE_HEIGHT = 1.25;
+  const BORDERS = 2;
+  const needed = {
+    sm: Math.ceil(font.xs * LINE_HEIGHT + 2 * 3 + BORDERS),
+    md: Math.ceil(font.sm * LINE_HEIGHT + 2 * 4 + BORDERS),
+    lg: Math.ceil(font.md * LINE_HEIGHT + 2 * 5 + BORDERS),
+  };
+  const result = {} as Record<'sm' | 'md' | 'lg', string>;
+  for (const key of ['sm', 'md', 'lg'] as const) {
+    result[key] = `${Math.max(Number.parseFloat(heights[key]), needed[key])}px`;
   }
   return result;
 }
@@ -696,6 +880,13 @@ export function generateTokensCss(options?: {
   const densitySpacing = overrides?.density
     ? getDensitySpacing(overrides.density)
     : defaultSharedTokens.spacing;
+  const textSize = resolveTextSize(overrides?.density, overrides?.textSize);
+  const layout = resolveLayout(overrides?.layout, overrides?.density);
+  const isFullWidth = layout.contentWidth === 'full';
+  const controlHeights = resolveControlHeights(overrides?.density, textSize);
+  const fontSizes = textSize === TEXT_SIZE_DEFAULT
+    ? defaultSharedTokens.fontSize
+    : getTextSizeScale(textSize);
 
   const semanticRadius = deriveSemanticRadius(overrides?.radius);
   const radiusOverride = semanticRadius.base;
@@ -734,14 +925,14 @@ export function generateTokensCss(options?: {
   --font-sans: ${defaultSharedTokens.fontStack.sans};
   --font-mono: ${defaultSharedTokens.fontStack.mono};
 
-  --font-size-xs: ${defaultSharedTokens.fontSize.xs};
-  --font-size-sm: ${defaultSharedTokens.fontSize.sm};
-  --font-size-md: ${defaultSharedTokens.fontSize.md};
-  --font-size-base: ${defaultSharedTokens.fontSize.md};
-  --font-size-lg: ${defaultSharedTokens.fontSize.lg};
-  --font-size-xl: ${defaultSharedTokens.fontSize.xl};
-  --font-size-2xl: ${defaultSharedTokens.fontSize['2xl']};
-  --font-size-3xl: ${defaultSharedTokens.fontSize['3xl']};
+  --font-size-xs: ${fontSizes.xs};
+  --font-size-sm: ${fontSizes.sm};
+  --font-size-md: ${fontSizes.md};
+  --font-size-base: ${fontSizes.md};
+  --font-size-lg: ${fontSizes.lg};
+  --font-size-xl: ${fontSizes.xl};
+  --font-size-2xl: ${fontSizes['2xl']};
+  --font-size-3xl: ${fontSizes['3xl']};
 
   /* Radius Scale */
   --radius-none: ${defaultSharedTokens.radius.none};
@@ -793,10 +984,16 @@ export function generateTokensCss(options?: {
   --space-16: var(--spacing-16);
 
   /* Control & Layout Heights */
-  --control-height-sm: ${defaultSharedTokens.controlHeight.sm};
-  --control-height-md: ${defaultSharedTokens.controlHeight.md};
-  --control-height-lg: ${defaultSharedTokens.controlHeight.lg};
-  --navbar-height: 60px;
+  --control-height-sm: ${controlHeights.sm};
+  --control-height-md: ${controlHeights.md};
+  --control-height-lg: ${controlHeights.lg};
+  --navbar-height: 50px;
+
+  /* Layout (standard screens; full-bleed workspaces opt out) */
+  --layout-content-max-width: ${isFullWidth ? 'none' : `${layout.contentWidth}px`};
+  --layout-content-margin-inline: ${layout.contentAlign === 'center' ? 'auto' : '0'};
+  --layout-page-padding: ${layout.pagePadding}px;
+  --layout-sidebar-width: ${layout.sidebarWidth}px;
 
   /* Shadows */
   --shadow-none: ${defaultSharedTokens.shadow.none};

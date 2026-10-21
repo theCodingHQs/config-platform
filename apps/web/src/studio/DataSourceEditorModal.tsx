@@ -1,7 +1,18 @@
 import React, { useState } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
-import type { DataSourceDefinition, ErdTable } from '@config-platform/schema';
+import type { DataSourceDefinition, ErdTable, FilterOp } from '@config-platform/schema';
 import { ExpressionInput } from './ExpressionInput';
+import { FilterFieldsPicker } from './FilterFieldsPicker';
+import {
+  FILTER_OP_LABELS,
+  filterOpsForColumns,
+  filterToRows,
+  findFilterColumn,
+  joinFilterFields,
+  rowsToFilter,
+  splitFilterFields,
+  type FilterRow,
+} from './data-source-filter-rows';
 
 export interface DataSourceEditorModalProps {
   isOpen: boolean;
@@ -122,6 +133,7 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
               {list.map((ds, idx) => {
                 const entity = entities.find((e) => e.id === ds.entityId);
                 const columns = entity?.columns || [];
+                const filterRows = filterToRows(ds.filter);
 
                 return (
                   <div
@@ -199,59 +211,79 @@ export const DataSourceEditorModal: React.FC<DataSourceEditorModalProps> = ({
                         Filter Criteria (Values can be <code>{'{{ state.<key> }}'}</code>)
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-                        {Object.entries(ds.filter || {}).map(([fKey, fVal], fIdx) => (
-                          <div key={fIdx} style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-                            <select
-                              className="form-select"
-                              value={fKey}
-                              onChange={(e) => {
-                                const newKey = e.target.value;
-                                const newFilter = { ...(ds.filter || {}) };
-                                delete newFilter[fKey];
-                                if (newKey) newFilter[newKey] = fVal;
-                                handleUpdate(idx, { ...ds, filter: newFilter });
-                              }}
-                              style={{ width: '40%', fontSize: 'var(--font-size-xs)' }}
-                            >
-                              <option value="">Select Field</option>
-                              {columns.map((c) => (
-                                <option key={c.id} value={c.id}>
-                                  {c.label} ({c.name})
-                                </option>
-                              ))}
-                            </select>
-                            <div style={{ flex: 1 }}>
-                              <ExpressionInput
-                                value={typeof fVal === 'string' ? fVal : String(fVal ?? '')}
-                                placeholder="e.g. {{ state.selectedStatus }}"
-                                onChange={(val) => {
-                                  const newFilter = { ...(ds.filter || {}), [fKey]: val };
-                                  handleUpdate(idx, { ...ds, filter: newFilter });
-                                }}
-                              />
+                        {filterRows.map((row, fIdx) => {
+                          const fields = splitFilterFields(row.field);
+                          const fieldColumns = fields.map((f) => findFilterColumn(columns, f));
+                          const ops = filterOpsForColumns(fieldColumns);
+                          const setRows = (next: FilterRow[]) => handleUpdate(idx, { ...ds, filter: rowsToFilter(next) });
+                          const updateRow = (patch: Partial<FilterRow>) =>
+                            setRows(filterRows.map((r, i) => (i === fIdx ? { ...r, ...patch } : r)));
+                          return (
+                            <div key={fIdx} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)' }}>
+                              <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                                <FilterFieldsPicker
+                                  ariaLabel={`Filter ${fIdx + 1} field`}
+                                  value={fields}
+                                  options={columns}
+                                  onChange={(nextFields) => {
+                                    // An empty selection keeps the row (as "Select Field") until removed
+                                    if (nextFields.length === 0) return;
+                                    const nextOps = filterOpsForColumns(nextFields.map((f) => findFilterColumn(columns, f)));
+                                    // Keep the operator when every selected field supports it
+                                    const op = nextOps.includes(row.op) ? row.op : 'eq';
+                                    updateRow({ field: joinFilterFields(nextFields), op });
+                                  }}
+                                />
+                                <select
+                                  className="form-select"
+                                  aria-label={`Filter ${fIdx + 1} operator`}
+                                  value={row.op}
+                                  onChange={(e) => updateRow({ op: e.target.value as FilterOp })}
+                                  style={{ width: '22%', fontSize: 'var(--font-size-xs)' }}
+                                >
+                                  {!ops.includes(row.op) && <option value={row.op}>{row.op}</option>}
+                                  {ops.map((op) => (
+                                    <option key={op} value={op}>
+                                      {FILTER_OP_LABELS[op]}
+                                    </option>
+                                  ))}
+                                </select>
+                                <div style={{ flex: 1 }}>
+                                  <ExpressionInput
+                                    value={typeof row.value === 'string' ? row.value : String(row.value ?? '')}
+                                    placeholder="e.g. {{ state.selectedStatus }}"
+                                    onChange={(val) => updateRow({ value: val })}
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setRows(filterRows.filter((_, i) => i !== fIdx))}
+                                  style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--danger)' }}
+                                  aria-label="Remove Filter"
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                              {fieldColumns.some((c) => c?.type === 'reference') && (
+                                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)' }}>
+                                  A link field matches the linked record's id, not its name. To search by name, filter a text field.
+                                </div>
+                              )}
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const newFilter = { ...(ds.filter || {}) };
-                                delete newFilter[fKey];
-                                handleUpdate(idx, { ...ds, filter: newFilter });
-                              }}
-                              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--danger)' }}
-                              aria-label="Remove Filter"
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-                        ))}
+                          );
+                        })}
+
+                        <p style={{ margin: 0, fontSize: 'var(--font-size-xs)', color: 'var(--muted)' }}>
+                          All conditions must match. Pick several fields in one condition to match any of them (e.g. one search box over name and work center). A condition whose {'{{ expression }}'} is empty (e.g. a blank search box) is skipped.
+                        </p>
 
                         <button
                           type="button"
                           className="btn btn-secondary"
                           onClick={() => {
-                            const availableCol = columns.find((c) => !(ds.filter || {})[c.id])?.id || columns[0]?.id || 'field';
-                            const newFilter = { ...(ds.filter || {}), [availableCol]: '' };
-                            handleUpdate(idx, { ...ds, filter: newFilter });
+                            const used = new Set(filterRows.flatMap((r) => splitFilterFields(r.field).map((f) => findFilterColumn(columns, f)?.id ?? f)));
+                            const availableCol = columns.find((c) => !used.has(c.id))?.id || columns[0]?.id || 'field';
+                            handleUpdate(idx, { ...ds, filter: rowsToFilter([...filterRows, { field: availableCol, op: 'eq', value: '' }]) });
                           }}
                           style={{ alignSelf: 'flex-start', fontSize: 'var(--font-size-xs)', padding: 'var(--space-1) var(--space-2)' }}
                         >

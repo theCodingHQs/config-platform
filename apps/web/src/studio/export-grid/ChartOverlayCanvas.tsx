@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useSyncExternalStore } from 'react';
 import * as echarts from 'echarts';
 import {
   BarChart3,
@@ -15,6 +15,34 @@ import {
   type ChartRenderData,
   buildEChartsOption,
 } from '@config-platform/schema';
+
+/**
+ * Live chart data keyed by chart id. Cards subscribe to it, so range charts re-render as the cells
+ * they read change (e.g. a checkbox click) without remounting Univer float DOMs.
+ */
+export interface ChartDataStore {
+  get: (chartId: string) => ChartRenderData | undefined;
+  set: (data: Map<string, ChartRenderData>) => void;
+  subscribe: (listener: () => void) => () => void;
+}
+
+export function createChartDataStore(): ChartDataStore {
+  let current = new Map<string, ChartRenderData>();
+  const listeners = new Set<() => void>();
+  return {
+    get: (chartId) => current.get(chartId),
+    set: (data) => {
+      current = data;
+      listeners.forEach((l) => l());
+    },
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+}
+
+const noopSubscribe = () => () => {};
 
 export interface SpreadsheetGridMetrics {
   scrollX: number;
@@ -34,6 +62,7 @@ export interface ChartOverlayCanvasProps {
   onDeleteChart: (chartId: string) => void;
   themeTokens?: Record<string, string>;
   previewDataMap?: Map<string, ChartRenderData>;
+  dataStore?: ChartDataStore;
   gridMetrics?: SpreadsheetGridMetrics;
   onForwardWheel?: (e: React.WheelEvent) => void;
 }
@@ -65,6 +94,7 @@ function LiveChartInstance({
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
+  const renderedChartRef = useRef<GridChartDefinition | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -74,7 +104,11 @@ function LiveChartInstance({
 
     const option = buildEChartsOption(chart, data, themeTokens);
     option.animation = true;
-    chartRef.current.setOption(option, true);
+    // Replace the option when the chart definition changes; merge when only data changed so
+    // live updates (e.g. ticking a checkbox) animate instead of redrawing from scratch.
+    const definitionChanged = renderedChartRef.current !== chart;
+    chartRef.current.setOption(option, definitionChanged ? { notMerge: true } : { replaceMerge: ['series'] });
+    renderedChartRef.current = chart;
 
     const handleResize = () => chartRef.current?.resize();
     window.addEventListener('resize', handleResize);
@@ -101,6 +135,7 @@ export function ChartOverlayCanvas({
   onDeleteChart,
   themeTokens,
   previewDataMap,
+  dataStore,
   gridMetrics,
   onForwardWheel,
 }: ChartOverlayCanvasProps) {
@@ -185,6 +220,7 @@ export function ChartOverlayCanvas({
             onDeleteChart={onDeleteChart}
             themeTokens={themeTokens}
             previewDataMap={previewDataMap}
+            dataStore={dataStore}
             style={{
               position: 'absolute',
               left: `${leftPx}px`,
@@ -206,6 +242,7 @@ export function GridChartCardContent({
   onDeleteChart,
   themeTokens,
   previewDataMap,
+  dataStore,
   style,
 }: {
   chart: GridChartDefinition;
@@ -214,9 +251,11 @@ export function GridChartCardContent({
   onDeleteChart?: (chartId: string) => void;
   themeTokens?: Record<string, string>;
   previewDataMap?: Map<string, ChartRenderData>;
+  dataStore?: ChartDataStore;
   style?: React.CSSProperties;
 }) {
-  const chartData: ChartRenderData = previewDataMap?.get(chart.id) || {
+  const liveData = useSyncExternalStore(dataStore?.subscribe ?? noopSubscribe, () => dataStore?.get(chart.id));
+  const chartData: ChartRenderData = liveData || previewDataMap?.get(chart.id) || {
     categories: ['Cat A', 'Cat B', 'Cat C', 'Cat D'],
     series: chart.source.series.map((s, idx) => ({
       name: s.name || `Series ${idx + 1}`,
@@ -340,6 +379,7 @@ export function GridChartFloatDomCard(props: any) {
       onDeleteChart={data.onDeleteChart}
       themeTokens={data.themeTokens}
       previewDataMap={data.previewDataMap}
+      dataStore={data.dataStore}
     />
   );
 }

@@ -232,7 +232,8 @@ export const POPULAR_ENTITY_ICONS: Array<{ name: string; label: string; category
 
 export interface DynamicIconProps {
   name?: string | null;
-  size?: number;
+  /** px, or a CSS length such as "1.25em" so the icon follows the surrounding text size. */
+  size?: number | string;
   className?: string;
   color?: string;
   style?: React.CSSProperties;

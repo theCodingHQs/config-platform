@@ -24,6 +24,11 @@ import {
   deriveAccentShades,
   validateAccentContrast,
   generateTokensCss,
+  getTextSizeScalePx,
+  resolveControlHeights,
+  resolveTextSize,
+  resolveLayout,
+  ThemeOverridesSchema,
 } from '../src/theme.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -140,6 +145,94 @@ describe('Theme Tokens & WCAG Contrast Tests', () => {
     assert.equal(normal['4'], '1rem');
     assert.equal(compact['4'], '0.8rem');
     assert.equal(comfortable['4'], '1.25rem');
+    assert.equal(getDensitySpacing('dense')['4'], '0.6rem');
+  });
+
+  it('shrinks control heights only for dense density', () => {
+    const dense = generateTokensCss({ presetId: 'neutral', overrides: { density: 'dense' } });
+    assert.match(dense, /--control-height-md: 28px;/);
+    assert.match(dense, /--spacing-4: 0\.6rem;/);
+
+    const compact = generateTokensCss({ presetId: 'neutral', overrides: { density: 'compact' } });
+    assert.match(compact, /--control-height-md: 36px;/);
+  });
+
+  it('derives the whole font scale from a configurable text size', () => {
+    // Default (no override) keeps the original tokens
+    const base = generateTokensCss({ presetId: 'neutral', overrides: {} });
+    assert.match(base, /--font-size-sm: 0\.875rem;/);
+
+    // 13px body → proportionally smaller scale, floor of 11px on captions
+    const small = getTextSizeScalePx(13);
+    assert.equal(small.sm, 13);
+    assert.equal(small.xs, 11);
+    assert.equal(small.md, 15);
+    assert.equal(small['3xl'], 28);
+
+    const css = generateTokensCss({ presetId: 'neutral', overrides: { textSize: 13 } });
+    assert.match(css, /--font-size-sm: 0\.8125rem;/);
+    assert.match(css, /--font-size-xs: 0\.6875rem;/);
+  });
+
+  it('applies a density default text size unless one is set explicitly', () => {
+    assert.equal(resolveTextSize('dense'), 13);
+    assert.equal(resolveTextSize('compact'), 13.5);
+    assert.equal(resolveTextSize(undefined), 14);
+    assert.equal(resolveTextSize('comfortable'), 15);
+    assert.equal(resolveTextSize('dense', 16), 16);
+
+    const dense = generateTokensCss({ presetId: 'neutral', overrides: { density: 'dense' } });
+    assert.match(dense, /--font-size-sm: 0\.8125rem;/);
+
+    const denseOverride = generateTokensCss({ presetId: 'neutral', overrides: { density: 'dense', textSize: 16 } });
+    assert.match(denseOverride, /--font-size-sm: 1rem;/);
+
+    const normal = generateTokensCss({ presetId: 'neutral', overrides: { density: 'normal' } });
+    assert.match(normal, /--font-size-sm: 0\.875rem;/);
+  });
+
+  it('resolves layout settings with density-aware page padding', () => {
+    assert.deepEqual(resolveLayout(undefined, undefined), {
+      contentWidth: 1280, contentAlign: 'center', pagePadding: 24, sidebarWidth: 240,
+    });
+    assert.equal(resolveLayout(undefined, 'dense').pagePadding, 16);
+    assert.equal(resolveLayout({ pagePadding: 40 }, 'dense').pagePadding, 40);
+
+    const wide = generateTokensCss({ presetId: 'neutral', overrides: { layout: { contentWidth: 1440, contentAlign: 'start', sidebarWidth: 280 } } });
+    assert.match(wide, /--layout-content-max-width: 1440px;/);
+    assert.match(wide, /--layout-content-margin-inline: 0;/);
+    assert.match(wide, /--layout-sidebar-width: 280px;/);
+
+    const full = generateTokensCss({ presetId: 'neutral', overrides: { layout: { contentWidth: 'full' } } });
+    assert.match(full, /--layout-content-max-width: none;/);
+  });
+
+  it('validates layout ranges and rejects unknown keys', () => {
+    const ok = [{ contentWidth: 'full' }, { contentWidth: 640 }, { contentWidth: 2560 }, { pagePadding: 0 }, { sidebarWidth: 360 }, { contentAlign: 'start' }];
+    for (const layout of ok) {
+      assert.equal(ThemeOverridesSchema.safeParse({ layout }).success, true, `expected ${JSON.stringify(layout)} to be valid`);
+    }
+    const bad = [{ contentWidth: 639 }, { contentWidth: 1280.5 }, { contentWidth: 'wide' }, { pagePadding: 65 }, { sidebarWidth: 100 }, { contentAlign: 'right' }, { gutter: 10 }];
+    for (const layout of bad) {
+      assert.equal(ThemeOverridesSchema.safeParse({ layout }).success, false, `expected ${JSON.stringify(layout)} to be invalid`);
+    }
+  });
+
+  it('validates text size range and step', () => {
+    for (const ok of [12, 13.5, 14, 18]) {
+      assert.equal(ThemeOverridesSchema.safeParse({ textSize: ok }).success, true, `expected ${ok} to be valid`);
+    }
+    for (const bad of [11.5, 18.5, 13.3, '14']) {
+      assert.equal(ThemeOverridesSchema.safeParse({ textSize: bad }).success, false, `expected ${bad} to be invalid`);
+    }
+  });
+
+  it('grows control heights when the text needs room, never shrinks them', () => {
+    assert.deepEqual(resolveControlHeights('dense', 14), { sm: '24px', md: '28px', lg: '36px' });
+    // 18px body on dense: 18 * 1.25 + 8 + 2 = 32.5 → 33px
+    assert.equal(resolveControlHeights('dense', 18).md, '33px');
+    // Normal density already has room for the largest text size
+    assert.deepEqual(resolveControlHeights('normal', 18), { sm: '28px', md: '36px', lg: '44px' });
   });
 
   it('validates ThemePreferenceSchema and ThemePresetIdSchema', () => {

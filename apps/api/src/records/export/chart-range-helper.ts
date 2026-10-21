@@ -1,4 +1,10 @@
-import type { GridCellDefinition } from '@config-platform/schema';
+import {
+  CHART_LIMITS,
+  type ChartRenderData,
+  type GridCellDefinition,
+  type GridChartDefinition,
+  type GridSheetDefinition,
+} from '@config-platform/schema';
 
 /**
  * Converts column letter to 0-based column index.
@@ -137,4 +143,55 @@ export function readRangeValues(
   }
 
   return values;
+}
+
+/**
+ * Reads a range-sourced chart's categories and series from (formula-evaluated) sheet cells.
+ * Pure: needs no tenant context, so it is shared by data exports and plain template previews.
+ */
+export function extractRangeChartData(
+  chart: GridChartDefinition,
+  sheets: GridSheetDefinition[]
+): ChartRenderData {
+  if (chart.source.kind !== 'range') {
+    throw new Error(`Chart '${chart.id}' is not range-sourced`);
+  }
+  const sheetId = chart.source.sheetId;
+  const targetSheet = sheets.find((s) => s.id === sheetId || s.name === sheetId);
+  if (!targetSheet) {
+    throw new Error(`Sheet '${sheetId}' referenced by chart '${chart.id}' not found`);
+  }
+
+  let categories: string[] = [];
+  if (chart.source.categoryRange) {
+    const rawCats = readRangeValues(targetSheet.cells, chart.source.categoryRange);
+    categories = rawCats.map((v) => (v !== null && v !== undefined ? String(v) : ''));
+  }
+
+  const series = chart.source.series.map((s) => {
+    const rawData = readRangeValues(targetSheet.cells, s.range);
+    if (rawData.length > CHART_LIMITS.MAX_POINTS_PER_SERIES) {
+      throw new Error(
+        `Series '${s.name}' range '${s.range}' has ${rawData.length} cells, exceeding maximum limit of ${CHART_LIMITS.MAX_POINTS_PER_SERIES} points`
+      );
+    }
+    const numericData = rawData.map((v) => {
+      const num = Number(v);
+      return isFinite(num) ? num : 0;
+    });
+    return {
+      name: s.name,
+      data: numericData,
+      color: s.color,
+      type: s.type,
+    };
+  });
+
+  // If categoryRange was omitted, generate 1-based index categories
+  if (categories.length === 0 && series.length > 0) {
+    const maxLen = Math.max(...series.map((s) => s.data.length), 0);
+    categories = Array.from({ length: maxLen }, (_, i) => String(i + 1));
+  }
+
+  return { categories, series };
 }

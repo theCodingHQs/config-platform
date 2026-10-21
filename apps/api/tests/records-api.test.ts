@@ -262,7 +262,7 @@ describe('Generic Records API', () => {
       },
     });
     expect(res.statusCode).toBe(422);
-    expect(JSON.parse(res.payload).errors.joined_at).toContain('valid ISO date');
+    expect(JSON.parse(res.payload).errors.joined_at).toContain('valid date');
   });
 
   it('validates select options constraint', async () => {
@@ -523,6 +523,135 @@ describe('Generic Records API', () => {
     const page2Ids = page2.data.map((r: any) => r.id);
     for (const id of page2Ids) {
       expect(page1Ids).not.toContain(id);
+    }
+  });
+
+  it('matches any of several fields with one filter (filter[a,b][op]) and ANDs it with other filters', async () => {
+    // "_b@" is only in Emp_B's email (names have no "@"), so the condition matches by email
+    const anyRes = await server.inject({
+      method: 'GET',
+      url: `/api/entities/employee/records?filter[full_name,email][contains]=_b@&count=true`,
+      headers: authA.headers,
+    });
+    expect(anyRes.statusCode).toBe(200);
+    const anyBody = JSON.parse(anyRes.payload);
+    expect(anyBody.data.map((r: any) => r.full_name)).toEqual(['Emp_B']);
+    expect(anyBody.total).toBe(1);
+
+    // Other conditions still apply (AND)
+    const combined = JSON.parse((await server.inject({
+      method: 'GET',
+      url: `/api/entities/employee/records?filter[full_name,email][contains]=emp_&filter[age][gte]=40&sort=age`,
+      headers: authA.headers,
+    })).payload);
+    expect(combined.data.map((r: any) => r.full_name)).toEqual(['Emp_D', 'Emp_E']);
+
+    // Each field must accept the operator, and unknown fields are rejected
+    const badOp = await server.inject({
+      method: 'GET',
+      url: `/api/entities/employee/records?filter[full_name,age][contains]=1`,
+      headers: authA.headers,
+    });
+    expect(badOp.statusCode).toBe(400);
+    const unknown = await server.inject({
+      method: 'GET',
+      url: `/api/entities/employee/records?filter[full_name,nope][contains]=x`,
+      headers: authA.headers,
+    });
+    expect(unknown.statusCode).toBe(400);
+
+    // Aggregates (stat cards) accept the same filters
+    const agg = JSON.parse((await server.inject({
+      method: 'GET',
+      url: `/api/entities/employee/aggregate?op=count&filter[full_name,email][contains]=_b@`,
+      headers: authA.headers,
+    })).payload);
+    expect(Number(agg.value)).toBe(1);
+  });
+
+  it('stores calendar dates and months as written, and moments as instants, whatever the time zone', async () => {
+    const created = await migrationService.createEntity(tenantA, {
+      name: 'shift_log',
+      label: 'Shift Log',
+      fields: [
+        { name: 'day', label: 'Day', type: 'date' },
+        { name: 'period', label: 'Period', type: 'date', config: { granularity: 'month' } },
+        { name: 'happened_at', label: 'Happened At', type: 'date', config: { includeTime: true } },
+      ],
+    } as any);
+    const post = (payload: Record<string, unknown>) =>
+      server.inject({ method: 'POST', url: `/api/entities/shift_log/records`, headers: authA.headers, payload });
+
+    // A calendar date comes back exactly as written (it used to come back as a shifted timestamp)
+    const a = JSON.parse((await post({ day: '2026-10-01', period: '2026-10-21', happened_at: '2026-10-21T20:05:00+05:30' })).payload);
+    expect(a.day).toBe('2026-10-01');
+    // Month granularity keeps the 1st of the month
+    expect(a.period).toBe('2026-10-01');
+    // A moment is stored as an instant and returned in UTC
+    expect(new Date(a.happened_at).toISOString()).toBe('2026-10-21T14:35:00.000Z');
+
+    // The written calendar date of an ISO date-time is kept, and "YYYY-MM" works for months
+    const b = JSON.parse((await post({ day: '2026-10-02T00:00:00.000Z', period: '2026-11' })).payload);
+    expect(b.day).toBe('2026-10-02');
+    expect(b.period).toBe('2026-11-01');
+
+    // Invalid values are rejected with field messages
+    const bad = JSON.parse((await post({ day: '2026-02-30', period: 'October' })).payload);
+    expect(bad.errors.day).toMatch(/valid date/);
+    expect(bad.errors.period).toMatch(/month/);
+
+    // Filtering by month matches the stored 1st
+    const october = JSON.parse((await server.inject({
+      method: 'GET', url: `/api/entities/shift_log/records?filter[period][eq]=2026-10-01`, headers: authA.headers,
+    })).payload);
+    expect(october.data).toHaveLength(1);
+
+    // Switching a Date field to Month moves existing values to the 1st; date ⇄ date & time is refused
+    const dayField = created.fields.find((f) => f.name === 'day')!;
+    const timeField = created.fields.find((f) => f.name === 'happened_at')!;
+    await migrationService.updateField(tenantA, {
+      entityId: created.entity.id, fieldId: dayField.id, expectedVersion: created.entity.version, config: { granularity: 'month' },
+    });
+    const days = JSON.parse((await server.inject({ method: 'GET', url: `/api/entities/shift_log/records?sort=day`, headers: authA.headers })).payload)
+      .data.map((r: any) => r.day);
+    expect(days).toEqual(['2026-10-01', '2026-10-01']);
+    await expect(migrationService.updateField(tenantA, {
+      entityId: created.entity.id, fieldId: timeField.id, expectedVersion: created.entity.version + 1, config: {},
+    })).rejects.toThrow(/date & time/);
+  });
+
+  it('returns grouped totals in key order and says when groups were cut at the limit', async () => {
+    const get = async (url: string) => JSON.parse((await server.inject({ method: 'GET', url, headers: authA.headers })).payload);
+    const all = await get(`/api/entities/employee/aggregate?op=count&groupBy=role&filter[full_name][contains]=Emp_`);
+    // Emp_A..E: engineer x3, designer x2, sorted by key
+    expect(all.groups).toEqual([{ key: 'designer', value: 2 }, { key: 'engineer', value: 3 }]);
+    expect(all.groupsTruncated).toBe(false);
+
+    const first = await get(`/api/entities/employee/aggregate?op=sum&field=age&groupBy=role&groupLimit=1&filter[full_name][contains]=Emp_`);
+    expect(first.groups).toEqual([{ key: 'designer', value: 28 + 42 }]);
+    expect(first.groupsTruncated).toBe(true);
+  });
+
+  it('rejects any-of and aggregate filters that use a hidden field', async () => {
+    await permissionService.setFieldPermission(tenantA, employeeEntityId, ageFieldId, 'viewer', { hidden: true, readOnly: false });
+    const viewer = await createTestSession(tenantA, 'viewer', 'rec_any_hidden');
+    try {
+      const listRes = await server.inject({
+        method: 'GET',
+        url: `/api/entities/employee/records?filter[full_name,age][eq]=42`,
+        headers: viewer.headers,
+      });
+      expect(listRes.statusCode).toBe(403);
+      // Counting by a hidden field would reveal its values
+      const aggRes = await server.inject({
+        method: 'GET',
+        url: `/api/entities/employee/aggregate?op=count&filter[age][gte]=40`,
+        headers: viewer.headers,
+      });
+      expect(aggRes.statusCode).toBe(403);
+    } finally {
+      await permissionService.setFieldPermission(tenantA, employeeEntityId, ageFieldId, 'viewer', { hidden: false, readOnly: false });
+      await cleanupTestUser(viewer.userId);
     }
   });
 

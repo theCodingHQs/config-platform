@@ -86,4 +86,29 @@ describe('ExcelJS Grid XLSX Renderer Benchmark (Personal Monthly Budget)', () =>
     expect(reloadedSheet!.getCell('A1').value).toBe('Personal Monthly Budget');
     expect(reloadedSheet!.getCell('C22').numFmt).toBe('$#,##0');
   });
+
+  it('writes calendar dates as real Excel dates (same day in every time zone), not text', async () => {
+    const benchmark = buildPersonalMonthlyBudgetBenchmark();
+    const sheet = benchmark.sheets[0];
+    sheet.cells['40:0'] = { value: '2026-10-01' };
+    sheet.cells['40:1'] = { value: '2026-02-28', numFmt: 'dd-mmm-yyyy' };
+    sheet.cells['40:2'] = { value: '2026-10-01', numFmt: '@' };
+
+    const buffer = await gridXlsxRenderer.renderToBuffer(benchmark);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer as any);
+    const ws = wb.getWorksheet('Personal Budget')!;
+
+    // A Date cell whose UTC day is the written day: Excel dates carry no time zone
+    const plain = ws.getCell('A41');
+    expect(plain.value).toBeInstanceOf(Date);
+    expect((plain.value as Date).toISOString()).toBe('2026-10-01T00:00:00.000Z');
+    // Excel's built-in regional short date (shown in the reader's own date style)
+    expect(plain.numFmt).toBe('mm-dd-yy');
+    // A template's own date format is kept
+    expect((ws.getCell('B41').value as Date).toISOString()).toBe('2026-02-28T00:00:00.000Z');
+    expect(ws.getCell('B41').numFmt).toBe('dd-mmm-yyyy');
+    // Text-formatted cells stay text
+    expect(ws.getCell('C41').value).toBe('2026-10-01');
+  });
 });

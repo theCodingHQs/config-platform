@@ -2,6 +2,8 @@ import React, { useState, useEffect, useContext } from 'react';
 import type { ExportButtonProps } from '@config-platform/schema';
 import { AuthContext, useAuth } from '../context/auth-context';
 import { DynamicIcon } from './dynamic-icon';
+import { useOptionalAppBar } from '../context/app-bar-context';
+import { DateInput } from './date-input';
 import {
   createExportDownloadToken,
   fetchEntityPermissions,
@@ -37,7 +39,9 @@ export const ExportButtonComponent: React.FC<
   const [canExport, setCanExport] = useState<boolean | null>(null);
   const [isGridTemplate, setIsGridTemplate] = useState<boolean>(false);
   const [downloading, setDownloading] = useState(false);
+  // Configuration problems stay next to the button; a failed download goes to the status bar
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const appBar = useOptionalAppBar();
 
   const [templateRecord, setTemplateRecord] = useState<any>(null);
   const [showParamDialog, setShowParamDialog] = useState<boolean>(false);
@@ -107,7 +111,8 @@ export const ExportButtonComponent: React.FC<
       window.location.href = downloadUrl;
       setShowParamDialog(false);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Export failed');
+      if (appBar) appBar.notify('error', err.message || 'Export failed');
+      else setErrorMessage(err.message || 'Export failed');
     } finally {
       setDownloading(false);
     }
@@ -280,36 +285,39 @@ export const ExportButtonComponent: React.FC<
                       </label>
                     ) : p.type === 'date_range' ? (
                       <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
-                        <input
-                          type="date"
-                          placeholder="Start"
-                          className="input input-sm"
+                        <DateInput
+                          aria-label={`${p.label || p.name} start`}
                           data-testid={`param-input-${p.name}-start`}
-                          value={currentVal?.start || ''}
-                          onChange={(e) =>
+                          value={currentVal?.start}
+                          onChange={(start) =>
                             setDialogParamValues((prev) => ({
                               ...prev,
-                              [paramKey]: { ...(currentVal || {}), start: e.target.value },
+                              [paramKey]: { ...(currentVal || {}), start: start ?? '' },
                             }))
                           }
                         />
-                        <input
-                          type="date"
-                          placeholder="End"
-                          className="input input-sm"
+                        <DateInput
+                          aria-label={`${p.label || p.name} end`}
                           data-testid={`param-input-${p.name}-end`}
-                          value={currentVal?.end || ''}
-                          onChange={(e) =>
+                          value={currentVal?.end}
+                          onChange={(end) =>
                             setDialogParamValues((prev) => ({
                               ...prev,
-                              [paramKey]: { ...(currentVal || {}), end: e.target.value },
+                              [paramKey]: { ...(currentVal || {}), end: end ?? '' },
                             }))
                           }
                         />
                       </div>
+                    ) : p.type === 'date' ? (
+                      <DateInput
+                        aria-label={p.label || p.name}
+                        data-testid={`param-input-${p.name}`}
+                        value={currentVal}
+                        onChange={(date) => setDialogParamValues((prev) => ({ ...prev, [paramKey]: date ?? '' }))}
+                      />
                     ) : (
                       <input
-                        type={p.type === 'number' ? 'number' : p.type === 'date' ? 'date' : 'text'}
+                        type={p.type === 'number' ? 'number' : 'text'}
                         className="input input-sm"
                         data-testid={`param-input-${p.name}`}
                         value={currentVal}

@@ -402,6 +402,29 @@ export const catalogMigrations: CatalogMigration[] = [
       `);
     },
   },
+  {
+    version: 14,
+    name: '014_page_nav_folder_icon',
+    up: async (client: PoolClient) => {
+      await client.query(`
+        ALTER TABLE public.page_nav_folder
+        ADD COLUMN IF NOT EXISTS icon VARCHAR(64);
+      `);
+    },
+  },
+  {
+    version: 15,
+    name: '015_date_settings',
+    up: async (client: PoolClient) => {
+      // Workspace date defaults (the time zone stays in tenant.timezone) and each user's own choices
+      await client.query(`
+        ALTER TABLE public.tenant
+        ADD COLUMN IF NOT EXISTS date_settings JSONB NOT NULL DEFAULT '{}'::jsonb;
+        ALTER TABLE public.app_user
+        ADD COLUMN IF NOT EXISTS date_preferences JSONB NOT NULL DEFAULT '{}'::jsonb;
+      `);
+    },
+  },
 ];
 
 /**

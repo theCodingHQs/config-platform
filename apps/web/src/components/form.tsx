@@ -14,6 +14,8 @@ import { BrokenBinding } from "../renderer/broken-binding";
 import { SearchableSelect } from "./searchable-select";
 import { DynamicIcon } from "./dynamic-icon";
 import { resolveTemplate, isAllowedIcon } from "@config-platform/schema";
+import { DateInput } from "./date-input";
+import { useOptionalAppBar } from "../context/app-bar-context";
 import type { FormProps } from "@config-platform/schema";
 
 const SYSTEM_KEYS = new Set(["id", "created_at", "updated_at"]);
@@ -53,6 +55,9 @@ export const FormComponent: React.FC<FormProps> = ({
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // In the app, save results go to the status bar; validation errors stay on the form.
+  // Outside the app shell (e.g. isolated renders) they are shown inline as before.
+  const appBar = useOptionalAppBar();
 
   useEffect(() => {
     return () => {
@@ -125,13 +130,14 @@ export const FormComponent: React.FC<FormProps> = ({
       }
       setFieldErrors({});
       setGeneralError(null);
-      setSuccessMessage(
-        mode === "edit"
-          ? "Record updated successfully."
-          : "Record created successfully.",
-      );
-      if (successTimerRef.current) clearTimeout(successTimerRef.current);
-      successTimerRef.current = setTimeout(() => setSuccessMessage(null), 4000);
+      const savedMessage = mode === "edit" ? "Record updated successfully." : "Record created successfully.";
+      if (appBar) {
+        appBar.notify("success", savedMessage);
+      } else {
+        setSuccessMessage(savedMessage);
+        if (successTimerRef.current) clearTimeout(successTimerRef.current);
+        successTimerRef.current = setTimeout(() => setSuccessMessage(null), 4000);
+      }
 
       // Invalidate records query so table refreshes
       queryClient.invalidateQueries({
@@ -148,6 +154,9 @@ export const FormComponent: React.FC<FormProps> = ({
       if (err instanceof ApiError && err.errors) {
         setFieldErrors(err.errors);
         setGeneralError(err.message || "Validation failed");
+      } else if (appBar) {
+        setGeneralError(null);
+        appBar.notify("error", err.message || `Failed to ${mode} record`);
       } else {
         setGeneralError(err.message || `Failed to ${mode} record`);
       }
@@ -600,25 +609,22 @@ function renderFieldInput(
         </label>
       );
 
-    case "date":
+    case "date": {
+      // Calendar date, month (saved as the 1st) or a moment in time, typed or picked in the
+      // viewer's own date format and time zone; the value is always ISO
+      const dateKind = fieldDef.config?.includeTime ? "datetime" : fieldDef.config?.granularity === "month" ? "month" : "day";
       return wrapWithIcon(
-        <input
+        <DateInput
           id={`field-${fieldDef.name}`}
-          type="date"
-          className={`form-input${isInvalidClass}`}
-          value={value ? String(value).split("T")[0] : ""}
+          kind={dateKind}
+          value={value ?? undefined}
+          invalid={Boolean(hasError)}
           disabled={readOnly}
-          style={
-            iconName
-              ? {
-                  paddingLeft: "calc(var(--space-6) + var(--space-3))",
-                  borderRadius: "var(--radius-control)",
-                }
-              : { borderRadius: "var(--radius-control)" }
-          }
-          onChange={(e) => onChange(e.target.value || undefined)}
+          inputStyle={iconName ? { paddingLeft: "calc(var(--space-6) + var(--space-3))" } : undefined}
+          onChange={(next) => onChange(next)}
         />,
       );
+    }
 
     case "select": {
       const options = (config.options || []) as Array<{
@@ -683,3 +689,4 @@ function renderFieldInput(
       );
   }
 }
+

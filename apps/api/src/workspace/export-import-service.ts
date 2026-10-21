@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { z } from 'zod';
+import { mapFieldTypeToPostgres } from '../migrations/ddl-generator.js';
 import { pool } from '../db/pool.js';
 import { defaultStorageAdapter } from '../db/storage-adapter.js';
 import { tenantLimitsService } from '../limits/tenant-limits.js';
@@ -94,6 +95,13 @@ export interface WorkspaceBundle {
       accent?: string;
       radius?: string;
       density?: string;
+      textSize?: number;
+      layout?: {
+        contentWidth?: number | 'full';
+        contentAlign?: 'center' | 'start';
+        pagePadding?: number;
+        sidebarWidth?: number;
+      };
     };
   };
   entities: Array<{
@@ -823,7 +831,8 @@ export class ExportImportService {
           let pgType = 'TEXT';
           if (f.type === 'number') pgType = 'DOUBLE PRECISION';
           else if (f.type === 'boolean') pgType = 'BOOLEAN DEFAULT FALSE';
-          else if (f.type === 'date') pgType = 'TIMESTAMPTZ';
+          // Calendar dates stay DATE; only "date & time" fields are instants
+          else if (f.type === 'date') pgType = mapFieldTypeToPostgres('date', f.config || {});
           else if (f.type === 'json') pgType = 'JSONB DEFAULT \'{}\'::jsonb';
 
           colDefs.push(`"${colName}" ${pgType}`);

@@ -256,11 +256,11 @@ describe('Phase 2C: Datasets for Grid Templates Backend Suite', () => {
     const result = await datasetQueryBuilder.executeDatasetQuery(dataset, ctx);
     expect(result.rows.length).toBe(4);
     // Ordered by units asc: 10, 15, 20, 30
-    expect(result.rows[0].units).toBe('10');
+    expect(result.rows[0].units).toBe(10); // NUMERIC arrives as a number, not "10"
     expect(result.rows[0].machineName).toBe('Mill M1');
     expect(result.rows[0].lineName).toBe('Line Alpha');
 
-    expect(result.rows[3].units).toBe('30');
+    expect(result.rows[3].units).toBe(30);
     expect(result.rows[3].machineName).toBe('Press M3');
     expect(result.rows[3].lineName).toBe('Line Beta');
   });
@@ -404,6 +404,31 @@ describe('Phase 2C: Datasets for Grid Templates Backend Suite', () => {
     const sorted = resultUtc.rows.sort((a, b) => Number(a.day_units) - Number(b.day_units));
     expect(Number(sorted[0].day_units)).toBe(10);
     expect(Number(sorted[1].day_units)).toBe(65);
+  });
+
+  // 4b. Sorting by a date-bucketed group column orders the buckets (chart time series)
+  it('4b. sorts grouped rows by a date-bucketed group column', async () => {
+    const dataset: GridDatasetDefinition = {
+      id: 'ds_bucket_sort',
+      name: 'Logs per day, newest first',
+      source: { baseEntityId: logEntityId, joins: [] },
+      fields: [],
+      filters: [],
+      sort: [{ fieldPath: 'timestamp', direction: 'desc' }],
+      groupBy: [{ fieldPath: 'timestamp', dateBucket: 'day' }],
+      aggregates: [{ id: 'agg_units', name: 'day_units', fn: 'sum', fieldPath: 'units' }],
+      having: [],
+    };
+
+    const ctxUtc = { ...getContext(), exportParams: { timezone: 'UTC' } };
+    const desc = await datasetQueryBuilder.executeDatasetQuery(dataset, ctxUtc);
+    expect(desc.rows.map((r) => Number(r.agg_units ?? r.day_units))).toEqual([65, 10]);
+
+    const asc = await datasetQueryBuilder.executeDatasetQuery(
+      { ...dataset, sort: [{ fieldPath: 'timestamp', direction: 'asc' }] },
+      ctxUtc
+    );
+    expect(asc.rows.map((r) => Number(r.agg_units ?? r.day_units))).toEqual([10, 65]);
   });
 
   // 5. Computed columns

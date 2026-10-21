@@ -41,21 +41,17 @@ export function migratePageV1toV2(page: any): PageDefinition {
     throw new Error('Invalid page definition to migrate');
   }
 
-  const currentVersion = Number(page.schemaVersion || 1);
-
-  if (currentVersion >= 2) {
-    return {
-      schemaVersion: 2,
-      id: String(page.id),
-      version: Number(page.version || 1),
-      route: String(page.route || '/'),
-      state: page.state || {},
-      dataSources: Array.isArray(page.dataSources) ? page.dataSources : [],
-      root: migrateNodeV1toV2(page.root),
-    };
+  // Page-level presentation settings (set from the Pages screen) carry through unchanged;
+  // only present keys are copied so absent stays absent (= default).
+  const presentation: Partial<Pick<PageDefinition, 'width' | 'icon' | 'allowedRoles'>> = {};
+  if (page.width !== undefined) presentation.width = page.width;
+  if (page.icon !== undefined) presentation.icon = page.icon;
+  // Access restriction: dropping it here would silently open the page to every role
+  if (Array.isArray(page.allowedRoles) && page.allowedRoles.length > 0) {
+    presentation.allowedRoles = page.allowedRoles;
   }
 
-  // Migration from v1 -> v2
+  // v1 and v2 share the same page-level shape; nodes are migrated individually
   return {
     schemaVersion: 2,
     id: String(page.id),
@@ -64,5 +60,6 @@ export function migratePageV1toV2(page: any): PageDefinition {
     state: page.state || {},
     dataSources: Array.isArray(page.dataSources) ? page.dataSources : [],
     root: migrateNodeV1toV2(page.root),
+    ...presentation,
   };
 }

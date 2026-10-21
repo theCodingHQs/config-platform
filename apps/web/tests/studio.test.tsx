@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
@@ -12,6 +12,7 @@ import { PageBuilder, computeDropTarget, moveNodeInTree } from '../src/studio/Pa
 import { renderNode } from '../src/renderer/render-node';
 import * as apiClient from '../src/api/client';
 import type { ErdTable, PageDefinition, NodeDefinition } from '@config-platform/schema';
+import { PageDefinitionSchema } from '@config-platform/schema';
 
 const mockEntities: ErdTable[] = [
   {
@@ -276,6 +277,67 @@ describe('Studio & Page Builder UI', () => {
     await user.click(publishBtn);
 
     expect(publishPageSpy).toHaveBeenCalledWith('test_tenant', 'p_builder_test');
+  });
+
+  it('edits page settings (width, icon) and group settings from the Pages screen, sending only changes', async () => {
+    vi.spyOn(apiClient, 'fetchPageNavigation').mockResolvedValue({
+      folders: [{ id: 'nf_sales', parentId: null, name: 'Sales', slug: 'sales', position: 0, icon: null }],
+      pages: [{
+        id: 'p_1', name: 'Telemetry Dashboard', route: '/sales/telemetry', version: 1,
+        hasDraft: true, hasPublished: true, createdAt: '', updatedAt: '',
+        folderId: 'nf_sales', position: 0, icon: null, width: null,
+      }],
+    });
+    const settingsSpy = vi.spyOn(apiClient, 'updatePageSettings').mockResolvedValue({} as any);
+    const folderSpy = vi.spyOn(apiClient, 'updatePageFolder').mockResolvedValue({} as any);
+
+    const user = userEvent.setup();
+    render(<MemoryRouter><PageManager /></MemoryRouter>, { wrapper: createTestWrapper() });
+
+    // Page settings: existing values are prefilled, defaults selected
+    await user.click(await screen.findByRole('button', { name: /Settings for Telemetry Dashboard/i }));
+    const dialog = screen.getByRole('dialog', { name: /Page Settings/i });
+    expect(within(dialog).getByLabelText(/Page Title/i)).toHaveValue('Telemetry Dashboard');
+    expect(within(dialog).getByLabelText(/URL Slug/i)).toHaveValue('telemetry');
+    // Defaults: width follows the theme (switch off), icon is automatic (no Reset shown)
+    const widthSwitch = within(dialog).getByRole('switch', { name: /Always full width/i });
+    expect(widthSwitch).not.toBeChecked();
+    const iconPicker = within(dialog).getByLabelText(/Navigation Icon/i);
+    expect(iconPicker).toHaveTextContent(/Automatic/);
+    expect(within(dialog).queryByRole('button', { name: /Reset/i })).toBeNull();
+
+    // Override both: full width and a picked icon
+    await user.click(widthSwitch);
+    await user.click(iconPicker);
+    await user.click(within(dialog).getByTitle(/\(Package\)$/));
+    expect(iconPicker).toHaveTextContent(/Package/);
+
+    // Reset returns the icon to automatic; picking again overrides it
+    await user.click(within(dialog).getByRole('button', { name: /Reset/i }));
+    expect(iconPicker).toHaveTextContent(/Automatic/);
+    await user.click(iconPicker);
+    await user.click(within(dialog).getByTitle(/\(Package\)$/));
+
+    await user.click(within(dialog).getByRole('button', { name: /Save Changes/i }));
+    expect(settingsSpy).toHaveBeenCalledWith('p_1', { width: 'full', icon: 'Package' });
+
+    // Group settings
+    await user.click(screen.getByRole('button', { name: /Settings for group Sales/i }));
+    const groupDialog = screen.getByRole('dialog', { name: /Group Settings/i });
+    const nameInput = within(groupDialog).getByLabelText(/Group Name/i);
+    await user.clear(nameInput);
+    await user.type(nameInput, 'Revenue');
+    await user.click(within(groupDialog).getByRole('button', { name: /Save Changes/i }));
+    expect(folderSpy).toHaveBeenCalledWith('nf_sales', { name: 'Revenue' });
+  });
+
+  it('page schema accepts only theme/full width and allowed icons', () => {
+    const base = { id: 'p', route: '/p', root: { id: 'r', type: 'stack', props: {}, children: [] } };
+    expect(PageDefinitionSchema.parse({ ...base, width: 'full', icon: 'Gauge' })).toMatchObject({ width: 'full', icon: 'Gauge' });
+    expect(PageDefinitionSchema.parse(base).width).toBeUndefined();
+    expect(PageDefinitionSchema.safeParse({ ...base, width: 1440 }).success).toBe(false);
+    expect(PageDefinitionSchema.safeParse({ ...base, width: 'wide' }).success).toBe(false);
+    expect(PageDefinitionSchema.safeParse({ ...base, icon: 'NotAnIcon' }).success).toBe(false);
   });
 
   // 4. Switching table or form entity resets fields that no longer apply

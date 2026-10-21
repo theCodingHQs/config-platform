@@ -13,7 +13,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "node --experimental-strip-types --test tests/theme.test.ts"
+    "test": "node --experimental-strip-types --test tests/theme.test.ts && node tests/run-in-timezones.mjs"
   },
   "dependencies": {
     "jsep": "^1.4.0",

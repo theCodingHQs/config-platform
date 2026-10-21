@@ -1,10 +1,51 @@
 import ExcelJS from 'exceljs';
+import { isPlainDate } from '@config-platform/schema';
 import type {
   GridExportTemplateDefinition,
   GridSheetDefinition,
   GridCellDefinition,
   GridCellStyle,
 } from '@config-platform/schema';
+import { extractRangeChartData, indexToColLetter, parseA1Range } from './chart-range-helper.js';
+import { evaluateAndCacheSheetFormulas } from './formula-evaluator.js';
+import { injectNativeCharts, type NativeChartSpec } from './xlsx-native-charts.js';
+
+/** ExcelJS writes this as built-in format 14, which Excel shows in the reader's regional short-date style. */
+const EXCEL_REGIONAL_SHORT_DATE = 'mm-dd-yy';
+
+/** Checked → green ☑, unchecked → grey ☐ (sections: positive;negative;zero). */
+export const CHECKBOX_NUM_FMT = '[Color10]"☑";[Color10]"☑";[Color16]"☐"';
+/** Hidden sheet with the numeric choices used by checkbox dropdowns. */
+export const CHECKBOX_VALUES_SHEET = '_checkbox_values';
+
+/**
+ * Builds native chart specs for every range-sourced chart. `sheets` must already have formula
+ * results cached (see evaluateAndCacheSheetFormulas) so chart caches hold real values.
+ */
+export function buildNativeChartSpecs(
+  template: GridExportTemplateDefinition,
+  sheets: GridSheetDefinition[] = template.sheets
+): NativeChartSpec[] {
+  const findSheet = (idOrName: string) => sheets.find((s) => s.id === idOrName || s.name === idOrName);
+  const specs: NativeChartSpec[] = [];
+  for (const chart of template.charts || []) {
+    if (chart.source.kind !== 'range') continue;
+    const anchorSheet = findSheet(chart.anchor.sheetId);
+    const sourceSheet = findSheet(chart.source.sheetId);
+    if (!anchorSheet || !sourceSheet) continue;
+    try {
+      specs.push({
+        chart: chart as NativeChartSpec['chart'],
+        sheetName: anchorSheet.name,
+        sourceSheetName: sourceSheet.name,
+        data: extractRangeChartData(chart, sheets),
+      });
+    } catch {
+      // Unresolvable or oversized range: leave the chart out rather than failing the export
+    }
+  }
+  return specs;
+}
 
 /**
  * Converts standard CSS / Hex colors (#RRGGBB or #RGB) to Excel 8-character ARGB format ('FFRRGGBB').
@@ -96,7 +137,23 @@ export class GridXlsxRenderer {
     workbook.creator = 'ConfigPlatform Grid Engine';
     workbook.created = new Date();
 
-    let hasUncachedFormula = false;
+    let hasFormula = false;
+
+    // Checkbox dropdowns read their choices from real numbers on a hidden sheet. A literal
+    // list ("1,0") holds text, so Excel rejected a typed 1 (a number) as not in the list.
+    // One column per distinct checked/unchecked pair: "checked|unchecked" -> { col, ref }
+    const checkboxLists = new Map<string, { col: string; ref: string; checked: number; unchecked: number }>();
+    for (const sheetDef of template.sheets) {
+      for (const dv of sheetDef.dataValidations || []) {
+        if (dv.type !== 'checkbox') continue;
+        const checked = dv.checkedValue ?? 1;
+        const unchecked = dv.uncheckedValue ?? 0;
+        const key = `${checked}|${unchecked}`;
+        if (checkboxLists.has(key)) continue;
+        const col = indexToColLetter(checkboxLists.size);
+        checkboxLists.set(key, { col, ref: `'${CHECKBOX_VALUES_SHEET}'!$${col}$1:$${col}$2`, checked, unchecked });
+      }
+    }
 
     for (const sheetDef of template.sheets) {
       const ws = workbook.addWorksheet(sheetDef.name, {
@@ -140,9 +197,7 @@ export class GridXlsxRenderer {
         // Value & Formula
         if (cellDef.formula) {
           const formulaStr = cellDef.formula.replace(/^=/, '');
-          if (cellDef.value === undefined || cellDef.value === null) {
-            hasUncachedFormula = true;
-          }
+          hasFormula = true;
           cell.value = {
             formula: formulaStr,
             result: cellDef.value !== undefined ? (cellDef.value as any) : undefined,
@@ -153,6 +208,13 @@ export class GridXlsxRenderer {
             (cell as any).type = ExcelJS.ValueType.String;
             cell.numFmt = '@';
             cell.value = cellDef.value;
+          } else if (cellDef.numFmt !== '@' && isPlainDate(cellDef.value)) {
+            // Calendar dates (date fields) become real Excel dates, so they sort, filter and
+            // calculate. Excel dates have no time zone: the UTC midnight of the day is exactly
+            // that day. Built-in format 14 shows them in the reader's regional short-date style.
+            const [y, m, d] = cellDef.value.split('-').map(Number);
+            cell.value = new Date(Date.UTC(y, m - 1, d));
+            if (!cellDef.numFmt) cell.numFmt = EXCEL_REGIONAL_SHORT_DATE;
           } else {
             cell.value = cellDef.value as any;
           }
@@ -167,6 +229,38 @@ export class GridXlsxRenderer {
         if (cellDef.style) {
           applyStyleToExcelCell(cell, cellDef.style);
         }
+      }
+
+      // 3b. Checkbox cells: 1/0 values shown as ☑/☐ with a 1/0 dropdown, so SUM-based formulas
+      // and the native charts reading them stay live in Excel
+      for (const dv of sheetDef.dataValidations || []) {
+        if (dv.type !== 'checkbox') continue;
+        const range = parseA1Range(dv.ref);
+        if (!range) continue;
+        const checked = dv.checkedValue ?? 1;
+        const unchecked = dv.uncheckedValue ?? 0;
+        for (let r = range.startRow; r <= range.endRow; r++) {
+          for (let c = range.startCol; c <= range.endCol; c++) {
+            const cell = ws.getCell(r + 1, c + 1);
+            if (cell.value === null || cell.value === undefined || cell.value === '') cell.value = unchecked;
+            cell.numFmt = CHECKBOX_NUM_FMT;
+            cell.alignment = { ...(cell.alignment || {}), horizontal: 'center', vertical: 'middle' };
+          }
+        }
+        // One range-level rule: per-cell rules make ExcelJS emit overlapping sqrefs past column Z
+        const normalizedRef = `${indexToColLetter(range.startCol)}${range.startRow + 1}:${indexToColLetter(range.endCol)}${range.endRow + 1}`;
+        (ws as any).dataValidations.add(normalizedRef, {
+          type: 'list',
+          allowBlank: true,
+          // Numeric choices (see checkboxLists): typed and picked values are both numbers
+          formulae: [checkboxLists.get(`${checked}|${unchecked}`)!.ref],
+          showErrorMessage: true,
+          errorTitle: 'Checkbox',
+          error: `Enter ${checked} for done or ${unchecked} for not done (or pick from the list).`,
+          showInputMessage: true,
+          promptTitle: 'Checkbox',
+          prompt: `${checked} = ☑ done, ${unchecked} = ☐ not done`,
+        });
       }
 
       // 4. Merged Ranges
@@ -238,28 +332,67 @@ export class GridXlsxRenderer {
       }
     }
 
-    if (hasUncachedFormula) {
+    // Hidden sheet holding the checkbox choices as numbers (checked in row 1, unchecked in row 2).
+    // Added last so the template's own sheets keep their order; 'veryHidden' keeps it out of
+    // Excel's Unhide menu.
+    if (checkboxLists.size > 0) {
+      const valuesSheet = workbook.addWorksheet(CHECKBOX_VALUES_SHEET, { state: 'veryHidden' });
+      for (const { col, checked, unchecked } of checkboxLists.values()) {
+        valuesSheet.getCell(`${col}1`).value = checked;
+        valuesSheet.getCell(`${col}2`).value = unchecked;
+      }
+    }
+
+    // Excel shows a formula's cached result until it recalculates, and templates can carry
+    // placeholder values (e.g. 0) on formula cells. Recalculating on open guarantees users see
+    // Excel's own results (KPIs, totals, chart data) the moment the file opens.
+    if (hasFormula) {
       workbook.calcProperties.fullCalcOnLoad = true;
     }
 
     return workbook;
   }
 
+  /**
+   * Renders to an XLSX buffer. Charts in `nativeCharts` are injected as native Excel charts;
+   * any chart with an entry in `chartImages` (and no native spec) is embedded as a PNG.
+   */
   public async renderToBuffer(
     template: GridExportTemplateDefinition,
-    chartImages?: Map<string, Buffer>
+    chartImages?: Map<string, Buffer>,
+    nativeCharts: NativeChartSpec[] = []
   ): Promise<Buffer> {
-    const workbook = this.renderToWorkbook(template, chartImages);
-    return (await workbook.xlsx.writeBuffer()) as unknown as Buffer;
+    let images = chartImages;
+    if (images && nativeCharts.length > 0) {
+      images = new Map(images);
+      for (const spec of nativeCharts) images.delete(spec.chart.id);
+    }
+    const workbook = this.renderToWorkbook(template, images);
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+    return injectNativeCharts(buffer, nativeCharts);
   }
 }
 
 export const gridXlsxRenderer = new GridXlsxRenderer();
 
+/**
+ * Renders a template without tenant data. Range charts become native charts whose caches are
+ * computed by running the sandboxed formula evaluator over a copy of the sheets.
+ */
 export async function renderGridTemplateToXlsxBuffer(
   template: GridExportTemplateDefinition
 ): Promise<Buffer> {
-  return gridXlsxRenderer.renderToBuffer(template);
+  // Evaluate formulas so the file stores correct cached results (Excel also recalculates on
+  // open); the same evaluated sheets feed the native charts' caches.
+  const evaluatedSheets: GridSheetDefinition[] = structuredClone(template.sheets);
+  for (const sheet of evaluatedSheets) evaluateAndCacheSheetFormulas(sheet);
+  const evaluated = { ...template, sheets: evaluatedSheets };
+  const hasRangeCharts = (template.charts || []).some((c) => c.source.kind === 'range');
+  return gridXlsxRenderer.renderToBuffer(
+    evaluated,
+    undefined,
+    hasRangeCharts ? buildNativeChartSpecs(template, evaluatedSheets) : [],
+  );
 }
 
 /**
