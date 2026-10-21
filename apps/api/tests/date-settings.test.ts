@@ -7,6 +7,7 @@ import { migrationService } from '../src/migrations/migration-service.js';
 import { defaultStorageAdapter } from '../src/db/storage-adapter.js';
 import { pool } from '../src/db/pool.js';
 import { catalogMigrations } from '../src/db/catalog-migration-runner.js';
+import { exportImportService } from '../src/workspace/export-import-service.js';
 import { createTestSession, cleanupTestUser, type TestSession } from './test-session-helper.js';
 
 describe('Date settings: workspace defaults and personal preferences', () => {
@@ -69,5 +70,35 @@ describe('Date settings: workspace defaults and personal preferences', () => {
     expect(JSON.parse((await call(admin, 'GET', '/api/auth/me')).body).datePreferences).toEqual({});
     expect((await call(viewer, 'PATCH', '/api/auth/date-preferences', { timeZone: 'Nowhere/City' })).statusCode).toBe(422);
     expect((await call(viewer, 'PATCH', '/api/auth/date-preferences', { colour: 'red' })).statusCode).toBe(422);
+  });
+
+  it('workspace bundles carry the regional settings to another workspace', async () => {
+    const target = `date_imp_${crypto.randomBytes(3).toString('hex')}`;
+    await migrationService.provisionTenant(target, 'Date Import Target');
+    try {
+      await call(admin, 'PUT', '/api/workspace/date-settings', {
+        dateFormat: 'D MMM YYYY', timeFormat: '12h', weekStart: 'sunday', timeZone: 'America/Chicago',
+      });
+      const bundle = await exportImportService.exportBundle(tenantId);
+      expect(bundle.regionalSettings).toEqual({ dateFormat: 'D MMM YYYY', timeFormat: '12h', weekStart: 'sunday', timeZone: 'America/Chicago' });
+
+      // An invalid value is reported, nothing is applied
+      const bad = await exportImportService.importBundle(target, { ...bundle, regionalSettings: { ...bundle.regionalSettings!, timeZone: 'Atlantis/City' } } as any, false);
+      expect((bad as any).conflicts.join(' ')).toMatch(/regional settings/i);
+      expect(await migrationService.getTenantTimezone(target)).toBe('UTC');
+
+      await exportImportService.importBundle(target, bundle, false);
+      const res = await pool.query('SELECT date_settings, timezone FROM public.tenant WHERE id = $1', [target]);
+      expect(res.rows[0].timezone).toBe('America/Chicago');
+      expect(res.rows[0].date_settings).toEqual({ dateFormat: 'D MMM YYYY', timeFormat: '12h', weekStart: 'sunday' });
+
+      // Bundles exported before regional settings existed still import (settings unchanged)
+      const { regionalSettings: _omit, ...oldBundle } = bundle;
+      await exportImportService.importBundle(target, oldBundle as any, false);
+      expect(await migrationService.getTenantTimezone(target)).toBe('America/Chicago');
+    } finally {
+      await pool.query(`DELETE FROM public.tenant WHERE id = $1`, [target]);
+      await pool.query(`DROP SCHEMA IF EXISTS "${defaultStorageAdapter.getTenantSchemaName(target)}" CASCADE`);
+    }
   });
 });

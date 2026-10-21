@@ -18,6 +18,8 @@ import {
 import { pagesService } from '../pages/pages-service.js';
 import {
   WorkspaceThemeConfigSchema,
+  WorkspaceDateSettingsSchema,
+  type WorkspaceDateSettings,
   AllowedIconNameSchema,
   ExportTemplateDefinitionSchema,
 } from '@config-platform/schema';
@@ -89,6 +91,8 @@ export const WorkspacePermissionsBundleSchema = z.object({
 export interface WorkspaceBundle {
   bundleVersion: number;
   exportedAt: string;
+  /** Settings → Regional: date/time display defaults and the workspace time zone. */
+  regionalSettings?: WorkspaceDateSettings;
   themeConfig?: {
     presetId: string;
     overrides?: {
@@ -215,10 +219,14 @@ export function deepWalkRemap<T>(value: T, idMap: Map<string, string>): T {
 export class ExportImportService {
   async exportBundle(tenantId: string): Promise<WorkspaceBundle> {
     // 0. Fetch theme configuration
-    const tenantRes = await pool.query<{ theme_config?: any }>(
-      `SELECT theme_config FROM public.tenant WHERE id = $1`,
+    const tenantRes = await pool.query<{ theme_config?: any; date_settings?: any; timezone?: string }>(
+      `SELECT theme_config, date_settings, timezone FROM public.tenant WHERE id = $1`,
       [tenantId]
     );
+    const regionalSettings = WorkspaceDateSettingsSchema.parse({
+      ...(tenantRes.rows[0]?.date_settings || {}),
+      timeZone: tenantRes.rows[0]?.timezone || 'UTC',
+    });
     const themeConfig = tenantRes.rows[0]?.theme_config || {
       presetId: process.env.DEFAULT_THEME_PRESET || 'neutral',
       overrides: {},
@@ -428,6 +436,7 @@ export class ExportImportService {
       bundleVersion: 2,
       exportedAt: new Date().toISOString(),
       themeConfig,
+      regionalSettings,
       entities,
       relations,
       pages,
@@ -491,6 +500,21 @@ export class ExportImportService {
         );
       } else {
         validatedThemeConfig = parsedTheme.data;
+      }
+    }
+
+    // Validate regional settings upfront if present (bundles from before they existed have none)
+    let validatedRegional: WorkspaceDateSettings | null = null;
+    if (bundle.regionalSettings !== undefined && bundle.regionalSettings !== null) {
+      const parsedRegional = WorkspaceDateSettingsSchema.safeParse(bundle.regionalSettings);
+      if (!parsedRegional.success) {
+        conflicts.push(
+          `Invalid regional settings in bundle: ${parsedRegional.error.issues
+            .map((i) => `${i.path.join('.') || 'root'}: ${i.message}`)
+            .join(', ')}`
+        );
+      } else {
+        validatedRegional = parsedRegional.data;
       }
     }
 
@@ -1058,6 +1082,15 @@ export class ExportImportService {
         );
       }
 
+      // 11. Import regional settings (display defaults + workspace time zone) if provided
+      if (validatedRegional) {
+        const { timeZone, ...display } = validatedRegional;
+        await client.query(
+          `UPDATE public.tenant SET date_settings = $1, timezone = $2 WHERE id = $3`,
+          [JSON.stringify(display), timeZone, tenantId]
+        );
+      }
+
       await client.query('COMMIT');
 
       if (session) {
@@ -1072,6 +1105,7 @@ export class ExportImportService {
             entitiesCount: bundle.entities.length,
             pagesCount: bundle.pages.length,
             themeConfig: bundle.themeConfig,
+            regionalSettings: validatedRegional ?? undefined,
             permissionsCount: remappedEntityPerms.length + remappedFieldPerms.length,
           },
         });

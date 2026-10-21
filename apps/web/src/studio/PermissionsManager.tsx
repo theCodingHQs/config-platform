@@ -37,6 +37,26 @@ import { useMetadata } from "../context/metadata-context";
 const ROLES = ["owner", "admin", "builder", "editor", "viewer"] as const;
 type Role = (typeof ROLES)[number];
 
+
+/** Field types as they're named in the Data Entities screen. */
+const FIELD_TYPE_NAMES: Record<string, string> = {
+  text: "Text",
+  number: "Number",
+  boolean: "Yes / No",
+  date: "Date",
+  select: "Choice",
+  reference: "Link",
+};
+
+/** Record actions a role can be allowed, in the words people use for them. */
+const RECORD_ACTIONS = [
+  { key: "canRead", label: "View", hint: "See records (in tables, details, charts)" },
+  { key: "canCreate", label: "Add", hint: "Create new records" },
+  { key: "canUpdate", label: "Edit", hint: "Change existing records" },
+  { key: "canDelete", label: "Delete", hint: "Remove records" },
+  { key: "canExport", label: "Export", hint: "Download records (CSV, Excel, reports)" },
+] as const;
+
 export function PermissionsManager() {
   const { tenantId } = useMetadata();
   const queryClient = useQueryClient();
@@ -335,8 +355,8 @@ export function PermissionsManager() {
               marginTop: "0.25rem",
             }}
           >
-            Configure role capabilities, entity access matrices, field-level
-            restrictions, and tenant team members.
+            Decide who can see and change each kind of data, and manage the people
+            in this workspace.
           </p>
         </div>
 
@@ -362,7 +382,7 @@ export function PermissionsManager() {
               gap: "0.375rem",
             }}
           >
-            <Shield size={15} /> Entity & Field Permissions
+            <Shield size={15} /> Data Access
           </button>
           <button
             type="button"
@@ -398,7 +418,7 @@ export function PermissionsManager() {
             }}
           >
             <label style={{ fontWeight: 600, fontSize: "var(--font-size-sm)" }}>
-              Target Entity:
+              Data entity:
             </label>
             <select
               value={selectedEntityId}
@@ -451,7 +471,7 @@ export function PermissionsManager() {
                     marginBottom: "0.5rem",
                   }}
                 >
-                  CRUD Permissions: {selectedEntity.label}
+                  Record access: {selectedEntity.label}
                 </h2>
                 <p
                   style={{
@@ -460,8 +480,9 @@ export function PermissionsManager() {
                     marginBottom: "1.25rem",
                   }}
                 >
-                  Specify record-level actions each tenant role is permitted to
-                  perform on this entity.
+                  What each role can do with {selectedEntity.label} records. This applies
+                  everywhere: pages, exports and imports. Owners and admins always have
+                  full access.
                 </p>
 
                 <div style={{ overflowX: "auto" }}>
@@ -481,26 +502,18 @@ export function PermissionsManager() {
                         }}
                       >
                         <th style={{ padding: "0.75rem 1rem" }}>Role</th>
-                        <th style={{ padding: "0.75rem 1rem" }}>
-                          Can Read (GET)
-                        </th>
-                        <th style={{ padding: "0.75rem 1rem" }}>
-                          Can Create (POST)
-                        </th>
-                        <th style={{ padding: "0.75rem 1rem" }}>
-                          Can Update (PATCH)
-                        </th>
-                        <th style={{ padding: "0.75rem 1rem" }}>
-                          Can Delete (DELETE)
-                        </th>
-                        <th style={{ padding: "0.75rem 1rem" }}>
-                          Can Export
-                        </th>
+                        {RECORD_ACTIONS.map((action) => (
+                          <th key={action.key} style={{ padding: "0.75rem 1rem" }} title={action.hint}>
+                            {action.label}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
                       {ROLES.map((role) => {
-                        const perm = getEntityPerm(role);
+                        const stored = getEntityPerm(role);
+                        // Export defaults like the server: on for every role except viewers
+                        const perm = { ...stored, canExport: stored.canExport ?? role !== "viewer" };
                         const isImmutableRole =
                           role === "owner" || role === "admin";
                         return (
@@ -534,93 +547,29 @@ export function PermissionsManager() {
                                 {role}
                               </span>
                             </td>
-                            {/* Can Read */}
-                            <td style={{ padding: "0.875rem 1rem" }}>
-                              <input
-                                type="checkbox"
-                                checked={perm.canRead}
-                                disabled={isImmutableRole}
-                                onChange={(e) => {
-                                  entityPermMutation.mutate({
-                                    role,
-                                    canRead: e.target.checked,
-                                    canCreate: perm.canCreate,
-                                    canUpdate: perm.canUpdate,
-                                    canDelete: perm.canDelete,
-                                  });
-                                }}
-                              />
-                            </td>
-                            {/* Can Create */}
-                            <td style={{ padding: "0.875rem 1rem" }}>
-                              <input
-                                type="checkbox"
-                                checked={perm.canCreate}
-                                disabled={isImmutableRole}
-                                onChange={(e) => {
-                                  entityPermMutation.mutate({
-                                    role,
-                                    canRead: perm.canRead,
-                                    canCreate: e.target.checked,
-                                    canUpdate: perm.canUpdate,
-                                    canDelete: perm.canDelete,
-                                  });
-                                }}
-                              />
-                            </td>
-                            {/* Can Update */}
-                            <td style={{ padding: "0.875rem 1rem" }}>
-                              <input
-                                type="checkbox"
-                                checked={perm.canUpdate}
-                                disabled={isImmutableRole}
-                                onChange={(e) => {
-                                  entityPermMutation.mutate({
-                                    role,
-                                    canRead: perm.canRead,
-                                    canCreate: perm.canCreate,
-                                    canUpdate: e.target.checked,
-                                    canDelete: perm.canDelete,
-                                  });
-                                }}
-                              />
-                            </td>
-                            {/* Can Delete */}
-                            <td style={{ padding: "0.875rem 1rem" }}>
-                              <input
-                                type="checkbox"
-                                checked={perm.canDelete}
-                                disabled={isImmutableRole}
-                                onChange={(e) => {
-                                  entityPermMutation.mutate({
-                                    role,
-                                    canRead: perm.canRead,
-                                    canCreate: perm.canCreate,
-                                    canUpdate: perm.canUpdate,
-                                    canDelete: e.target.checked,
-                                    canExport: perm.canExport,
-                                  });
-                                }}
-                              />
-                            </td>
-                            {/* Can Export */}
-                            <td style={{ padding: "0.875rem 1rem" }}>
-                              <input
-                                type="checkbox"
-                                checked={Boolean(perm.canExport)}
-                                disabled={isImmutableRole}
-                                onChange={(e) => {
-                                  entityPermMutation.mutate({
-                                    role,
-                                    canRead: perm.canRead,
-                                    canCreate: perm.canCreate,
-                                    canUpdate: perm.canUpdate,
-                                    canDelete: perm.canDelete,
-                                    canExport: e.target.checked,
-                                  });
-                                }}
-                              />
-                            </td>
+                            {RECORD_ACTIONS.map((action) => (
+                              <td key={action.key} style={{ padding: "0.875rem 1rem" }}>
+                                <input
+                                  type="checkbox"
+                                  aria-label={`${role}: ${action.label}`}
+                                  checked={perm[action.key]}
+                                  disabled={isImmutableRole}
+                                  onChange={(e) =>
+                                    // Always send every action: one left out falls back to the
+                                    // role default on the server (it used to re-enable Export)
+                                    entityPermMutation.mutate({
+                                      role,
+                                      canRead: perm.canRead,
+                                      canCreate: perm.canCreate,
+                                      canUpdate: perm.canUpdate,
+                                      canDelete: perm.canDelete,
+                                      canExport: perm.canExport,
+                                      [action.key]: e.target.checked,
+                                    })
+                                  }
+                                />
+                              </td>
+                            ))}
                           </tr>
                         );
                       })}
@@ -645,7 +594,7 @@ export function PermissionsManager() {
                     marginBottom: "0.5rem",
                   }}
                 >
-                  Field-Level Restrictions
+                  Field access: {selectedEntity.label}
                 </h2>
                 <p
                   style={{
@@ -654,9 +603,9 @@ export function PermissionsManager() {
                     marginBottom: "1.25rem",
                   }}
                 >
-                  Hide confidential fields or make sensitive fields read-only
-                  per role. Hidden fields are omitted from responses and cannot
-                  be queried.
+                  Hide confidential fields from a role, or let it see a field without
+                  changing it. Hidden fields never leave the server for that role, and
+                  it can't filter or sort by them.
                 </p>
 
                 <div style={{ overflowX: "auto" }}>
@@ -675,22 +624,22 @@ export function PermissionsManager() {
                           fontSize: "var(--font-size-sm)",
                         }}
                       >
-                        <th style={{ padding: "0.75rem 1rem" }}>Field Name</th>
+                        <th style={{ padding: "0.75rem 1rem" }}>Field</th>
                         <th style={{ padding: "0.75rem 1rem" }}>Type</th>
                         <th style={{ padding: "0.75rem 1rem" }}>
-                          Viewer: Hidden
+                          Viewer: hide
                         </th>
                         <th style={{ padding: "0.75rem 1rem" }}>
-                          Viewer: Read-Only
+                          Viewer: view only
                         </th>
                         <th style={{ padding: "0.75rem 1rem" }}>
-                          Editor: Hidden
+                          Editor: hide
                         </th>
                         <th style={{ padding: "0.75rem 1rem" }}>
-                          Editor: Read-Only
+                          Editor: view only
                         </th>
                         <th style={{ padding: "0.75rem 1rem" }}>
-                          Builder: Hidden
+                          Builder: hide
                         </th>
                       </tr>
                     </thead>
@@ -733,7 +682,7 @@ export function PermissionsManager() {
                                 color: "var(--text-muted)",
                               }}
                             >
-                              {col.type}
+                              {FIELD_TYPE_NAMES[col.type] ?? col.type}
                             </td>
                             {/* Viewer Hidden */}
                             <td style={{ padding: "0.75rem 1rem" }}>
@@ -1086,7 +1035,7 @@ export function PermissionsManager() {
                   >
                     <th style={{ padding: "0.75rem 1rem" }}>User Email</th>
                     <th style={{ padding: "0.75rem 1rem" }}>Role</th>
-                    <th style={{ padding: "0.75rem 1rem" }}>Joined Date</th>
+                    <th style={{ padding: "0.75rem 1rem" }}>Member since</th>
                     <th style={{ padding: "0.75rem 1rem", textAlign: "right" }}>
                       Actions
                     </th>

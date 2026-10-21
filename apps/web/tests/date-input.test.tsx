@@ -135,3 +135,31 @@ describe('Date & time preferences dialog', () => {
     await waitFor(() => expect(screen.getByTestId('app-status-notification')).toHaveTextContent(/preferences are saved/));
   });
 });
+
+describe('Workspace date defaults reach open screens', () => {
+  it('rechecks the workspace settings every minute, so an admin change shows without a reload', async () => {
+    const { DateSettingsProvider, SETTINGS_REFRESH_MS } = await import('../src/context/date-settings-provider');
+    const { useDateDisplayPrefs } = await import('../src/context/date-display-context');
+    const { formatPlainDate } = await import('@config-platform/schema');
+    const settings = vi.spyOn(apiClient, 'fetchWorkspaceDateSettings')
+      .mockResolvedValueOnce({ dateFormat: 'DD/MM/YYYY', timeFormat: 'auto', weekStart: 'auto', timeZone: 'UTC' })
+      .mockResolvedValue({ dateFormat: 'YYYY-MM-DD', timeFormat: 'auto', weekStart: 'auto', timeZone: 'UTC' });
+    vi.spyOn(apiClient, 'fetchMe').mockResolvedValue({ id: 'u', email: 'a@b.c', tenantId: 't', role: 'viewer', datePreferences: {} });
+
+    function Shown() {
+      return <span data-testid="shown">{formatPlainDate('2026-10-01', useDateDisplayPrefs())}</span>;
+    }
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(<QueryClientProvider client={client}><DateSettingsProvider><Shown /></DateSettingsProvider></QueryClientProvider>);
+      await waitFor(() => expect(screen.getByTestId('shown').textContent).toBe('01/10/2026'));
+
+      await vi.advanceTimersByTimeAsync(SETTINGS_REFRESH_MS + 100);
+      await waitFor(() => expect(screen.getByTestId('shown').textContent).toBe('2026-10-01'));
+      expect(settings.mock.calls.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
