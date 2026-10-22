@@ -26,7 +26,7 @@ export function DatePreferencesButton() {
   );
 }
 
-function DatePreferencesDialog({ onClose }: { onClose: () => void }) {
+export function DatePreferencesDialog({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const notify = useStatusNotify();
   const { data: workspace } = useQuery({ queryKey: WORKSPACE_DATE_SETTINGS_KEY, queryFn: fetchWorkspaceDateSettings });

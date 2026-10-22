@@ -8,6 +8,10 @@ import type { ErdTable } from '@config-platform/schema';
 import { TableComponent } from '../src/components/table';
 import { MetadataProvider } from '../src/context/metadata-context';
 import * as apiClient from '../src/api/client';
+import { HeaderMobileMenu } from '../src/components/header-mobile-menu';
+import { ThemeProvider } from '../src/context/theme-context';
+import { AppBarProvider } from '../src/context/app-bar-context';
+import { fireEvent } from '@testing-library/react';
 
 const machine: ErdTable = {
   id: 't_machine', name: 'machine', label: 'Machine', physicalTableName: 't', version: 1,
@@ -46,5 +50,28 @@ describe('Phones and tablets', () => {
     expect(phone).toContain('.runtime-modal {');
     expect(css).toMatch(/@media \(pointer: coarse\) \{[\s\S]*min-height: 44px/);
     expect(css).toMatch(/@media \(max-width: 1024px\) \{\s*\.header-studio/);
+  });
+
+  it('the phone "⋯" menu holds account details, date preferences, theme and log out', async () => {
+    const logout = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ThemeProvider initialTheme="light" initialWorkspaceTheme={{ presetId: 'neutral', overrides: {} }}>
+          <AppBarProvider>
+            <HeaderMobileMenu email="op@factory.com" role="editor" onLogout={logout} />
+          </AppBarProvider>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    const menu = screen.getByRole('menu', { name: 'Account' });
+    expect(menu).toHaveTextContent('op@factory.com · editor');
+    fireEvent.click(within(menu).getByRole('menuitemradio', { name: /Dark/ }));
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /Log out/ }));
+    expect(logout).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: /Date & time preferences/ }));
+    expect(screen.getByRole('dialog', { name: 'Date & time preferences' })).toBeInTheDocument();
   });
 });

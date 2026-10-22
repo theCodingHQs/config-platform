@@ -1228,6 +1228,26 @@ input:-webkit-autofill:active {
   }
 }
 
+/* Backstop: nothing may make the page wider than the screen (a wider page opens zoomed in on
+   phones). clip, unlike hidden, doesn't create a scroll container, so popovers still show. */
+@media (max-width: 768px) {
+  html,
+  body {
+    overflow-x: clip;
+  }
+}
+
+/* The "⋯" account menu only exists on phones */
+.header-mobile-menu {
+  display: none;
+}
+
+.header-desktop-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3);
+}
+
 @media (max-width: 768px) {
   .header-detail,
   .header-label {
@@ -1244,6 +1264,44 @@ input:-webkit-autofill:active {
   .page-container {
     padding: var(--space-3);
   }
+
+  /* Top bar fits a phone: account controls move into the "⋯" menu, the workspace name shrinks */
+  .header-desktop-controls {
+    display: none !important;
+  }
+
+  .header-mobile-menu {
+    display: block;
+  }
+
+  .header-workspace-prefix {
+    display: none;
+  }
+
+  .header-workspace {
+    min-width: 0;
+    max-width: 9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .header-workspace select {
+    max-width: 9rem;
+  }
+
+  .app-header-inner > div {
+    min-width: 0;
+    gap: var(--space-2) !important;
+  }
+}
+
+/* Very narrow phones: the brand keeps its icon only */
+@media (max-width: 400px) {
+  .header-brand-text {
+    display: none;
+  }
+}
 
   /* Rows of controls (title + button, filters) wrap instead of overflowing */
   .layout-stack[data-direction="horizontal"] {

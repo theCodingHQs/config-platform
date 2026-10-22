@@ -97,6 +97,7 @@ import { AcceptInvitePage } from "./pages/AcceptInvitePage";
 import { ThemeProvider } from "./context/theme-context";
 import { ThemeModeSwitch } from "./components/ThemeModeSwitch";
 import { DatePreferencesButton } from "./components/date-preferences-dialog";
+import { HeaderMobileMenu } from "./components/header-mobile-menu";
 import {
   Zap,
   Menu,
@@ -309,20 +310,24 @@ function WorkspaceSwitcher({
           border: "1px solid var(--border)",
         }}
         title="Current Workspace"
+        className="header-workspace"
       >
-        Workspace: {current?.tenantName || defaultName || currentTenantId}
+        <span className="header-workspace-prefix">Workspace: </span>
+        {current?.tenantName || defaultName || currentTenantId}
       </span>
     );
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
+    <div className="header-workspace" style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
       <span
+        className="header-workspace-prefix"
         style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}
       >
         Workspace:
       </span>
       <select
+        aria-label="Workspace"
         value={currentTenantId}
         onChange={handleSwitch}
         disabled={switching}
@@ -484,7 +489,7 @@ function AppContent({ user }: { user: CurrentUser }) {
                 gap: "0.375rem",
               }}
             >
-              <Zap size={16} /> ConfigPlatform
+              <Zap size={16} /> <span className="header-brand-text">ConfigPlatform</span>
             </NavLink>
 
             <span className="header-studio" style={{ color: "var(--border)" }}>|</span>
@@ -654,12 +659,16 @@ function AppContent({ user }: { user: CurrentUser }) {
               {user.email}
             </span>
 
-            <DatePreferencesButton />
-            <ThemeModeSwitch compact />
+            {/* Phones: these move into the "⋯" menu below */}
+            <span className="header-desktop-controls">
+              <DatePreferencesButton />
+              <ThemeModeSwitch compact />
+            </span>
+            <HeaderMobileMenu email={user.email} role={user.role} onLogout={logout} />
 
             <button
               type="button"
-              className="btn btn-ghost"
+              className="btn btn-ghost header-desktop-controls"
               onClick={logout}
               style={{
                 fontSize: "var(--font-size-xs)",
