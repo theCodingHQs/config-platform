@@ -5,6 +5,7 @@ import {
   generateTokensCss,
 } from '@config-platform/schema';
 import { apiFetch, fetchWorkspaceTheme } from '../api/client';
+import { AuthContext } from './auth-context';
 
 export type ResolvedTheme = 'light' | 'dark';
 
@@ -154,12 +155,22 @@ export const ThemeProvider: React.FC<{
     }
   }, [applyWorkspaceThemeToDom, theme, resolvedTheme]);
 
-  // Initial fetch of workspace theme
+  // The workspace theme belongs to whoever is signed in: load it on sign-in (or a switch to
+  // another workspace), and go back to the default on sign-out so the login screen doesn't
+  // keep the previous workspace's spacing and text size
+  const auth = useContext(AuthContext);
+  const signedInWorkspace = auth ? (auth.user ? `${auth.user.id}:${auth.user.tenantId}` : null) : undefined;
   useEffect(() => {
-    if (!initialWorkspaceTheme) {
-      refetchWorkspaceTheme();
+    if (initialWorkspaceTheme) return;
+    if (signedInWorkspace === null) {
+      if (auth?.loading) return;
+      setWorkspaceThemeState(defaultWorkspaceTheme);
+      setThemeEditing('enabled');
+      return;
     }
-  }, [initialWorkspaceTheme, refetchWorkspaceTheme]);
+    refetchWorkspaceTheme();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialWorkspaceTheme, signedInWorkspace, auth?.loading]);
 
   // Sync if initialTheme prop changes from auth profile
   useEffect(() => {

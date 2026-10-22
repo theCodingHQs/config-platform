@@ -42,6 +42,32 @@ describe('Theme Foundation Unit & Integration Tests', () => {
     vi.restoreAllMocks();
   });
 
+  it('signing out puts the login screen back on the default theme; signing in loads the workspace theme', async () => {
+    const dense = { presetId: 'neutral', overrides: { density: 'dense' as const } };
+    vi.spyOn(apiClient, 'fetchWorkspaceTheme').mockResolvedValue({ themeConfig: dense, themeEditing: 'enabled' } as any);
+    const authValue = (user: any) => ({
+      user, loading: false, login: vi.fn(), signup: vi.fn(), acceptInvite: vi.fn(), logout: vi.fn(), refetchUser: vi.fn(),
+    });
+    const admin = { id: 'u1', email: 'admin@example.com', tenantId: 't1', role: 'admin' };
+    const spacing8 = () => document.getElementById('workspace-theme-overrides')!.textContent!.match(/--spacing-8: ([^;]+);/)![1];
+    const tree = (user: any) => (
+      <AuthContext.Provider value={authValue(user)}>
+        <ThemeProvider><div /></ThemeProvider>
+      </AuthContext.Provider>
+    );
+    const { rerender } = render(tree(admin));
+    await act(async () => {});
+    const denseSpacing = spacing8();
+
+    rerender(tree(null));
+    await act(async () => {});
+    expect(spacing8()).not.toBe(denseSpacing);
+
+    rerender(tree(admin));
+    await act(async () => {});
+    expect(spacing8()).toBe(denseSpacing);
+  });
+
   describe('Token Parity and Schema Validation', () => {
     it('validates that neutralLightPalette conforms to SemanticColorsSchema', () => {
       const parsed = SemanticColorsSchema.safeParse(neutralLightPalette);

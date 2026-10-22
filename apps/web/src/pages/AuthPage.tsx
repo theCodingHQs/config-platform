@@ -209,7 +209,7 @@ export function AuthPage() {
                     className="form-input"
                     style={{
                       width: '100%',
-                      paddingLeft: 'var(--space-8)',
+                      paddingLeft: 'calc(var(--space-3) + 16px + var(--space-2))',
                     }}
                   />
                 </div>
@@ -248,7 +248,7 @@ export function AuthPage() {
                   className="form-input"
                   style={{
                     width: '100%',
-                    paddingLeft: 'var(--space-8)',
+                    paddingLeft: 'calc(var(--space-3) + 16px + var(--space-2))',
                   }}
                   required
                 />
@@ -290,7 +290,7 @@ export function AuthPage() {
                   className="form-input"
                   style={{
                     width: '100%',
-                    paddingLeft: 'var(--space-8)',
+                    paddingLeft: 'calc(var(--space-3) + 16px + var(--space-2))',
                   }}
                   required
                 />
