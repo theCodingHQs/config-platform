@@ -96,6 +96,32 @@ describe('Report emails', () => {
   });
 });
 
+describe('Report emails: paused schedules and time zones', () => {
+  it('a paused schedule is labelled, its buttons are not faded, and times name the workspace zone', async () => {
+    vi.spyOn(apiClient, 'listReportSchedules').mockResolvedValue([
+      {
+        id: 'rs_2', templateId: 'et_1', templateName: 'Production report', timing: { frequency: 'weekly', weekday: 1, timeOfDay: '07:00' },
+        recipients: ['a@acme.com'], parameters: {}, enabled: false, createdBy: 'u1', createdByEmail: builder.email,
+        nextRunAt: null, lastRunAt: null, lastStatus: null, lastError: null,
+      },
+    ] as any);
+    vi.spyOn(apiClient, 'listExportTemplates').mockResolvedValue([productionReport] as any);
+    vi.spyOn(apiClient, 'fetchEmailSettings').mockResolvedValue({ mode: 'platform', platformConfigured: true, platformFromAddress: null });
+    // The workspace runs on a zone no test machine uses
+    vi.spyOn(apiClient, 'fetchWorkspaceDateSettings').mockResolvedValue({ dateFormat: 'auto', timeFormat: 'auto', weekStart: 'auto', timeZone: 'Pacific/Chatham' });
+
+    renderWithProviders(<ReportSchedules />);
+    expect(await screen.findByText('Paused')).toBeTruthy();
+    expect(screen.getByText(/Not sent automatically while paused/)).toBeTruthy();
+    expect(await screen.findByText(/Pacific\/Chatham time/)).toBeTruthy();
+
+    const sendNow = screen.getByRole('button', { name: /Send now/ });
+    expect((sendNow as HTMLButtonElement).disabled).toBe(false);
+    expect(sendNow.closest('[style*="opacity"]')).toBeNull();
+    expect(sendNow.getAttribute('title')).toMatch(/stays paused/);
+  });
+});
+
 describe('Settings → Email', () => {
   it('admins switch to their own mail server; a saved password is never shown', async () => {
     vi.spyOn(apiClient, 'fetchEmailSettings').mockResolvedValue({ mode: 'platform', platformConfigured: true, platformFromAddress: 'reports@platform.com' });

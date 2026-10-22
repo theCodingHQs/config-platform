@@ -80,6 +80,11 @@ export function ReportSchedules() {
     onError: (err: Error) => notify("error", err.message),
   });
 
+  // Schedules run on the workspace clock; when the viewer's differs, say which one the times use
+  const { data: workspaceDates } = useQuery({ queryKey: WORKSPACE_DATE_SETTINGS_KEY, queryFn: fetchWorkspaceDateSettings });
+  const viewerZone = prefs.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const workspaceZoneLabel = workspaceDates?.timeZone && workspaceDates.timeZone !== viewerZone ? `${workspaceDates.timeZone.replace(/_/g, " ")} time` : null;
+
   const emailsOnlyLogged = email && email.mode === "platform" && !email.platformConfigured;
 
   return (
@@ -145,22 +150,28 @@ export function ReportSchedules() {
             </thead>
             <tbody>
               {schedules.map((s) => (
-                <tr key={s.id} style={{ opacity: s.enabled ? 1 : 0.6 }}>
-                  <td data-label="Report">
-                    <div style={{ fontWeight: 600 }}>{s.name || s.templateName}</div>
+                <tr key={s.id}>
+                  <td data-label="Report" style={dimmed(s)}>
+                    <div style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
+                      {s.name || s.templateName}
+                      {!s.enabled && <span className="badge">Paused</span>}
+                    </div>
                     {s.name && <div style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>{s.templateName}</div>}
                   </td>
-                  <td data-label="When">
-                    <div>{describeScheduleTiming(s.timing)}</div>
+                  <td data-label="When" style={dimmed(s)}>
+                    <div>
+                      {describeScheduleTiming(s.timing)}
+                      {workspaceZoneLabel && <span style={{ color: "var(--text-muted)" }}> ({workspaceZoneLabel})</span>}
+                    </div>
                     <div style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
-                      {s.enabled ? (s.nextRunAt ? `Next: ${formatInstant(s.nextRunAt, prefs)}` : "") : "Paused"}
+                      {s.enabled ? (s.nextRunAt ? `Next: ${formatInstant(s.nextRunAt, prefs)}${workspaceZoneLabel ? " your time" : ""}` : "") : "Not sent automatically while paused"}
                     </div>
                   </td>
-                  <td data-label="Recipients" title={s.recipients.join(", ")}>
+                  <td data-label="Recipients" title={s.recipients.join(", ")} style={dimmed(s)}>
                     {s.recipients.slice(0, 2).join(", ")}
                     {s.recipients.length > 2 && <span style={{ color: "var(--text-muted)" }}> +{s.recipients.length - 2} more</span>}
                   </td>
-                  <td data-label="Last sent">
+                  <td data-label="Last sent" style={dimmed(s)}>
                     {s.lastRunAt ? (
                       <>
                         <span className={`badge ${s.lastStatus === "sent" ? "badge-success" : "badge-danger"}`}>
@@ -177,7 +188,7 @@ export function ReportSchedules() {
                   </td>
                   <td data-label="">
                     <div style={{ display: "flex", gap: "var(--space-1)", justifyContent: "flex-end", flexWrap: "wrap" }}>
-                      <button type="button" className="btn btn-secondary btn-sm" disabled={sendNow.isPending} onClick={() => sendNow.mutate(s.id)} title="Send it now (doesn't change the schedule)">
+                      <button type="button" className="btn btn-secondary btn-sm" disabled={sendNow.isPending} onClick={() => sendNow.mutate(s.id)} title={s.enabled ? "Send it now (doesn't change the schedule)" : "Send it once now (the schedule stays paused)"}>
                         <Send size="1em" /> {sendNow.isPending && sendNow.variables === s.id ? "Sending…" : "Send now"}
                       </button>
                       <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={() => toggle.mutate(s)} aria-label={s.enabled ? "Pause" : "Resume"} title={s.enabled ? "Pause" : "Resume"}>
@@ -219,6 +230,11 @@ export function ReportSchedules() {
       )}
     </div>
   );
+}
+
+/** A paused schedule's details are faded; its buttons stay as they are, since they all still work */
+function dimmed(s: ReportSchedule): React.CSSProperties | undefined {
+  return s.enabled ? undefined : { opacity: 0.6 };
 }
 
 function toInput(s: ReportSchedule, patch: Partial<ReportScheduleInput> = {}): ReportScheduleInput {
