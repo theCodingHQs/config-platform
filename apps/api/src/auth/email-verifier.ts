@@ -1,10 +1,11 @@
 /**
  * Production and Development Email Sender.
- * Supports Resend (via RESEND_API_KEY) and SMTP (via SMTP_URL).
- * Fails startup in production if no provider is configured unless REQUIRE_EMAIL_VERIFICATION=false.
+ * Sends through the platform's email service: RESEND_API_KEY / SMTP_URL in the environment,
+ * or the one set up on the Platform setup screen.
+ * Without any email service, links are logged (development) or not sent (production, with a warning).
  */
 
-import nodemailer, { type Transporter } from 'nodemailer';
+import { platformSettings } from '../platform/platform-settings.js';
 
 export interface EmailSender {
   sendVerificationEmail(email: string, token: string): Promise<void>;
@@ -14,7 +15,7 @@ export interface EmailSender {
 export type EmailVerifier = EmailSender;
 
 export function getPublicUrl(): string {
-  return (process.env.PUBLIC_URL || process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  return platformSettings.publicUrl();
 }
 
 export function buildVerificationEmailHtml(verificationUrl: string): string {
@@ -83,55 +84,9 @@ export function buildInviteEmailHtml(inviteUrl: string, inviterEmail?: string, t
 }
 
 export class ProductionEmailSender implements EmailSender {
-  private resendApiKey?: string;
-  private smtpUrl?: string;
-  private transporter?: Transporter;
-
-  constructor() {
-    this.resendApiKey = process.env.RESEND_API_KEY;
-    this.smtpUrl = process.env.SMTP_URL;
-    if (this.smtpUrl) {
-      this.transporter = nodemailer.createTransport(this.smtpUrl);
-    }
-  }
-
   async sendMail(options: { to: string; subject: string; html: string; text: string }): Promise<void> {
-    const from = process.env.EMAIL_FROM || 'noreply@configplatform.com';
-
-    if (this.resendApiKey) {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.resendApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          from,
-          to: [options.to],
-          subject: options.subject,
-          html: options.html,
-          text: options.text,
-        }),
-      });
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`Resend email delivery failed (${res.status}): ${errorText}`);
-      }
-      return;
-    }
-
-    if (this.transporter) {
-      await this.transporter.sendMail({
-        from,
-        to: options.to,
-        subject: options.subject,
-        html: options.html,
-        text: options.text,
-      });
-      return;
-    }
-
-    throw new Error('No email provider configured. Please set RESEND_API_KEY or SMTP_URL.');
+    const sent = await platformSettings.send({ to: [options.to], subject: options.subject, html: options.html, text: options.text });
+    if (!sent) throw new Error('No email service is set up. A platform owner can set one up under Platform setup.');
   }
 
   async sendVerificationEmail(email: string, token: string): Promise<void> {
@@ -195,24 +150,19 @@ export class ConsoleEmailVerifier implements EmailSender {
 
 export function validateEmailConfig(): void {
   const isProd = process.env.NODE_ENV === 'production';
-  const requireVerification = process.env.REQUIRE_EMAIL_VERIFICATION !== 'false';
-  const hasProvider = Boolean(process.env.RESEND_API_KEY || process.env.SMTP_URL);
-
-  if (isProd && requireVerification && !hasProvider) {
-    throw new Error(
-      'Email provider configuration missing in production: either RESEND_API_KEY or SMTP_URL must be configured, or explicitly set REQUIRE_EMAIL_VERIFICATION=false to disable email verification.'
-    );
+  if (!isProd) return;
+  if (!platformSettings.emailConfigured()) {
+    // Not fatal: a platform owner can set up email on the Platform setup screen after start-up
+    console.warn('[email] No email service is set up: invites and confirmation emails are not sent. Set one up under Platform setup (or RESEND_API_KEY / SMTP_URL).');
+    return;
   }
-
-  if (isProd && hasProvider && !process.env.EMAIL_FROM) {
-    throw new Error(
-      'EMAIL_FROM environment variable is required in production when an email provider is configured.'
-    );
+  if (!platformSettings.fromAddress()) {
+    throw new Error('EMAIL_FROM environment variable is required in production when an email provider is configured.');
   }
 }
 
 export function createEmailSender(): EmailSender {
-  if (process.env.RESEND_API_KEY || process.env.SMTP_URL) {
+  if (platformSettings.emailConfigured()) {
     return new ProductionEmailSender();
   }
   return new ConsoleEmailVerifier();
@@ -222,14 +172,14 @@ export const consoleEmailVerifier = new ConsoleEmailVerifier();
 
 export const defaultEmailVerifier: EmailSender & { lastSentEmail: any } = {
   async sendVerificationEmail(email: string, token: string) {
-    if (process.env.RESEND_API_KEY || process.env.SMTP_URL) {
+    if (platformSettings.emailConfigured()) {
       const sender = new ProductionEmailSender();
       return sender.sendVerificationEmail(email, token);
     }
     return consoleEmailVerifier.sendVerificationEmail(email, token);
   },
   async sendInviteEmail(email: string, token: string, inviterEmail?: string, tenantName?: string) {
-    if (process.env.RESEND_API_KEY || process.env.SMTP_URL) {
+    if (platformSettings.emailConfigured()) {
       const sender = new ProductionEmailSender();
       return sender.sendInviteEmail(email, token, inviterEmail, tenantName);
     }

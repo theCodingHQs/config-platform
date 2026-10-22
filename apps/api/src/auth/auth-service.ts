@@ -11,6 +11,18 @@ import { migrationService } from '../migrations/migration-service.js';
 import { defaultEmailVerifier, defaultEmailSender } from './email-verifier.js';
 import type { AppUser, SessionPayload, TenantRole } from './auth-types.js';
 import { isValidRole } from './auth-types.js';
+import { platformSettings } from '../platform/platform-settings.js';
+
+/**
+ * Whether people must confirm their email address before logging in. REQUIRE_EMAIL_VERIFICATION
+ * decides when set; otherwise production requires it once an email service is set up (before
+ * that, confirmation emails couldn't be delivered and nobody could log in).
+ */
+export function emailVerificationRequired(): boolean {
+  if (process.env.REQUIRE_EMAIL_VERIFICATION === 'true') return true;
+  if (process.env.REQUIRE_EMAIL_VERIFICATION === 'false') return false;
+  return process.env.NODE_ENV === 'production' && platformSettings.emailConfigured();
+}
 
 // Dynamically import argon2 so test environments without native can still load the module
 let argon2: typeof import('argon2');
@@ -100,8 +112,9 @@ export class AuthService {
 
       const userId = `u_${crypto.randomBytes(8).toString('hex')}`;
       await client.query(
-        `INSERT INTO public.app_user (id, email, password_hash, last_tenant_id, email_verified, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, FALSE, NOW(), NOW())`,
+        // The server's first account becomes its platform owner
+        `INSERT INTO public.app_user (id, email, password_hash, last_tenant_id, email_verified, is_platform_admin, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, FALSE, NOT EXISTS (SELECT 1 FROM public.app_user WHERE is_platform_admin), NOW(), NOW())`,
         [userId, normalizedEmail, hash, tenantId]
       );
 
@@ -178,8 +191,7 @@ export class AuthService {
 
     const user = userRes.rows[0];
 
-    const requireVerification = process.env.REQUIRE_EMAIL_VERIFICATION === 'true' ||
-      (process.env.NODE_ENV === 'production' && process.env.REQUIRE_EMAIL_VERIFICATION !== 'false');
+    const requireVerification = emailVerificationRequired();
     if (requireVerification && !user.email_verified) {
       throw new AuthError('Email verification required before accessing workspace. Please check your inbox.', 403);
     }
@@ -248,13 +260,20 @@ export class AuthService {
     return { sessionId: rawSessionId, userId, tenantId, tenantName: effectiveTenantName, role, email, expiresAt };
   }
 
+  /** True on a brand-new server that has no accounts yet. */
+  async isFirstAccount(): Promise<boolean> {
+    const res = await pool.query('SELECT EXISTS (SELECT 1 FROM public.app_user) AS any');
+    return !res.rows[0]?.any;
+  }
+
   async resolveSession(sessionId: string): Promise<SessionPayload | null> {
     const hashed = hashToken(sessionId);
     const res = await pool.query(
       `SELECT s.id AS "sessionId", s.user_id AS "userId", s.tenant_id AS "tenantId",
               t.name AS "tenantName", s.role, s.expires_at AS "expiresAt", u.email,
               u.theme_preference AS "themePreference",
-              u.date_preferences AS "datePreferences"
+              u.date_preferences AS "datePreferences",
+              u.is_platform_admin AS "isPlatformAdmin"
        FROM public.app_session s
        JOIN public.app_user u ON u.id = s.user_id
        JOIN public.tenant t ON t.id = s.tenant_id
@@ -273,6 +292,7 @@ export class AuthService {
       email: row.email,
       themePreference: (row.themePreference as any) || 'system',
       datePreferences: row.datePreferences || {},
+      isPlatformAdmin: Boolean(row.isPlatformAdmin),
       expiresAt: row.expiresAt,
     };
   }
@@ -497,8 +517,7 @@ export class AuthService {
       if (existingUser.rows.length > 0) {
         const u = existingUser.rows[0];
         userId = u.id;
-        const requireVerification = process.env.REQUIRE_EMAIL_VERIFICATION === 'true' ||
-          (process.env.NODE_ENV === 'production' && process.env.REQUIRE_EMAIL_VERIFICATION !== 'false');
+        const requireVerification = emailVerificationRequired();
         if (requireVerification && !u.email_verified) {
           throw new AuthError('Email verification required before accepting invitation. Please verify your email first.', 403);
         }

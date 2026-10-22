@@ -89,8 +89,8 @@ export async function bootstrapOwner(options?: BootstrapOwnerOptions): Promise<B
 
     // Create owner app_user with email_verified = true
     await client.query(
-      `INSERT INTO public.app_user (id, email, password_hash, last_tenant_id, email_verified, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, TRUE, NOW(), NOW())`,
+      `INSERT INTO public.app_user (id, email, password_hash, last_tenant_id, email_verified, is_platform_admin, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, TRUE, TRUE, NOW(), NOW())`,
       [userId, normalizedEmail, hash, tenantId]
     );
 

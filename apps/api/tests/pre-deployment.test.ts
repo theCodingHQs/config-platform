@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { buildServer } from '../src/server.js';
 import { pool, directPool, DEFAULT_STATEMENT_TIMEOUT_MS, coerceStatementTimeout } from '../src/db/pool.js';
 import { defaultStorageAdapter } from '../src/db/storage-adapter.js';
 import { initializeMetadataCatalog, isCatalogReady, setCatalogReady } from '../src/db/catalog-init.js';
 import { runCatalogMigrations, editorDeleteMigrationReport } from '../src/db/catalog-migration-runner.js';
 import { migrationService } from '../src/migrations/migration-service.js';
-import { authService, AuthError } from '../src/auth/auth-service.js';
+import { authService, AuthError, emailVerificationRequired } from '../src/auth/auth-service.js';
 import { validateEmailConfig, ProductionEmailSender, getPublicUrl } from '../src/auth/email-verifier.js';
 import { auditLogService } from '../src/audit/audit-service.js';
 import { tenantLimitsService } from '../src/limits/tenant-limits.js';
@@ -485,7 +485,7 @@ describe('Pre-Deployment Hardening & Production Guards', () => {
   // 10. Production EmailSender & Startup Guard
   // =========================================================================
   describe('10. Production EmailSender & Startup Validation', () => {
-    it('fails startup validation in production if no email provider is configured', () => {
+    it('starts in production without an email service (set up later on Platform setup), without requiring confirmation emails meanwhile', () => {
       const origEnv = process.env.NODE_ENV;
       const origReq = process.env.REQUIRE_EMAIL_VERIFICATION;
       const origResend = process.env.RESEND_API_KEY;
@@ -497,9 +497,14 @@ describe('Pre-Deployment Hardening & Production Guards', () => {
         delete process.env.RESEND_API_KEY;
         delete process.env.SMTP_URL;
 
-        expect(() => validateEmailConfig()).toThrow(
-          /Email provider configuration missing in production/i
-        );
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        expect(() => validateEmailConfig()).not.toThrow();
+        expect(warn.mock.calls[0][0]).toMatch(/No email service is set up/);
+        warn.mockRestore();
+        // Confirmation emails couldn't be delivered, so they aren't required yet
+        expect(emailVerificationRequired()).toBe(false);
+        process.env.RESEND_API_KEY = 're_test';
+        expect(emailVerificationRequired()).toBe(true);
       } finally {
         process.env.NODE_ENV = origEnv;
         if (origReq !== undefined) process.env.REQUIRE_EMAIL_VERIFICATION = origReq;

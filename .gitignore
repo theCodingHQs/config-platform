@@ -9,3 +9,6 @@ packages/*/dist
 *.log
 .DS_Store
 coverage
+
+# Encryption key for stored passwords (created by the API on first use)
+.secrets/

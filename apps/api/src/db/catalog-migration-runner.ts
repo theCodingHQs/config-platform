@@ -467,6 +467,30 @@ export const catalogMigrations: CatalogMigration[] = [
       `);
     },
   },
+  {
+    version: 18,
+    name: '018_platform_setup',
+    up: async (client: PoolClient) => {
+      // Server-wide settings (Platform setup screen) and the accounts allowed to change them
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.platform_setting (
+          key VARCHAR(64) PRIMARY KEY,
+          value JSONB NOT NULL,
+          updated_by VARCHAR(64) REFERENCES public.app_user(id) ON DELETE SET NULL,
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        ALTER TABLE public.app_user
+        ADD COLUMN IF NOT EXISTS is_platform_admin BOOLEAN NOT NULL DEFAULT FALSE;
+      `);
+      // An existing server's first account (whoever set it up) becomes its platform owner
+      await client.query(`
+        UPDATE public.app_user SET is_platform_admin = TRUE
+        WHERE id = (SELECT id FROM public.app_user ORDER BY created_at, id LIMIT 1)
+          AND NOT EXISTS (SELECT 1 FROM public.app_user WHERE is_platform_admin);
+      `);
+    },
+  },
 ];
 
 /**

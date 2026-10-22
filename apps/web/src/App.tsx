@@ -51,6 +51,9 @@ const WorkspaceSettings = React.lazy(() =>
     default: m.WorkspaceSettings,
   }))
 );
+const PlatformSetup = React.lazy(() =>
+  import("./studio/PlatformSetup").then((m) => ({ default: m.PlatformSetup }))
+);
 const ReportSchedules = React.lazy(() =>
   import("./studio/ReportSchedules").then((m) => ({ default: m.ReportSchedules }))
 );
@@ -615,6 +618,26 @@ function AppContent({ user }: { user: CurrentUser }) {
               >
                 Settings
               </NavLink>
+              {user.isPlatformAdmin && (
+                <NavLink
+                  to="/studio/platform"
+                  title="Settings for the whole server: email service, sign-ups, website address"
+                  className={({ isActive }) =>
+                    isActive ? "btn btn-secondary active" : "btn btn-ghost"
+                  }
+                  style={({ isActive }) => ({
+                    fontSize: "var(--font-size-sm)",
+                    padding: "0.25rem 0.625rem",
+                    fontWeight: isActive ? 600 : 500,
+                    color: isActive ? "var(--accent)" : "var(--text)",
+                    backgroundColor: isActive
+                      ? "var(--accent-subtle)"
+                      : "transparent",
+                  })}
+                >
+                  Platform
+                </NavLink>
+              )}
             </nav>
           </div>
 
@@ -713,6 +736,12 @@ function AppContent({ user }: { user: CurrentUser }) {
                 path="/studio/pages"
                 element={<div className="page-container"><PageManager /></div>}
               />
+              {user.isPlatformAdmin && (
+                <Route
+                  path="/studio/platform"
+                  element={<div className="page-container"><PlatformSetup /></div>}
+                />
+              )}
               <Route
                 path="/studio/report-schedules"
                 element={<div className="page-container"><ReportSchedules /></div>}

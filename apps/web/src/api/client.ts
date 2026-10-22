@@ -14,6 +14,8 @@ import type {
   ReportScheduleInput,
   EmailDeliverySettings,
   EmailDeliverySettingsInput,
+  PlatformSettingsInput,
+  PlatformSettingsView,
 } from "@config-platform/schema";
 
 export class ApiError extends Error {
@@ -110,6 +112,8 @@ export interface CurrentUser {
   role: "owner" | "admin" | "builder" | "editor" | "viewer";
   /** The user's own date display choices (absent keys = workspace default). */
   datePreferences?: UserDatePreferences;
+  /** May open Platform setup (server-wide settings) */
+  isPlatformAdmin?: boolean;
 }
 
 export interface MemberInfo {
@@ -1338,4 +1342,36 @@ export async function updateEmailSettings(input: EmailDeliverySettingsInput): Pr
 
 export async function sendTestEmail(): Promise<{ sentTo: string; from: string; via: string }> {
   return handleResponse(await apiFetch(`${API_BASE_URL}/workspace/email-settings/test`, { method: "POST" }));
+}
+
+// ─── Platform setup (platform owners) ────────────────────────────────────────
+
+export async function fetchPlatformSettings(): Promise<PlatformSettingsView> {
+  return handleResponse<PlatformSettingsView>(await apiFetch(`${API_BASE_URL}/platform/settings`));
+}
+
+export async function updatePlatformSettings(input: PlatformSettingsInput): Promise<PlatformSettingsView> {
+  const res = await apiFetch(`${API_BASE_URL}/platform/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return handleResponse<PlatformSettingsView>(res);
+}
+
+export async function sendPlatformTestEmail(): Promise<{ sentTo: string; from: string; via: string }> {
+  return handleResponse(await apiFetch(`${API_BASE_URL}/platform/settings/test-email`, { method: "POST" }));
+}
+
+export async function addPlatformAdmin(email: string): Promise<PlatformSettingsView["platformAdmins"]> {
+  const res = await apiFetch(`${API_BASE_URL}/platform/admins`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  return handleResponse(res);
+}
+
+export async function removePlatformAdmin(userId: string): Promise<PlatformSettingsView["platformAdmins"]> {
+  return handleResponse(await apiFetch(`${API_BASE_URL}/platform/admins/${userId}`, { method: "DELETE" }));
 }

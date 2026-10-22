@@ -20,6 +20,7 @@ import { createRateLimitHook } from './rate-limiter.js';
 import { tenantLimitsService } from '../limits/tenant-limits.js';
 import { auditLogService } from '../audit/audit-service.js';
 import { pool } from '../db/pool.js';
+import { platformSettings } from '../platform/platform-settings.js';
 
 const COOKIE_OPTS = {
   httpOnly: true,
@@ -37,10 +38,7 @@ const CSRF_COOKIE_OPTS = {
 };
 
 export function getSignupMode(): 'open' | 'invite_only' {
-  if (process.env.SIGNUP_MODE === 'open' || process.env.SIGNUP_MODE === 'invite_only') {
-    return process.env.SIGNUP_MODE;
-  }
-  return process.env.NODE_ENV === 'production' ? 'invite_only' : 'open';
+  return platformSettings.signupMode();
 }
 
 /** Public auth routes – no session required */
@@ -71,6 +69,7 @@ export async function authRoutes(fastify: FastifyInstance) {
       role: session.role,
       themePreference: session.themePreference || 'system',
       datePreferences: session.datePreferences || {},
+      isPlatformAdmin: Boolean(session.isPlatformAdmin),
     };
   });
 
@@ -122,7 +121,8 @@ export async function authRoutes(fastify: FastifyInstance) {
     preHandler: [createRateLimitHook(5, 15 * 60 * 1000), csrfCheckHook],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const mode = getSignupMode();
-    if (mode === 'invite_only') {
+    // A brand-new server (no accounts yet) lets its first person sign up: they become its platform owner
+    if (mode === 'invite_only' && !(await authService.isFirstAccount())) {
       return reply.status(403).send({
         statusCode: 403,
         error: 'Forbidden',

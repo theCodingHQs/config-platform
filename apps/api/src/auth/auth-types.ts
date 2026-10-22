@@ -48,6 +48,8 @@ export interface SessionPayload {
   themePreference?: 'system' | 'light' | 'dark';
   /** The user's own date display choices (absent keys = workspace default). */
   datePreferences?: UserDatePreferences;
+  /** May change server-wide settings (Platform setup), across all workspaces */
+  isPlatformAdmin?: boolean;
   expiresAt: Date;
 }
 

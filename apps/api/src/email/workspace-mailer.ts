@@ -1,7 +1,7 @@
 /**
  * Sends a workspace's emails (scheduled reports, test messages) by one of three routes:
  *  1. the workspace's own mail server (Settings → Email), when it chose one
- *  2. the platform's email service (RESEND_API_KEY or SMTP_URL, sender EMAIL_FROM)
+ *  2. the platform's email service (environment, or the Platform setup screen)
  *  3. nowhere: outside production with no service set up, messages are logged and kept in
  *     `devOutbox` so the feature can be tried and tested without sending real email
  */
@@ -14,6 +14,7 @@ import {
 } from '@config-platform/schema';
 import { pool } from '../db/pool.js';
 import { decryptSecret, encryptSecret } from '../utils/secret-box.js';
+import { platformSettings } from '../platform/platform-settings.js';
 
 export interface MailAttachment {
   filename: string;
@@ -41,7 +42,7 @@ export const devOutbox: SentMail[] = [];
 
 export class EmailNotConfiguredError extends Error {
   constructor() {
-    super('Email is not set up on this server yet. Ask the platform operator to configure an email service, or set up your own mail server under Settings → Email.');
+    super('Email is not set up on this server yet. A platform owner can set it up under Platform setup, or use your own email account under Settings → Email.');
   }
 }
 
@@ -51,13 +52,6 @@ interface StoredEmailSettings {
   smtp?: StoredSmtp;
 }
 
-function platformConfigured(): boolean {
-  return Boolean(process.env.RESEND_API_KEY || process.env.SMTP_URL);
-}
-
-function platformFromAddress(): string | null {
-  return process.env.EMAIL_FROM || null;
-}
 
 /** "Acme Factory" <reports@platform.com>, escaping quotes in the name */
 function formatFrom(name: string, address: string): string {
@@ -76,7 +70,7 @@ class WorkspaceMailer {
 
   async getSettings(tenantId: string): Promise<EmailDeliverySettings> {
     const { settings } = await this.loadStored(tenantId);
-    const base = { platformConfigured: platformConfigured(), platformFromAddress: platformFromAddress() };
+    const base = { platformConfigured: platformSettings.emailConfigured(), platformFromAddress: platformSettings.fromAddress() };
     if (settings.mode === 'smtp' && settings.smtp) {
       const { passwordEncrypted, ...smtp } = settings.smtp;
       return { mode: 'smtp', smtp: { ...smtp, hasPassword: Boolean(passwordEncrypted) }, ...base };
@@ -127,32 +121,9 @@ class WorkspaceMailer {
       return { ...mail, tenantId, from, via: 'workspace-smtp' };
     }
 
-    const platformFrom = platformFromAddress() || 'noreply@configplatform.com';
-    const from = formatFrom(senderName, platformFrom);
-
-    if (process.env.RESEND_API_KEY) {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          from,
-          to: mail.to,
-          reply_to: mail.replyTo,
-          subject: mail.subject,
-          text: mail.text,
-          html: mail.html,
-          attachments: attachments.map((a) => ({ filename: a.filename, content: a.content.toString('base64') })),
-        }),
-      });
-      if (!res.ok) throw new Error(`The email service refused the message (${res.status}): ${await res.text()}`);
-      return { ...mail, tenantId, from, via: 'platform-resend' };
-    }
-
-    if (process.env.SMTP_URL) {
-      const transport = nodemailer.createTransport(process.env.SMTP_URL);
-      await transport.sendMail({ from, to: mail.to, replyTo: mail.replyTo, subject: mail.subject, text: mail.text, html: mail.html, attachments });
-      return { ...mail, tenantId, from, via: 'platform-smtp' };
-    }
+    const viaPlatform = await platformSettings.send(mail, senderName);
+    if (viaPlatform) return { ...mail, tenantId, ...viaPlatform };
+    const from = formatFrom(senderName, platformSettings.fromAddress() || 'noreply@configplatform.com');
 
     if (process.env.NODE_ENV === 'production') throw new EmailNotConfiguredError();
 

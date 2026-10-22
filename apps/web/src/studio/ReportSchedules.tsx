@@ -108,7 +108,12 @@ export function ReportSchedules() {
             Email sending isn't set up on this server yet, so reports are prepared but not delivered.{" "}
             {isAdmin ? (
               <>
-                Use your own mail server under <Link to="/studio/settings?tab=email">Settings → Email</Link>, or ask the platform operator to set up built-in sending.
+                Use your own email account under <Link to="/studio/settings?tab=email">Settings → Email</Link>
+                {user?.isPlatformAdmin ? (
+                  <>, or set up built-in sending under <Link to="/studio/platform">Platform setup</Link>.</>
+                ) : (
+                  ", or ask your platform owner to set up built-in sending."
+                )}
               </>
             ) : (
               "Ask an admin to set it up under Settings → Email."

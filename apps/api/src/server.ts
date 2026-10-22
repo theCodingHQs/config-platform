@@ -38,6 +38,8 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { validateEmailConfig } from './auth/email-verifier.js';
+import { platformSettings } from './platform/platform-settings.js';
+import { platformRoutes } from './platform/platform-routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -83,6 +85,7 @@ export async function checkDemoAccountWarning(logger?: any): Promise<boolean> {
 }
 
 export async function buildServer() {
+  await platformSettings.load();
   validateEmailConfig();
 
   const trustProxyConfig = process.env.TRUST_PROXY === 'true'
@@ -327,6 +330,7 @@ export async function buildServer() {
       await protectedApp.register(workspaceRoutes);
       await protectedApp.register(auditRoutes);
       await protectedApp.register(reportScheduleRoutes);
+      await protectedApp.register(platformRoutes);
     });
   }, { prefix: '/api' });
 
