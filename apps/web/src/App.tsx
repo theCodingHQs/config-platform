@@ -439,6 +439,7 @@ function AppContent({ user }: { user: CurrentUser }) {
             alignItems: "center",
             justifyContent: "space-between",
           }}
+          className="app-header-inner"
         >
           <div
             style={{ display: "flex", alignItems: "center", gap: "1.25rem" }}
@@ -486,10 +487,11 @@ function AppContent({ user }: { user: CurrentUser }) {
               <Zap size={16} /> ConfigPlatform
             </NavLink>
 
-            <span style={{ color: "var(--border)" }}>|</span>
+            <span className="header-studio" style={{ color: "var(--border)" }}>|</span>
 
-            {/* Studio Navigation in Navbar */}
+            {/* Studio Navigation in Navbar (desktop: building happens on a big screen) */}
             <nav
+              className="header-studio"
               style={{ display: "flex", gap: "0.375rem", alignItems: "center" }}
             >
               <span
@@ -622,6 +624,7 @@ function AppContent({ user }: { user: CurrentUser }) {
             />
 
             <span
+              className="header-detail"
               style={{
                 fontSize: "var(--font-size-xs)",
                 fontWeight: 700,
@@ -641,6 +644,7 @@ function AppContent({ user }: { user: CurrentUser }) {
             </span>
 
             <span
+              className="header-detail"
               style={{
                 fontSize: "var(--font-size-xs)",
                 fontWeight: 500,
@@ -668,7 +672,7 @@ function AppContent({ user }: { user: CurrentUser }) {
               title="Sign Out"
             >
               <LogOut size={14} />
-              <span>Log out</span>
+              <span className="header-label">Log out</span>
             </button>
           </div>
         </div>

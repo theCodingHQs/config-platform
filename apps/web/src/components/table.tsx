@@ -116,7 +116,8 @@ export const TableComponent: React.FC<TableProps> = ({
     >
       <div className="table-container">
         <table
-          className={`data-table ${striped ? 'table-striped' : ''} ${compact ? 'table-compact' : ''} ${bordered ? 'table-bordered' : ''}`.trim()}
+          // responsive-cards: on phones each row becomes a card of "label: value" lines
+          className={`data-table responsive-cards ${striped ? 'table-striped' : ''} ${compact ? 'table-compact' : ''} ${bordered ? 'table-bordered' : ''}`.trim()}
         >
           <thead>
             <tr>
@@ -181,7 +182,7 @@ export const TableComponent: React.FC<TableProps> = ({
 
                     const val = row[field.name];
                     return (
-                      <td key={col.fieldId || idx}>
+                      <td key={col.fieldId || idx} data-label={field.label || field.name}>
                         {renderCellValue(field, val, datePrefs)}
                       </td>
                     );

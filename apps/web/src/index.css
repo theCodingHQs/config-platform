@@ -1217,3 +1217,114 @@ input:-webkit-autofill:active {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+
+/* ─── Phones and tablets (runtime pages: data entry on the shop floor) ─── */
+
+/* Building happens on a big screen: below tablet width the top bar keeps only what people
+   entering data need (menu, workspace, preferences, theme, log out) */
+@media (max-width: 1024px) {
+  .header-studio {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .header-detail,
+  .header-label {
+    display: none !important;
+  }
+
+  .app-header-inner {
+    /* inline padding is set on the element */
+    padding: 0 var(--space-3) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .page-container {
+    padding: var(--space-3);
+  }
+
+  /* Rows of controls (title + button, filters) wrap instead of overflowing */
+  .layout-stack[data-direction="horizontal"] {
+    flex-wrap: wrap !important;
+  }
+
+  /* Tables: one card per record, each value labelled with its column */
+  .data-table.responsive-cards thead {
+    display: none;
+  }
+
+  .data-table.responsive-cards,
+  .data-table.responsive-cards tbody {
+    display: block;
+    width: 100%;
+  }
+
+  .data-table.responsive-cards tr {
+    display: block;
+    margin-bottom: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: var(--border-width-sm) solid var(--border);
+    border-radius: var(--radius-surface);
+    background: var(--surface);
+  }
+
+  .data-table.responsive-cards td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-3);
+    padding: var(--space-1) 0;
+    border: 0;
+    text-align: right;
+  }
+
+  .data-table.responsive-cards td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    max-width: 50%;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-align: left;
+  }
+
+  .data-table.responsive-cards td[colspan] {
+    justify-content: center;
+    text-align: center;
+  }
+
+  /* Dialogs (add / edit forms) use the whole screen; inline sizes are set on the elements */
+  .runtime-modal-overlay {
+    padding: 0 !important;
+    align-items: stretch !important;
+  }
+
+  .runtime-modal {
+    max-width: none !important;
+    max-height: none !important;
+    height: 100%;
+    border-radius: var(--radius-none) !important;
+    border: 0 !important;
+  }
+}
+
+/* Fingers, not mouse pointers: controls at least 44px tall, larger checkboxes */
+@media (pointer: coarse) {
+  .btn,
+  .form-input,
+  .form-select,
+  .input {
+    min-height: 44px;
+  }
+
+  .btn-icon {
+    min-width: 44px;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 1.375rem;
+    height: 1.375rem;
+  }
+}

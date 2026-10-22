@@ -65,6 +65,7 @@ export function ModalComponent({
       role="dialog"
       aria-modal="true"
       data-testid="modal-overlay"
+      className="runtime-modal-overlay"
       style={{
         position: 'fixed',
         top: 0,
@@ -86,6 +87,7 @@ export function ModalComponent({
     >
       <div
         data-testid="modal-container"
+        className="runtime-modal"
         style={{
           background: 'var(--surface)',
           color: 'var(--text)',
