@@ -14,7 +14,7 @@ import {
   fetchLiveDdl,
   ApiError,
 } from '../api/client';
-import { Plus, X, AlertTriangle, ChevronUp, ChevronDown, Edit2, Upload, FileSpreadsheet } from 'lucide-react';
+import { Plus, X, AlertTriangle, ChevronUp, ChevronDown, Edit2, Upload, FileSpreadsheet, LayoutGrid } from 'lucide-react';
 import type { ErdTable, ErdColumn, FieldType } from '@config-platform/schema';
 import { DynamicIcon } from '../components/dynamic-icon';
 import { IconPicker } from '../components/icon-picker';
@@ -23,6 +23,7 @@ import { ImportDataModal } from './ImportDataModal';
 import { FormulaEditor, canBeCalculated } from './FormulaEditor';
 import { UniqueRulesPanel } from './UniqueRulesPanel';
 import { ImportWizard } from './ImportWizard';
+import { TemplateGallery } from './TemplateGallery';
 
 export const EntityManager: React.FC = () => {
   const { tenantId } = useMetadata();
@@ -30,6 +31,7 @@ export const EntityManager: React.FC = () => {
 
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
   const [showImportWizard, setShowImportWizard] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditEntityModal, setShowEditEntityModal] = useState(false);
   const [showAddFieldModal, setShowAddFieldModal] = useState(false);
@@ -371,6 +373,9 @@ export const EntityManager: React.FC = () => {
           >
             {activeSideTab === 'ddl' ? 'Hide DDL' : 'View Live DDL'}
           </button>
+          <button type="button" className="btn btn-secondary" onClick={() => setShowTemplates(true)}>
+            <LayoutGrid size="1.1em" /> Templates
+          </button>
           <button
             type="button"
             className="btn btn-secondary"
@@ -700,7 +705,7 @@ export const EntityManager: React.FC = () => {
             <p style={{ color: 'var(--text-muted)', fontSize: "var(--font-size-sm)", lineHeight: 1.6, margin: 0 }}>
               Workspaces start clean with no entities or pages.
               <br />
-              <strong>Step 1:</strong> Start from an Excel sheet you already use, or create a Data Entity (e.g. Products, Customers, Orders) and its fields.
+              <strong>Step 1:</strong> Install a ready-made template, start from an Excel sheet you already use, or create a Data Entity (e.g. Products, Customers, Orders) and its fields.
               <br />
               <strong>Step 2:</strong> Go to <em>Pages</em> in the top navigation to build and publish views bound to your entities.
             </p>
@@ -718,6 +723,9 @@ export const EntityManager: React.FC = () => {
               onClick={() => setShowImportWizard(true)}
             >
               <FileSpreadsheet size="1.1em" /> Start from an Excel sheet
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => setShowTemplates(true)}>
+              <LayoutGrid size="1.1em" /> Start from a template
             </button>
           </div>
         ) : (
@@ -791,6 +799,18 @@ export const EntityManager: React.FC = () => {
           </div>
         )}
       </div>
+
+      {showTemplates && (
+        <TemplateGallery
+          tenantId={tenantId}
+          onClose={() => setShowTemplates(false)}
+          onInstalled={(result) => {
+            // The template's main entity is listed last (shared ones like Machine come first)
+            const main = result.entities[result.entities.length - 1];
+            if (main) setSelectedEntityId(main.id);
+          }}
+        />
+      )}
 
       {showImportWizard && (
         <ImportWizard

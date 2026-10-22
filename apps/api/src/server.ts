@@ -7,6 +7,7 @@ import { schemaRoutes } from './schema/schema-routes.js';
 import { recordsRoutes } from './records/records-routes.js';
 import { importRoutes } from './records/import/import-routes.js';
 import { importWizardRoutes } from './records/import/import-wizard-routes.js';
+import { solutionTemplateRoutes } from './workspace/solution-template-routes.js';
 import { pagesRoutes } from './pages/pages-routes.js';
 import { permissionRoutes } from './permissions/permission-routes.js';
 import { authRoutes, memberRoutes } from './auth/auth-routes.js';
@@ -318,6 +319,7 @@ export async function buildServer() {
       await protectedApp.register(recordsRoutes);
       await protectedApp.register(importRoutes);
       await protectedApp.register(importWizardRoutes);
+      await protectedApp.register(solutionTemplateRoutes);
       await protectedApp.register(exportRoutes);
       await protectedApp.register(pagesRoutes);
       await protectedApp.register(permissionRoutes);

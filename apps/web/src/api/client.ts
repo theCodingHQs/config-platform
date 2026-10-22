@@ -1019,6 +1019,42 @@ export async function updateWorkspaceTheme(
   return handleResponse<{ success: boolean; themeConfig: WorkspaceThemeConfig; warning?: string }>(res);
 }
 
+export interface SolutionTemplateCard {
+  id: string;
+  name: string;
+  summary: string;
+  description: string;
+  icon: string;
+  folder: string;
+  entities: string[];
+  pages: string[];
+  reports: string[];
+  hasSampleData: boolean;
+}
+
+export interface SolutionInstallResult {
+  templateId: string;
+  entities: Array<{ id: string; label: string; reused: boolean }>;
+  pages: Array<{ id: string; name: string; route: string }>;
+  reports: Array<{ id: string; name: string }>;
+  sampleRecords: number;
+  warnings: string[];
+}
+
+/** The template gallery (ready-made apps). */
+export async function listSolutionTemplates(): Promise<SolutionTemplateCard[]> {
+  return handleResponse(await apiFetch(`${API_BASE_URL}/solution-templates`));
+}
+
+export async function installSolutionTemplate(id: string, sampleData: boolean): Promise<SolutionInstallResult> {
+  const res = await apiFetch(`${API_BASE_URL}/solution-templates/${id}/install`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sampleData }),
+  });
+  return handleResponse(res);
+}
+
 export interface SheetAnalysis extends WizardAnalysis {
   sheets: string[];
   selectedSheet: string;

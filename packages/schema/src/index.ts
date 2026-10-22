@@ -4,6 +4,8 @@ export * from './catalog.js';
 export * from './migrations.js';
 export * from './erd.js';
 export * from './page.js';
+export * from './page-templates.js';
+export * from './solution-templates.js';
 export * from './action.js';
 export * from './data-source.js';
 export * from './expression.js';
