@@ -1340,8 +1340,14 @@ export async function updateEmailSettings(input: EmailDeliverySettingsInput): Pr
   return handleResponse<EmailDeliverySettings>(res);
 }
 
-export async function sendTestEmail(): Promise<{ sentTo: string; from: string; via: string }> {
-  return handleResponse(await apiFetch(`${API_BASE_URL}/workspace/email-settings/test`, { method: "POST" }));
+export async function sendTestEmail(to?: string): Promise<{ sentTo: string; from: string; via: string }> {
+  return handleResponse(
+    await apiFetch(`${API_BASE_URL}/workspace/email-settings/test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to }),
+    }),
+  );
 }
 
 // ─── Platform setup (platform owners) ────────────────────────────────────────
@@ -1359,8 +1365,14 @@ export async function updatePlatformSettings(input: PlatformSettingsInput): Prom
   return handleResponse<PlatformSettingsView>(res);
 }
 
-export async function sendPlatformTestEmail(): Promise<{ sentTo: string; from: string; via: string }> {
-  return handleResponse(await apiFetch(`${API_BASE_URL}/platform/settings/test-email`, { method: "POST" }));
+export async function sendPlatformTestEmail(to?: string): Promise<{ sentTo: string; from: string; via: string }> {
+  return handleResponse(
+    await apiFetch(`${API_BASE_URL}/platform/settings/test-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to }),
+    }),
+  );
 }
 
 export async function addPlatformAdmin(email: string): Promise<PlatformSettingsView["platformAdmins"]> {

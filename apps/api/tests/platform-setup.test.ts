@@ -83,7 +83,8 @@ describe('Platform setup (server-wide settings for platform owners)', () => {
     expect((await workspaceMailer.getSettings(tenantId)).platformConfigured).toBe(true);
 
     // Nothing listens on port 1: the test email explains the failure
-    const test = await api(owner, 'POST', '/platform/settings/test-email');
+    expect((await api(owner, 'POST', '/platform/settings/test-email', { to: 'not-an-email' })).statusCode).toBe(422);
+    const test = await api(owner, 'POST', '/platform/settings/test-email', { to: 'delivered@resend.dev' });
     expect(test.statusCode).toBe(502);
     expect(JSON.parse(test.body).message).toMatch(/could not be sent/);
 

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Info, Send } from "lucide-react";
+import { CheckCircle2, Info } from "lucide-react";
 import { EmailDeliverySettingsInputSchema, type EmailDeliverySettingsInput, type SmtpSettings } from "@config-platform/schema";
 import { fetchEmailSettings, sendTestEmail, updateEmailSettings } from "../api/client";
 import { useStatusNotify } from "../context/app-bar-context";
+import { TestEmailControl } from "../components/test-email-control";
 
 const EMAIL_SETTINGS_KEY = ["email-settings"];
 
@@ -56,7 +57,7 @@ export function EmailSettingsPanel({ canEdit }: { canEdit: boolean }) {
   });
 
   const test = useMutation({
-    mutationFn: sendTestEmail,
+    mutationFn: (to: string) => sendTestEmail(to),
     onSuccess: (r) =>
       notify(
         r.via === "log" ? "info" : "success",
@@ -211,9 +212,7 @@ export function EmailSettingsPanel({ canEdit }: { canEdit: boolean }) {
           <button type="button" className="btn btn-primary" disabled={!changed || save.isPending} onClick={() => save.mutate()}>
             {save.isPending ? "Saving…" : "Save email settings"}
           </button>
-          <button type="button" className="btn btn-secondary" disabled={changed || test.isPending} onClick={() => test.mutate()} title={changed ? "Save first" : "Sends a test message to you"}>
-            {test.isPending ? <>Sending…</> : <><Send size="1em" /> Send me a test email</>}
-          </button>
+          <TestEmailControl disabled={changed} pending={test.isPending} onSend={(to) => test.mutate(to)} />
           {!changed && saved.mode === "smtp" && saved.smtp && (
             <span style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1)", fontSize: "var(--font-size-sm)", color: "var(--text-muted)" }}>
               <CheckCircle2 size="1em" /> Using {saved.smtp.fromAddress}

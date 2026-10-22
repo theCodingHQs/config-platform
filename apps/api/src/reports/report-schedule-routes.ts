@@ -6,6 +6,7 @@ import { hasMinRole } from '../auth/auth-types.js';
 import { auditLogService } from '../audit/audit-service.js';
 import { workspaceMailer } from '../email/workspace-mailer.js';
 import { reportScheduleService, ReportScheduleError } from './report-schedule-service.js';
+import { testRecipient } from '../platform/platform-routes.js';
 
 function sendError(reply: FastifyReply, err: unknown) {
   if (err instanceof ZodError) {
@@ -97,21 +98,23 @@ export async function reportScheduleRoutes(fastify: FastifyInstance) {
     return saved;
   });
 
-  /** Sends a test message to the signed-in admin with the saved settings. */
+  /** Sends a test message (to the typed address, else the signed-in admin) with the saved settings. */
   fastify.post(
     '/workspace/email-settings/test',
     { preHandler: csrfCheckHook, config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
     async (req: FastifyRequest, reply: FastifyReply) => {
-      const { tenantId, email, role } = req.session;
+      const { tenantId, role } = req.session;
       if (!hasMinRole(role, 'admin')) return forbidden(reply, 'Admin role or higher required');
+      const to = testRecipient(req);
+      if (!to) return reply.status(422).send({ statusCode: 422, error: 'Unprocessable Entity', message: 'Enter a valid email address to send the test to' });
       try {
         const sent = await workspaceMailer.send(tenantId, {
-          to: [email],
+          to: [to],
           subject: 'Test email: your report emails are set up',
           text: 'This is a test message. If you can read it, scheduled reports from this workspace will reach their recipients.',
           html: '<p style="font-family:Arial,Helvetica,sans-serif">This is a test message. If you can read it, scheduled reports from this workspace will reach their recipients.</p>',
         });
-        return { sentTo: email, from: sent.from, via: sent.via };
+        return { sentTo: to, from: sent.from, via: sent.via };
       } catch (err: any) {
         return reply.status(502).send({ statusCode: 502, error: 'Bad Gateway', message: `The test email could not be sent: ${err?.message || err}` });
       }

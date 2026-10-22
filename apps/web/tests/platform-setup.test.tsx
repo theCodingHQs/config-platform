@@ -57,7 +57,12 @@ describe('Platform setup screen', () => {
     });
     await waitFor(() => expect((screen.getByLabelText('Resend API key') as HTMLInputElement).value).toBe(''));
     expect(screen.getByLabelText('Resend API key').getAttribute('placeholder')).toBe('Saved (type to replace)');
-    expect(screen.getByRole('button', { name: /Send me a test email/ })).toBeTruthy();
+    // The test can go to any address (testing-mode services only deliver to some)
+    const send = vi.spyOn(apiClient, 'sendPlatformTestEmail').mockResolvedValue({ sentTo: 'delivered@resend.dev', from: 'x', via: 'platform-resend' });
+    expect((screen.getByLabelText('Send the test email to') as HTMLInputElement).value).toBe('owner@factoryapps.io');
+    fireEvent.change(screen.getByLabelText('Send the test email to'), { target: { value: 'delivered@resend.dev' } });
+    fireEvent.click(screen.getByRole('button', { name: /Send test email/ }));
+    await waitFor(() => expect(send).toHaveBeenCalledWith('delivered@resend.dev'));
   });
 
   it('shows settings from the server configuration as locked', async () => {

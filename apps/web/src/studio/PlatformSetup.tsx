@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { KeyRound, Lock, Mail, Send, Server, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
+import { KeyRound, Lock, Mail, Server, ShieldCheck, Trash2, UserPlus, Users } from "lucide-react";
 import {
   PlatformSettingsInputSchema,
   type PlatformEmailProvider,
@@ -17,6 +17,7 @@ import {
 } from "../api/client";
 import { useStatusNotify } from "../context/app-bar-context";
 import { useAuth } from "../context/auth-context";
+import { TestEmailControl } from "../components/test-email-control";
 
 const PLATFORM_KEY = ["platform-settings"];
 
@@ -150,7 +151,7 @@ function EmailServiceSection({ view }: { view: PlatformSettingsView }) {
   }, [e]);
 
   const test = useMutation({
-    mutationFn: sendPlatformTestEmail,
+    mutationFn: (to: string) => sendPlatformTestEmail(to),
     onSuccess: (r) => notify("success", `Test email sent to ${r.sentTo}. Check the inbox (and the spam folder).`),
     onError: (err: Error) => notify("error", err.message),
   });
@@ -277,9 +278,7 @@ function EmailServiceSection({ view }: { view: PlatformSettingsView }) {
               {save.isPending ? "Saving…" : "Save email service"}
             </button>
             {e.provider !== "none" && (
-              <button type="button" className="btn btn-secondary" disabled={changed || test.isPending} onClick={() => test.mutate()} title={changed ? "Save first" : "Sends a test message to you"}>
-                <Send size="1em" /> {test.isPending ? "Sending…" : "Send me a test email"}
-              </button>
+              <TestEmailControl disabled={changed} pending={test.isPending} onSend={(to) => test.mutate(to)} />
             )}
           </div>
         </>

@@ -147,6 +147,11 @@ describe('Scheduled report emails', () => {
     const ok = await api(admin, 'POST', '/workspace/email-settings/test');
     expect(ok.statusCode).toBe(200);
     expect(JSON.parse(ok.body)).toMatchObject({ sentTo: admin.email, via: 'log' });
+    // Or to an address typed on the screen
+    const typed = await api(admin, 'POST', '/workspace/email-settings/test', { to: 'delivered@resend.dev' });
+    expect(JSON.parse(typed.body)).toMatchObject({ sentTo: 'delivered@resend.dev' });
+    expect(devOutbox.at(-1)!.to).toEqual(['delivered@resend.dev']);
+    expect((await api(admin, 'POST', '/workspace/email-settings/test', { to: 'nope' })).statusCode).toBe(422);
   }, 60000);
 
   it('schedules can be paused and deleted', async () => {

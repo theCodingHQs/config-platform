@@ -1,8 +1,15 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
 import { csrfCheckHook } from '../auth/session-middleware.js';
 import { auditLogService } from '../audit/audit-service.js';
 import { platformSettings, PlatformSettingsError } from './platform-settings.js';
+
+/** The address a test email goes to: the one typed on the screen, else the signed-in person */
+export function testRecipient(req: FastifyRequest): string | null {
+  const typed = String((req.body as any)?.to ?? '').trim();
+  const to = typed || req.session.email;
+  return z.string().email().safeParse(to).success ? to : null;
+}
 
 /** Platform setup: server-wide settings, for platform owners only (whatever their workspace role). */
 export async function platformRoutes(fastify: FastifyInstance) {
@@ -49,15 +56,17 @@ export async function platformRoutes(fastify: FastifyInstance) {
     '/platform/settings/test-email',
     { preHandler: [csrfCheckHook, requireOwner], config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
     async (req, reply) => {
+      const to = testRecipient(req);
+      if (!to) return reply.status(422).send({ statusCode: 422, error: 'Unprocessable Entity', message: 'Enter a valid email address to send the test to' });
       try {
         const sent = await platformSettings.send({
-          to: [req.session.email],
+          to: [to],
           subject: 'Test email: the platform can send email',
           text: 'This is a test message from Platform setup. Invites, confirmations and report emails will be sent this way.',
           html: '<p style="font-family:Arial,Helvetica,sans-serif">This is a test message from Platform setup. Invites, confirmations and report emails will be sent this way.</p>',
         });
         if (!sent) return reply.status(409).send({ statusCode: 409, error: 'Conflict', message: 'Choose an email service and save it first.' });
-        return { sentTo: req.session.email, from: sent.from, via: sent.via };
+        return { sentTo: to, from: sent.from, via: sent.via };
       } catch (err: any) {
         return reply.status(502).send({ statusCode: 502, error: 'Bad Gateway', message: `The test email could not be sent: ${err?.message || err}` });
       }
