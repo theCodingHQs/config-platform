@@ -49,6 +49,9 @@ describe('Page chart component (ECharts)', () => {
     const rows = within(table).getAllByRole('row').slice(1).map((row) => row.textContent);
     expect(rows).toEqual(['A15', 'B7']);
     expect(screen.getByTestId('chart-plot')).toHaveAttribute('aria-label', 'Output by line: 2 categories');
+    // Can shrink with the window: the drawn chart doesn't hold the card at its old width
+    expect(screen.getByTestId('chart-container').style.minWidth).toBe('0');
+    expect(screen.getByTestId('chart-plot').style.overflow).toBe('hidden');
     // Grouped and summed on the server (no record limit), not from a loaded page of rows
     expect(spy).toHaveBeenCalledWith('t_machine', { op: 'sum', field: 'output', groupBy: 'line', filter: undefined });
     expect(screen.queryByText(/Showing the first/)).toBeNull();

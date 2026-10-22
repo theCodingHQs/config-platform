@@ -1121,8 +1121,10 @@ input:-webkit-autofill:active {
     z-index: 15;
   }
 
+  /* minmax(0, …): a plain 1fr column can't get narrower than its widest content, so a chart
+     drawn at the old width kept the column (and the page) wide after the window shrank */
   .layout-grid.responsive-collapse {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: minmax(0, 1fr) !important;
   }
 }
 

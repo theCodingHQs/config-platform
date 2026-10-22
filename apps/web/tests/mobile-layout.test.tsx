@@ -87,4 +87,15 @@ describe('Phones and tablets', () => {
       expect(phoneSelectors).toContain(selector);
     }
   });
+
+  it('layouts shrink with the window (no sideways scroll after making it narrower)', () => {
+    const css = fs.readFileSync(path.resolve(__dirname, '../src/index.css'), 'utf8');
+    const root = postcss.parse(css);
+    let collapsed = '';
+    root.walkRules('.layout-grid.responsive-collapse', (rule) => {
+      rule.walkDecls('grid-template-columns', (d) => { collapsed = d.value; });
+    });
+    // A plain 1fr column can't be narrower than its content (e.g. a chart drawn at the old width)
+    expect(collapsed).toMatch(/^minmax\(0, 1fr\)/);
+  });
 });

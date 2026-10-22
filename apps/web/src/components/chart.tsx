@@ -268,7 +268,9 @@ export const ChartComponent: React.FC<ChartProps> = ({
         gap: "var(--spacing-3)",
         flex: flex !== undefined ? flex : undefined,
         width: widthValue,
-        minWidth: minWidth !== undefined ? (typeof minWidth === 'number' ? `${minWidth}px` : minWidth) : undefined,
+        // 0 by default: the drawn chart has a fixed pixel width, which must not stop the card
+        // from shrinking with the window (the chart then redraws at the new width)
+        minWidth: minWidth !== undefined ? (typeof minWidth === 'number' ? `${minWidth}px` : minWidth) : 0,
         maxWidth: maxWidth !== undefined ? (typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth) : undefined,
         alignSelf,
         minHeight: "320px",
@@ -310,7 +312,9 @@ export const ChartComponent: React.FC<ChartProps> = ({
             data-testid="chart-plot"
             role="img"
             aria-label={`${title || "Chart"}: ${chartData.labels.length} ${chartData.labels.length === 1 ? "category" : "categories"}`}
-            style={{ position: "relative", width: "100%", height: "280px" }}
+            // overflow hidden: until the redraw, the previous (wider) drawing is clipped, not
+            // pushing the page sideways
+            style={{ position: "relative", width: "100%", minWidth: 0, height: "280px", overflow: "hidden" }}
           />
           {groupsTruncated && (
             <p style={{ margin: 0, fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
