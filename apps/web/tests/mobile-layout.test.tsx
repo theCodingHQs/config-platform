@@ -4,6 +4,7 @@ import { render, screen, within, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import fs from 'node:fs';
 import path from 'node:path';
+import postcss from 'postcss';
 import type { ErdTable } from '@config-platform/schema';
 import { TableComponent } from '../src/components/table';
 import { MetadataProvider } from '../src/context/metadata-context';
@@ -73,5 +74,17 @@ describe('Phones and tablets', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Menu' }));
     fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: /Date & time preferences/ }));
     expect(screen.getByRole('dialog', { name: 'Date & time preferences' })).toBeInTheDocument();
+  });
+
+  it('the stylesheet parses, and the phone rules sit inside the phone media query', () => {
+    const css = fs.readFileSync(path.resolve(__dirname, '../src/index.css'), 'utf8');
+    const root = postcss.parse(css); // throws on syntax errors (an unbalanced brace broke the build once)
+    const phoneSelectors: string[] = [];
+    root.walkAtRules('media', (rule) => {
+      if (rule.params === '(max-width: 640px)') rule.walkRules((r) => { phoneSelectors.push(r.selector); });
+    });
+    for (const selector of ['.data-table.responsive-cards td[data-label]::before', '.table-container:has(> .data-table.responsive-cards)', '.runtime-modal', '.header-desktop-controls', '.layout-stack[data-direction="horizontal"]']) {
+      expect(phoneSelectors).toContain(selector);
+    }
   });
 });

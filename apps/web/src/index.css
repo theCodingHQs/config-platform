@@ -1294,14 +1294,6 @@ input:-webkit-autofill:active {
     min-width: 0;
     gap: var(--space-2) !important;
   }
-}
-
-/* Very narrow phones: the brand keeps its icon only */
-@media (max-width: 400px) {
-  .header-brand-text {
-    display: none;
-  }
-}
 
   /* Rows of controls (title + button, filters) wrap instead of overflowing */
   .layout-stack[data-direction="horizontal"] {
@@ -1311,6 +1303,18 @@ input:-webkit-autofill:active {
   /* Tables: one card per record, each value labelled with its column */
   .data-table.responsive-cards thead {
     display: none;
+  }
+
+  /* The cards are the frame: the table's own border and background would hug them */
+  .table-container:has(> .data-table.responsive-cards) {
+    border: 0;
+    border-radius: var(--radius-none);
+    background-color: transparent;
+    overflow-x: visible;
+  }
+
+  .data-table.responsive-cards tr:last-child {
+    margin-bottom: 0;
   }
 
   .data-table.responsive-cards,
@@ -1364,6 +1368,13 @@ input:-webkit-autofill:active {
     height: 100%;
     border-radius: var(--radius-none) !important;
     border: 0 !important;
+  }
+}
+
+/* Very narrow phones: the brand keeps its icon only */
+@media (max-width: 400px) {
+  .header-brand-text {
+    display: none;
   }
 }
 
