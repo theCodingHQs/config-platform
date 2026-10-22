@@ -4,6 +4,8 @@ import type {
   AddFieldInput,
   UpdateFieldInput,
   DropFieldInput,
+  SetUniqueRulesInput,
+  UniqueRule,
   DropEntityInput,
   AddRelationInput,
   MigrationResult,
@@ -28,8 +30,23 @@ import {
 } from './ddl-generator.js';
 import { tenantMigrationQueue } from './queue.js';
 import { entityCache } from '../records/entity-cache.js';
+import { calculatedFieldsService, CalculatedFieldError } from '../records/calculated-fields-service.js';
 import { pool } from '../db/pool.js';
 import crypto from 'node:crypto';
+
+/** A unique-combination change that can't be applied (409, with a readable reason). */
+export class UniqueRuleError extends Error {
+  public statusCode = 409;
+  constructor(message: string) {
+    super(message);
+    this.name = 'Conflict';
+  }
+}
+
+function formatKeyValue(value: unknown): string {
+  if (value instanceof Date) return value.toISOString().slice(0, 10);
+  return value === null || value === undefined ? '(empty)' : String(value);
+}
 
 export class OptimisticLockError extends Error {
   constructor(entityId: string, expectedVersion: number, currentVersion: number) {
@@ -115,7 +132,11 @@ export class MigrationService {
     tenantId: string,
     input: CreateEntityInput
   ): Promise<MigrationResult & { entity: EntityDef; fields: FieldDef[] }> {
-    return tenantMigrationQueue.enqueue(tenantId, async () => {
+    // Formulas in a new entity are checked before anything is created
+    if (input.fields?.some((f: any) => f.config?.formula)) {
+      await calculatedFieldsService.plan(tenantId, input.fields as any);
+    }
+    const result = await tenantMigrationQueue.enqueue(tenantId, async () => {
       return this.storage.transaction(tenantId, async (tx) => {
         // Check uniqueness of entity name in tenant
         const existing = await tx.client.query(
@@ -198,6 +219,7 @@ export class MigrationService {
         };
       });
     });
+    return result;
   }
 
   /**
@@ -330,7 +352,13 @@ export class MigrationService {
     tenantId: string,
     input: AddFieldInput
   ): Promise<MigrationResult & { field: FieldDef }> {
-    return tenantMigrationQueue.enqueue(tenantId, async () => {
+    // A calculated field must have a valid formula before its column is created
+    const addsFormula = Boolean((input.config as any)?.formula);
+    if (addsFormula) {
+      const current = await entityCache.resolveEntity(tenantId, input.entityId);
+      await calculatedFieldsService.plan(tenantId, [...current.fields, { name: input.name, type: input.type, config: input.config } as any]);
+    }
+    const result = await tenantMigrationQueue.enqueue(tenantId, async () => {
       return this.storage.transaction(tenantId, async (tx) => {
         const entityRes = await tx.client.query<{
           id: string;
@@ -426,6 +454,9 @@ export class MigrationService {
         };
       });
     });
+    // Existing records get the new field's value
+    if (addsFormula) await calculatedFieldsService.recalculate(tenantId, input.entityId);
+    return result;
   }
 
   /**
@@ -435,7 +466,30 @@ export class MigrationService {
     tenantId: string,
     input: UpdateFieldInput
   ): Promise<MigrationResult & { field: FieldDef }> {
-    return tenantMigrationQueue.enqueue(tenantId, async () => {
+    // Formulas are checked against the field as it will be; renaming a field other formulas use
+    // would break them, so it's refused with the list of formulas
+    const before = await entityCache.resolveEntity(tenantId, input.entityId);
+    const currentField = before.fieldById.get(input.fieldId);
+    let formulaChanged = false;
+    if (currentField) {
+      const nextName = input.name ?? currentField.name;
+      if (nextName !== currentField.name) {
+        const usages = await calculatedFieldsService.usagesOf(tenantId, before, currentField.name);
+        if (usages.length) {
+          throw new CalculatedFieldError(`Can't rename '${currentField.name}': it's used by ${usages.join(', ')}. Update those formulas first.`);
+        }
+      }
+      const nextField = {
+        ...currentField,
+        name: nextName,
+        type: input.type ?? currentField.type,
+        config: input.config !== undefined ? input.config : currentField.config,
+      };
+      const prospective = before.fields.map((f) => (f.id === currentField.id ? nextField : f));
+      if (prospective.some((f) => (f.config as any)?.formula)) await calculatedFieldsService.plan(tenantId, prospective as any);
+      formulaChanged = (currentField.config as any)?.formula !== (nextField.config as any)?.formula;
+    }
+    const result = await tenantMigrationQueue.enqueue(tenantId, async () => {
       return this.storage.transaction(tenantId, async (tx) => {
         // Lock entity and check optimistic locking
         const entityRes = await tx.client.query<{
@@ -582,6 +636,106 @@ export class MigrationService {
         };
       });
     });
+    // New or changed formula: recalculate every record
+    if (formulaChanged) await calculatedFieldsService.recalculate(tenantId, input.entityId);
+    return result;
+  }
+
+  /**
+   * Field combinations no two records may share (e.g. Machine + Month). Replaces the entity's
+   * whole list: new rules get a unique index (refused, with examples, when existing records
+   * already break them); removed rules drop theirs.
+   */
+  async setUniqueRules(
+    tenantId: string,
+    input: SetUniqueRulesInput
+  ): Promise<MigrationResult & { uniqueRules: UniqueRule[] }> {
+    return tenantMigrationQueue.enqueue(tenantId, async () => {
+      return this.storage.transaction(tenantId, async (tx) => {
+        const entityRes = await tx.client.query<{ id: string; version: number; label: string; physical_table_name: string; unique_rules: UniqueRule[] }>(
+          `SELECT id, version, label, physical_table_name, unique_rules FROM public.entity_def WHERE id = $1 AND tenant_id = $2 FOR UPDATE`,
+          [input.entityId, tenantId]
+        );
+        if (entityRes.rows.length === 0) throw new Error(`Entity not found: ${input.entityId}`);
+        const entity = entityRes.rows[0];
+        if (entity.version !== input.expectedVersion) {
+          throw new OptimisticLockError(input.entityId, input.expectedVersion, entity.version);
+        }
+
+        const fieldsRes = await tx.client.query<{ id: string; label: string; physical_column_name: string }>(
+          `SELECT id, label, physical_column_name FROM public.field_def WHERE entity_id = $1`,
+          [input.entityId]
+        );
+        const fieldById = new Map(fieldsRes.rows.map((f) => [f.id, f]));
+        const table = `"${tx.schemaName}"."${entity.physical_table_name}"`;
+        const indexName = (rule: UniqueRule) => `uq_${entity.physical_table_name}_${rule.id}`.slice(0, 63);
+
+        // Normalise: known fields, no repeats within a rule, no two identical rules
+        const seen = new Set<string>();
+        const next: UniqueRule[] = [];
+        for (const rule of input.rules) {
+          const fields = [...new Set(rule.fields)];
+          for (const fieldId of fields) {
+            if (!fieldById.has(fieldId)) throw new UniqueRuleError(`Unknown field '${fieldId}' in a unique combination`);
+          }
+          const key = [...fields].sort().join('+');
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const existing = (entity.unique_rules || []).find((r) => r.id === rule.id);
+          next.push({ id: existing?.id ?? crypto.randomBytes(5).toString('hex'), fields });
+        }
+
+        const ddl: string[] = [];
+        // Removed (or changed) rules lose their index
+        for (const old of entity.unique_rules || []) {
+          const kept = next.find((r) => r.id === old.id);
+          if (!kept || kept.fields.join() !== old.fields.join()) {
+            const sql = `DROP INDEX IF EXISTS "${tx.schemaName}"."${indexName(old)}";`;
+            await tx.execute(sql);
+            ddl.push(sql);
+          }
+        }
+        // New (or changed) rules: refuse if records already share the combination
+        for (const rule of next) {
+          const old = (entity.unique_rules || []).find((r) => r.id === rule.id);
+          if (old && old.fields.join() === rule.fields.join()) continue;
+          const cols = rule.fields.map((id) => `"${fieldById.get(id)!.physical_column_name}"`);
+          const dupes = await tx.client.query(
+            `SELECT ${cols.map((c, i) => `${c} AS v${i}`).join(', ')}, COUNT(*)::int AS n
+               FROM ${table} WHERE ${cols.map((c) => `${c} IS NOT NULL`).join(' AND ')}
+              GROUP BY ${cols.join(', ')} HAVING COUNT(*) > 1 ORDER BY COUNT(*) DESC LIMIT 3`
+          );
+          if (dupes.rows.length > 0) {
+            const labels = rule.fields.map((id) => fieldById.get(id)!.label).join(' + ');
+            const examples = dupes.rows
+              .map((row: any) => `${rule.fields.map((_, i) => formatKeyValue(row[`v${i}`])).join(' / ')} (${row.n} records)`)
+              .join('; ');
+            throw new UniqueRuleError(
+              `${entity.label} already has records sharing the same ${labels}: ${examples}. Fix or remove those duplicates first.`
+            );
+          }
+          const sql = `CREATE UNIQUE INDEX "${indexName(rule)}" ON ${table} (${cols.join(', ')});`;
+          await tx.execute(sql);
+          ddl.push(sql);
+        }
+
+        await tx.client.query(
+          `UPDATE public.entity_def SET unique_rules = $1, version = version + 1, updated_at = NOW() WHERE id = $2`,
+          [JSON.stringify(next), input.entityId]
+        );
+        const ddlText = ddl.length ? ddl.join('\n') : `-- Unique combinations unchanged for ${input.entityId}`;
+        const { migrationId, version } = await this.recordMigration(tx, ddlText);
+        return {
+          success: true,
+          migrationId,
+          version,
+          ddl: ddlText,
+          appliedAt: new Date().toISOString(),
+          entityId: input.entityId,
+          uniqueRules: next,
+        };
+      });
+    });
   }
 
   /**
@@ -591,7 +745,21 @@ export class MigrationService {
     tenantId: string,
     input: DropFieldInput
   ): Promise<MigrationResult> {
-    return tenantMigrationQueue.enqueue(tenantId, async () => {
+    // A field other formulas use can't be deleted (their values would silently break)
+    const owner = await entityCache.resolveEntity(tenantId, input.entityId);
+    const dropping = owner.fieldById.get(input.fieldId);
+    if (dropping) {
+      const usages = await calculatedFieldsService.usagesOf(tenantId, owner, dropping.name);
+      if (usages.length) {
+        throw new CalculatedFieldError(`Can't delete '${dropping.name}': it's used by ${usages.join(', ')}. Update those formulas first.`);
+      }
+      const inRule = ((owner.entity as any).uniqueRules || []).find((rule: UniqueRule) => rule.fields.includes(dropping.id));
+      if (inRule) {
+        const labels = inRule.fields.map((id: string) => owner.fieldById.get(id)?.label ?? id).join(' + ');
+        throw new UniqueRuleError(`Can't delete '${dropping.name}': it's part of the unique combination ${labels}. Remove that rule first.`);
+      }
+    }
+    const result = await tenantMigrationQueue.enqueue(tenantId, async () => {
       return this.storage.transaction(tenantId, async (tx) => {
         const entityRes = await tx.client.query<{
           id: string;
@@ -659,6 +827,7 @@ export class MigrationService {
         };
       });
     });
+    return result;
   }
 
   /**

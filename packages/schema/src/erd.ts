@@ -30,6 +30,8 @@ export const ErdTableSchema = z.object({
   version: z.number(),
   displayFieldId: z.string().nullable().optional(),
   icon: z.string().nullable().optional(),
+  /** Field combinations no two records may share (see UniqueRuleSchema) */
+  uniqueRules: z.array(z.object({ id: z.string(), fields: z.array(z.string()) })).optional(),
   columns: z.array(ErdColumnSchema),
   fields: z.array(ErdColumnSchema).optional(),
 });

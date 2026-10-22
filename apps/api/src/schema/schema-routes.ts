@@ -4,6 +4,7 @@ import {
   UpdateEntityInputSchema,
   AddFieldInputSchema,
   UpdateFieldInputSchema,
+  SetUniqueRulesInputSchema,
   DropFieldInputSchema,
   DropEntityInputSchema,
   AddRelationInputSchema,
@@ -83,6 +84,30 @@ export async function schemaRoutes(fastify: FastifyInstance) {
   });
 
   // PUT /schema/entities/:id - Update entity (builder+)
+  // PUT /schema/entities/:id/unique-rules - Field combinations no two records may share (builder+)
+  fastify.put('/schema/entities/:id/unique-rules', {
+    preHandler: csrfCheckHook,
+  }, async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!requireBuilder(req, reply)) return;
+    const { tenantId } = req.session;
+    const { id } = req.params as { id: string };
+    const parsed = SetUniqueRulesInputSchema.safeParse({ ...(req.body as any), entityId: id });
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.format() });
+    }
+    const result = await migrationService.setUniqueRules(tenantId, parsed.data);
+    await auditLogService.log({
+      tenantId,
+      userId: req.session.userId,
+      userEmail: req.session.email,
+      action: 'entity.unique_rules.update',
+      entityType: 'entity',
+      entityId: id,
+      afterState: { uniqueRules: result.uniqueRules },
+    });
+    return result;
+  });
+
   fastify.put('/schema/entities/:id', {
     preHandler: csrfCheckHook,
   }, async (req: FastifyRequest, reply: FastifyReply) => {

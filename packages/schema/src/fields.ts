@@ -75,6 +75,8 @@ export const FieldConfigSchema = z.object({
   includeTime: z.boolean().optional(),
   defaultNow: z.boolean().optional(),
   granularity: z.enum(['day', 'month']).optional(),
+  // Calculated (number, text, yes/no): the value comes from this formula, never from input
+  formula: z.string().max(500).optional(),
   // Common
   defaultValue: z.any().optional(),
 }).passthrough();

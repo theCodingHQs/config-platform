@@ -20,6 +20,8 @@ import { DynamicIcon } from '../components/dynamic-icon';
 import { IconPicker } from '../components/icon-picker';
 import { useStatusNotify } from '../context/app-bar-context';
 import { ImportDataModal } from './ImportDataModal';
+import { FormulaEditor, canBeCalculated } from './FormulaEditor';
+import { UniqueRulesPanel } from './UniqueRulesPanel';
 
 export const EntityManager: React.FC = () => {
   const { tenantId } = useMetadata();
@@ -51,6 +53,8 @@ export const EntityManager: React.FC = () => {
   const [fieldRefTarget, setFieldRefTarget] = useState('');
   /** Date fields: a calendar date, a month, or a moment (date & time). */
   const [fieldDateKind, setFieldDateKind] = useState<DateKind>('day');
+  /** Calculated field formula; null = the value is entered by people. */
+  const [fieldFormula, setFieldFormula] = useState<string | null>(null);
 
   // Queries
   const { data: entities = [], isLoading, refetch } = useQuery<ErdTable[]>({
@@ -199,6 +203,10 @@ export const EntityManager: React.FC = () => {
       } else if (fieldType === 'date') {
         config = dateKindToConfig(fieldDateKind, config);
       }
+      if (canBeCalculated(fieldType)) {
+        if (fieldFormula !== null) config.formula = fieldFormula.trim();
+        else delete config.formula;
+      }
       return addField(tenantId, selectedEntity.id, {
         name: fieldName,
         label: fieldLabel,
@@ -235,6 +243,10 @@ export const EntityManager: React.FC = () => {
         config.targetEntityId = fieldRefTarget;
       } else if (fieldType === 'date') {
         config = dateKindToConfig(fieldDateKind, config);
+      }
+      if (canBeCalculated(fieldType)) {
+        if (fieldFormula !== null) config.formula = fieldFormula.trim();
+        else delete config.formula;
       }
       return updateField(tenantId, selectedEntity.id, editingField.id, {
         label: fieldLabel,
@@ -309,6 +321,7 @@ export const EntityManager: React.FC = () => {
     setFieldSelectOptions('Option 1, Option 2');
     setFieldRefTarget('');
     setFieldDateKind('day');
+    setFieldFormula(null);
   };
 
   const openEditFieldModal = (f: ErdColumn) => {
@@ -328,6 +341,7 @@ export const EntityManager: React.FC = () => {
       setFieldRefTarget('');
     }
     setFieldDateKind(dateKindOf(f.config));
+    setFieldFormula(f.config?.formula ?? null);
   };
 
   return (
@@ -573,7 +587,12 @@ export const EntityManager: React.FC = () => {
                           <td style={{ fontWeight: 500 }}>{col.label}</td>
                           <td style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: "var(--font-size-sm)" }}>{col.name}</td>
                           <td>
-                            <span className="badge">{col.type}</span>
+                            <span className="badge">{FIELD_TYPE_LABELS[col.type] ?? col.type}</span>
+                            {col.config?.formula && (
+                              <span className="badge badge-success" title={col.config.formula} style={{ marginLeft: 'var(--space-1)' }}>
+                                Calculated
+                              </span>
+                            )}
                           </td>
                           <td style={{ color: 'var(--text-muted)', fontFamily: 'monospace', fontSize: "var(--font-size-xs)" }}>{col.id}</td>
                           <td>{col.required ? <span className="badge badge-success">Required</span> : <span style={{ color: 'var(--text-muted)' }}>Optional</span>}</td>
@@ -608,7 +627,7 @@ export const EntityManager: React.FC = () => {
                                   style={{ padding: '0.25rem 0.5rem', fontSize: "var(--font-size-xs)" }}
                                   onClick={() => openEditFieldModal(col)}
                                 >
-                                  Rename
+                                  Edit
                                 </button>
                                 <button
                                   type="button"
@@ -633,6 +652,8 @@ export const EntityManager: React.FC = () => {
                 </tbody>
               </table>
             </div>
+
+            <UniqueRulesPanel entity={selectedEntity} tenantId={tenantId} />
           </div>
         ) : entities.length === 0 ? (
           <div
@@ -891,6 +912,14 @@ export const EntityManager: React.FC = () => {
               <DateKindField id="add-field-date-kind" value={fieldDateKind} onChange={setFieldDateKind} />
             )}
 
+            <FormulaEditor
+              idPrefix="add-field"
+              fieldType={fieldType}
+              formula={fieldFormula}
+              onChange={setFieldFormula}
+              otherFields={selectedEntity?.columns ?? []}
+            />
+
             {fieldType === 'reference' && (
               <div>
                 <label className="form-label" htmlFor="add-field-target" style={{ fontSize: 'var(--font-size-xs)' }}>Target Entity</label>
@@ -921,7 +950,7 @@ export const EntityManager: React.FC = () => {
       {editingField && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--overlay-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
           <div style={{ backgroundColor: 'var(--surface)', padding: 'var(--space-6)', borderRadius: 'var(--radius-surface)', width: '420px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)', border: 'var(--border-width) solid var(--border)', boxShadow: 'var(--shadow-xl)' }}>
-            <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>Rename Field ({editingField.id})</h3>
+            <h3 style={{ margin: 0, fontSize: 'var(--font-size-lg)', fontWeight: 600 }}>Edit Field: {editingField.label}</h3>
             <div>
               <label className="form-label" htmlFor="edit-field-label" style={{ fontSize: 'var(--font-size-xs)' }}>Field Label</label>
               <input
@@ -952,6 +981,13 @@ export const EntityManager: React.FC = () => {
                 lockedToDateTime={dateKindOf(editingField.config) === 'datetime'}
               />
             )}
+            <FormulaEditor
+              idPrefix="edit-field"
+              fieldType={editingField.type}
+              formula={fieldFormula}
+              onChange={setFieldFormula}
+              otherFields={(selectedEntity?.columns ?? []).filter((c) => c.id !== editingField.id)}
+            />
             {editingField.type === 'select' && (
               <div>
                 <label className="form-label" htmlFor="edit-field-options" style={{ fontSize: 'var(--font-size-xs)' }}>Select Options (comma-separated)</label>
@@ -1033,3 +1069,13 @@ function DateKindField({
     </div>
   );
 }
+
+/** Field types as people know them (the same names as on the Permissions screen). */
+const FIELD_TYPE_LABELS: Record<string, string> = {
+  text: 'Text',
+  number: 'Number',
+  boolean: 'Yes / No',
+  date: 'Date',
+  select: 'Choice',
+  reference: 'Link',
+};

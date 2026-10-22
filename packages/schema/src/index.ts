@@ -7,6 +7,7 @@ export * from './page.js';
 export * from './action.js';
 export * from './data-source.js';
 export * from './expression.js';
+export * from './calculated-fields.js';
 export * from './migrator.js';
 export * from './theme.js';
 export * from './icons.js';

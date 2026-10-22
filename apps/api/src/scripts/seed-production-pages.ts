@@ -20,6 +20,7 @@
  */
 
 import { pool } from '../db/pool.js';
+import { calculatedFieldsService } from '../records/calculated-fields-service.js';
 import { initializeMetadataCatalog } from '../db/catalog-init.js';
 import { migrationService } from '../migrations/migration-service.js';
 import { recordsService } from '../records/records-service.js';
@@ -62,12 +63,21 @@ const MACHINE_EXTRA_FIELDS: FieldSpec[] = [
   { name: 'commissioned_on', label: 'Commissioned On', type: 'date' },
 ];
 
+/** Calculated sheet fields: looked up from the machine, or totals of the day checkboxes. */
+const SHEET_FORMULAS: Record<string, string> = {
+  machine_name: 'machine.name',
+  work_center: 'machine.work_center',
+  days_met: 'countTrue(range("day_01", "day_31"))',
+  gap_days: 'max(planned_days - days_met, 0)',
+  attainment_pct: 'if(planned_days > 0, round(days_met * 100 / planned_days, 1), 0)',
+};
+
 const SHEET_EXTRA_FIELDS: FieldSpec[] = [
-  { name: 'machine_name', label: 'Machine Name', type: 'text' },
-  { name: 'work_center', label: 'Work Center', type: 'text' },
-  { name: 'days_met', label: 'Days on Target', type: 'number', config: { precision: 4, scale: 0 } },
-  { name: 'gap_days', label: 'Gap (days)', type: 'number', config: { precision: 4, scale: 0 } },
-  { name: 'attainment_pct', label: 'Attainment %', type: 'number', config: { precision: 5, scale: 1 } },
+  { name: 'machine_name', label: 'Machine Name', type: 'text', config: { formula: SHEET_FORMULAS.machine_name } },
+  { name: 'work_center', label: 'Work Center', type: 'text', config: { formula: SHEET_FORMULAS.work_center } },
+  { name: 'days_met', label: 'Days on Target', type: 'number', config: { precision: 4, scale: 0, formula: SHEET_FORMULAS.days_met } },
+  { name: 'gap_days', label: 'Gap (days)', type: 'number', config: { precision: 4, scale: 0, formula: SHEET_FORMULAS.gap_days } },
+  { name: 'attainment_pct', label: 'Attainment %', type: 'number', config: { precision: 5, scale: 1, formula: SHEET_FORMULAS.attainment_pct } },
   { name: 'notes', label: 'Notes', type: 'text' },
 ];
 
@@ -115,52 +125,59 @@ async function ensureEntityPresentation(tenantId: string, entity: any, icon: str
   });
 }
 
-/** Keeps production_sheet's derived fields in sync with its day checkboxes and machine. */
-async function installDerivedFieldTriggers(tenantId: string, machine: any, sheet: any) {
+/**
+ * Production sheet totals and machine details as calculated fields (formulas the platform keeps
+ * up to date), and "one sheet per machine per month" as a duplicate rule. Older installs used
+ * hand-written database triggers for this; those are removed so values aren't computed twice.
+ * Returns how many sheets were recalculated.
+ */
+async function setupCalculatedSheetFields(tenantId: string, sheet: any): Promise<number> {
   const schema = defaultStorageAdapter.getTenantSchemaName(tenantId);
-  const mc = (n: string) => `"${machine.fields.find((f: any) => f.name === n).physicalColumnName}"`;
-  const sc = (n: string) => `"${sheet.fields.find((f: any) => f.name === n).physicalColumnName}"`;
-  const machineTable = `"${schema}"."${machine.entity.physicalTableName}"`;
-  const sheetTable = `"${schema}"."${sheet.entity.physicalTableName}"`;
-  const metExpr = Array.from({ length: 31 }, (_, d) => `(CASE WHEN NEW.${sc(productionDayField(d + 1))} THEN 1 ELSE 0 END)`).join(' + ');
-
   await pool.query(`
-    CREATE OR REPLACE FUNCTION "${schema}".production_sheet_derive() RETURNS trigger AS $fn$
-    DECLARE met integer;
-    BEGIN
-      met := ${metExpr};
-      NEW.${sc('days_met')} := met;
-      NEW.${sc('gap_days')} := GREATEST(COALESCE(NEW.${sc('planned_days')}, 0) - met, 0);
-      NEW.${sc('attainment_pct')} := CASE WHEN COALESCE(NEW.${sc('planned_days')}, 0) > 0
-        THEN ROUND(met * 100.0 / NEW.${sc('planned_days')}, 1) ELSE 0 END;
-      SELECT m.${mc('name')}, m.${mc('work_center')}
-        INTO NEW.${sc('machine_name')}, NEW.${sc('work_center')}
-        FROM ${machineTable} m WHERE m.id = NEW.${sc('machine')};
-      RETURN NEW;
-    END
-    $fn$ LANGUAGE plpgsql;
-
-    DROP TRIGGER IF EXISTS trg_production_sheet_derive ON ${sheetTable};
-    CREATE TRIGGER trg_production_sheet_derive BEFORE INSERT OR UPDATE ON ${sheetTable}
-      FOR EACH ROW EXECUTE FUNCTION "${schema}".production_sheet_derive();
-
-    CREATE OR REPLACE FUNCTION "${schema}".machine_propagate_to_sheets() RETURNS trigger AS $fn$
-    BEGIN
-      IF NEW.${mc('name')} IS DISTINCT FROM OLD.${mc('name')}
-         OR NEW.${mc('work_center')} IS DISTINCT FROM OLD.${mc('work_center')} THEN
-        UPDATE ${sheetTable} SET ${sc('machine')} = ${sc('machine')} WHERE ${sc('machine')} = NEW.id;
-      END IF;
-      RETURN NEW;
-    END
-    $fn$ LANGUAGE plpgsql;
-
-    DROP TRIGGER IF EXISTS trg_machine_propagate_to_sheets ON ${machineTable};
-    CREATE TRIGGER trg_machine_propagate_to_sheets AFTER UPDATE ON ${machineTable}
-      FOR EACH ROW EXECUTE FUNCTION "${schema}".machine_propagate_to_sheets();
+    DROP TRIGGER IF EXISTS trg_production_sheet_derive ON "${schema}"."${sheet.entity.physicalTableName}";
+    DROP FUNCTION IF EXISTS "${schema}".production_sheet_derive();
   `);
-  // Backfill existing sheets through the trigger
-  const res = await pool.query(`UPDATE ${sheetTable} SET ${sc('machine')} = ${sc('machine')}`);
-  return res.rowCount ?? 0;
+  const machineEntity = (sheet.fields.find((f: any) => f.name === 'machine')?.config as any)?.targetEntityId;
+  if (machineEntity) {
+    const machine = await entityCache.resolveEntity(tenantId, machineEntity);
+    await pool.query(`
+      DROP TRIGGER IF EXISTS trg_machine_propagate_to_sheets ON "${schema}"."${machine.entity.physicalTableName}";
+      DROP FUNCTION IF EXISTS "${schema}".machine_propagate_to_sheets();
+    `);
+  }
+
+  // Existing installs: turn the derived fields into calculated ones (each change recalculates)
+  for (const [name, formula] of Object.entries(SHEET_FORMULAS)) {
+    const field = sheet.fields.find((f: any) => f.name === name);
+    if (!field || (field.config as any)?.formula === formula) continue;
+    await migrationService.updateField(tenantId, {
+      entityId: sheet.entity.id,
+      fieldId: field.id,
+      expectedVersion: await entityVersion(tenantId, sheet.entity.id),
+      config: { ...(field.config || {}), formula },
+    });
+  }
+  const recalculated = await calculatedFieldsService.recalculate(tenantId, sheet.entity.id);
+
+  // One sheet per machine per month
+  const current = await entityByName(tenantId, 'production_sheet');
+  const machineField = current!.fields.find((f: any) => f.name === 'machine');
+  const monthField = current!.fields.find((f: any) => f.name === 'month');
+  const rules = ((current!.entity as any).uniqueRules || []) as Array<{ id: string; fields: string[] }>;
+  const hasRule = rules.some((r) => r.fields.length === 2 && r.fields.includes(machineField!.id) && r.fields.includes(monthField!.id));
+  if (machineField && monthField && !hasRule) {
+    try {
+      await migrationService.setUniqueRules(tenantId, {
+        entityId: current!.entity.id,
+        expectedVersion: await entityVersion(tenantId, current!.entity.id),
+        rules: [...rules, { fields: [machineField.id, monthField.id] }],
+      });
+    } catch (err: any) {
+      // Existing duplicate sheets: report them, keep going (the rule can be added once fixed)
+      console.warn(`  ! one-sheet-per-machine-per-month not enforced yet: ${err.message}`);
+    }
+  }
+  return recalculated;
 }
 
 function monthOptions(today: Date, count = 12) {
@@ -763,7 +780,7 @@ export async function seedProductionPages(tenantId: string, opts: { today?: Date
   }
 
   // 3. Derived sheet fields
-  const sheetsBackfilled = await installDerivedFieldTriggers(tenantId, machine, sheet);
+  const sheetsBackfilled = await setupCalculatedSheetFields(tenantId, sheet);
 
   // 4. Pages under a "Production" navigation folder
   const tpl = await pool.query(`SELECT id FROM public.export_template WHERE tenant_id = $1 AND name = $2`, [tenantId, TEMPLATE_NAME]);

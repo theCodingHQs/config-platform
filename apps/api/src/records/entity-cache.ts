@@ -20,12 +20,30 @@ interface CacheEntry {
 
 export class EntityCache {
   private cache: Map<string, CacheEntry> = new Map();
+  /** Bumped on every invalidation of a tenant, so derived caches know to rebuild. */
+  private generations: Map<string, number> = new Map();
+
+  generation(tenantId: string): number {
+    return this.generations.get(tenantId) ?? 0;
+  }
+
+  /**
+   * Like resolveEntity, but reuses a definition loaded in the last `maxAgeMs` without
+   * re-checking its version. For hot paths (recalculating after every save). Schema changes
+   * made through this server invalidate the cache, so they're seen immediately.
+   */
+  async resolveRecent(tenantId: string, entityIdOrName: string, maxAgeMs = 30_000): Promise<ResolvedEntity> {
+    const cached = this.cache.get(this.getCacheKey(tenantId, entityIdOrName));
+    if (cached && Date.now() - cached.cachedAt < maxAgeMs) return cached.data;
+    return this.resolveEntity(tenantId, entityIdOrName);
+  }
 
   private getCacheKey(tenantId: string, entityIdOrName: string): string {
     return `${tenantId}:${entityIdOrName}`;
   }
 
   invalidate(tenantId: string, entityId?: string, entityName?: string) {
+    this.generations.set(tenantId, this.generation(tenantId) + 1);
     if (entityId) {
       this.cache.delete(this.getCacheKey(tenantId, entityId));
     }
@@ -48,7 +66,7 @@ export class EntityCache {
     try {
       // Fetch latest entity definition to check version
       const entityRes = await client.query<EntityDef>(
-        `SELECT id, tenant_id AS "tenantId", name, label, physical_table_name AS "physicalTableName", display_field_id AS "displayFieldId", icon, version, created_at AS "createdAt", updated_at AS "updatedAt"
+        `SELECT id, tenant_id AS "tenantId", name, label, physical_table_name AS "physicalTableName", display_field_id AS "displayFieldId", icon, unique_rules AS "uniqueRules", version, created_at AS "createdAt", updated_at AS "updatedAt"
          FROM public.entity_def
          WHERE tenant_id = $1 AND (id = $2 OR name = $2)`,
         [tenantId, entityIdOrName]

@@ -84,6 +84,25 @@ export const AddRelationInputSchema = z.object({
 
 export type AddRelationInput = z.infer<typeof AddRelationInputSchema>;
 
+/**
+ * A combination of fields no two records may share, e.g. Machine + Month on a production sheet
+ * ("one sheet per machine per month"). Enforced by a database unique index.
+ */
+export const UniqueRuleSchema = z.object({
+  id: z.string().regex(/^[a-z0-9]{6,16}$/),
+  /** Field ids, in order */
+  fields: z.array(z.string()).min(1).max(5),
+});
+export type UniqueRule = z.infer<typeof UniqueRuleSchema>;
+
+export const SetUniqueRulesInputSchema = z.object({
+  entityId: z.string(),
+  expectedVersion: z.number().int(),
+  /** The complete list; rules without an id are new */
+  rules: z.array(z.object({ id: z.string().optional(), fields: z.array(z.string()).min(1).max(5) })).max(10),
+});
+export type SetUniqueRulesInput = z.infer<typeof SetUniqueRulesInputSchema>;
+
 export const MigrationResultSchema = z.object({
   success: z.boolean(),
   migrationId: z.string(),

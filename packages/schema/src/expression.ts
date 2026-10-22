@@ -87,7 +87,10 @@ export function isSingleExpression(val: string): boolean {
 /**
  * Evaluates an AST node with strict whitelist and safety checks
  */
-function evaluateAstNode(node: any, scope: ExpressionScope, depth: number): any {
+/** Extra pure functions available to one evaluation (e.g. calculated-field helpers). */
+export type ExpressionFunctions = Record<string, (...args: any[]) => any>;
+
+function evaluateAstNode(node: any, scope: ExpressionScope, depth: number, functions?: ExpressionFunctions): any {
   if (depth > MAX_AST_DEPTH) {
     throw new Error(`Expression exceeds maximum AST depth of ${MAX_AST_DEPTH}`);
   }
@@ -123,14 +126,14 @@ function evaluateAstNode(node: any, scope: ExpressionScope, depth: number): any 
     }
 
     case 'MemberExpression': {
-      const objectVal = evaluateAstNode(node.object, scope, depth + 1);
+      const objectVal = evaluateAstNode(node.object, scope, depth + 1, functions);
       if (objectVal === null || objectVal === undefined) {
         return undefined;
       }
 
       let propName: string;
       if (node.computed) {
-        propName = String(evaluateAstNode(node.property, scope, depth + 1));
+        propName = String(evaluateAstNode(node.property, scope, depth + 1, functions));
       } else {
         propName = node.property.name;
       }
@@ -145,22 +148,22 @@ function evaluateAstNode(node: any, scope: ExpressionScope, depth: number): any 
     case 'LogicalExpression':
     case 'BinaryExpression': {
       if (node.operator === '&&') {
-        const leftVal = evaluateAstNode(node.left, scope, depth + 1);
-        return leftVal ? evaluateAstNode(node.right, scope, depth + 1) : leftVal;
+        const leftVal = evaluateAstNode(node.left, scope, depth + 1, functions);
+        return leftVal ? evaluateAstNode(node.right, scope, depth + 1, functions) : leftVal;
       }
       if (node.operator === '||') {
-        const leftVal = evaluateAstNode(node.left, scope, depth + 1);
-        return leftVal ? leftVal : evaluateAstNode(node.right, scope, depth + 1);
+        const leftVal = evaluateAstNode(node.left, scope, depth + 1, functions);
+        return leftVal ? leftVal : evaluateAstNode(node.right, scope, depth + 1, functions);
       }
       if (node.operator === '??') {
-        const leftVal = evaluateAstNode(node.left, scope, depth + 1);
+        const leftVal = evaluateAstNode(node.left, scope, depth + 1, functions);
         return leftVal !== null && leftVal !== undefined
           ? leftVal
-          : evaluateAstNode(node.right, scope, depth + 1);
+          : evaluateAstNode(node.right, scope, depth + 1, functions);
       }
 
-      const left = evaluateAstNode(node.left, scope, depth + 1);
-      const right = evaluateAstNode(node.right, scope, depth + 1);
+      const left = evaluateAstNode(node.left, scope, depth + 1, functions);
+      const right = evaluateAstNode(node.right, scope, depth + 1, functions);
 
       switch (node.operator) {
         case '+':
@@ -195,7 +198,7 @@ function evaluateAstNode(node: any, scope: ExpressionScope, depth: number): any 
     }
 
     case 'UnaryExpression': {
-      const arg = evaluateAstNode(node.argument, scope, depth + 1);
+      const arg = evaluateAstNode(node.argument, scope, depth + 1, functions);
       switch (node.operator) {
         case '!':
           return !arg;
@@ -209,10 +212,10 @@ function evaluateAstNode(node: any, scope: ExpressionScope, depth: number): any 
     }
 
     case 'ConditionalExpression': {
-      const test = evaluateAstNode(node.test, scope, depth + 1);
+      const test = evaluateAstNode(node.test, scope, depth + 1, functions);
       return test
-        ? evaluateAstNode(node.consequent, scope, depth + 1)
-        : evaluateAstNode(node.alternate, scope, depth + 1);
+        ? evaluateAstNode(node.consequent, scope, depth + 1, functions)
+        : evaluateAstNode(node.alternate, scope, depth + 1, functions);
     }
 
     case 'CallExpression': {
@@ -227,13 +230,14 @@ function evaluateAstNode(node: any, scope: ExpressionScope, depth: number): any 
         throw new Error(`Access to blocked function: ${fnName}`);
       }
 
-      const fn = PURE_FUNCTIONS[fnName];
+      const fn = (functions && Object.prototype.hasOwnProperty.call(functions, fnName) ? functions[fnName] : undefined)
+        ?? PURE_FUNCTIONS[fnName];
       if (typeof fn !== 'function') {
         throw new Error(`Function '${fnName}' is not in pure function whitelist`);
       }
 
       const args = (node.arguments || []).map((argNode: any) =>
-        evaluateAstNode(argNode, scope, depth + 1)
+        evaluateAstNode(argNode, scope, depth + 1, functions)
       );
 
       return fn(...args);
@@ -241,7 +245,7 @@ function evaluateAstNode(node: any, scope: ExpressionScope, depth: number): any 
 
     case 'ArrayExpression': {
       return (node.elements || []).map((el: any) =>
-        evaluateAstNode(el, scope, depth + 1)
+        evaluateAstNode(el, scope, depth + 1, functions)
       );
     }
 
@@ -255,7 +259,8 @@ function evaluateAstNode(node: any, scope: ExpressionScope, depth: number): any 
  */
 export function evaluateRawExpression(
   rawExpr: string,
-  scope: ExpressionScope
+  scope: ExpressionScope,
+  functions?: ExpressionFunctions
 ): { value: any; error: string | null } {
   const trimmed = rawExpr.trim();
   if (trimmed.length > MAX_EXPRESSION_LENGTH) {
@@ -274,7 +279,7 @@ export function evaluateRawExpression(
 
   try {
     const ast = jsep(trimmed);
-    const value = evaluateAstNode(ast, scope, 0);
+    const value = evaluateAstNode(ast, scope, 0, functions);
     return { value, error: null };
   } catch (err: any) {
     return { value: undefined, error: err.message || 'Expression evaluation error' };

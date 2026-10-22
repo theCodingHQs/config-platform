@@ -114,6 +114,8 @@ export interface WorkspaceBundle {
     label: string;
     displayFieldId?: string | null;
     icon?: string | null;
+    /** Field combinations no two records may share (field ids of this bundle) */
+    uniqueRules?: Array<{ id: string; fields: string[] }>;
     fields: Array<{
       id: string;
       name: string;
@@ -239,8 +241,9 @@ export class ExportImportService {
       label: string;
       display_field_id?: string | null;
       icon?: string | null;
+      unique_rules?: Array<{ id: string; fields: string[] }>;
     }>(
-      `SELECT id, name, label, display_field_id, icon FROM public.entity_def WHERE tenant_id = $1 ORDER BY name ASC`,
+      `SELECT id, name, label, display_field_id, icon, unique_rules FROM public.entity_def WHERE tenant_id = $1 ORDER BY name ASC`,
       [tenantId]
     );
 
@@ -269,6 +272,7 @@ export class ExportImportService {
         label: ent.label,
         displayFieldId: ent.display_field_id || null,
         icon: ent.icon || null,
+        uniqueRules: ent.unique_rules || [],
         fields: fieldsRes.rows.map((f) => ({
           id: f.id,
           name: f.name,
@@ -866,6 +870,21 @@ export class ExportImportService {
         await client.query(
           `CREATE TABLE IF NOT EXISTS "${tenantSchema}"."${physicalTable}" (${colDefs.join(', ')})`
         );
+
+        // Unique combinations, on the new field ids (the table is new, so nothing can conflict)
+        const rules = (ent.uniqueRules || [])
+          .map((rule) => ({ id: rule.id, fields: rule.fields.map((id) => fieldIdMap.get(id)).filter((id): id is string => Boolean(id)) }))
+          .filter((rule) => rule.fields.length > 0 && /^[a-z0-9]{6,16}$/.test(rule.id));
+        if (rules.length) {
+          const columnOf = new Map(ent.fields.map((f) => [fieldIdMap.get(f.id), `col_${f.name.toLowerCase()}`]));
+          for (const rule of rules) {
+            const cols = rule.fields.map((id) => `"${columnOf.get(id)}"`).join(', ');
+            await client.query(
+              `CREATE UNIQUE INDEX "${`uq_${physicalTable}_${rule.id}`.slice(0, 63)}" ON "${tenantSchema}"."${physicalTable}" (${cols})`
+            );
+          }
+          await client.query(`UPDATE public.entity_def SET unique_rules = $1 WHERE id = $2`, [JSON.stringify(rules), newEntityId]);
+        }
       }
 
       // 5. Insert relations

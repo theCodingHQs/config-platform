@@ -25,8 +25,9 @@ export class ErdService {
         version: number;
         display_field_id?: string | null;
         icon?: string | null;
+        unique_rules?: Array<{ id: string; fields: string[] }>;
       }>(
-        `SELECT id, name, label, physical_table_name, version, display_field_id, icon
+        `SELECT id, name, label, physical_table_name, version, display_field_id, icon, unique_rules
          FROM public.entity_def
          WHERE tenant_id = $1
          ORDER BY name ASC`,
@@ -161,6 +162,7 @@ export class ErdService {
           version: e.version,
           displayFieldId: e.display_field_id || null,
           icon: e.icon || null,
+          uniqueRules: e.unique_rules || [],
           columns: [...systemCols, ...customCols],
           fields: customCols,
         };

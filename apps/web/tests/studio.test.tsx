@@ -117,8 +117,8 @@ describe('Studio & Page Builder UI', () => {
 
     expect(addFieldSpy).toHaveBeenCalledWith('test_tenant', 't_sensor', expect.objectContaining({ label: 'Pressure', name: 'pressure' }));
 
-    // 3. Rename Field
-    const renameBtns = screen.getAllByRole('button', { name: /^Rename$/i });
+    // 3. Edit (rename) a field
+    const renameBtns = screen.getAllByRole('button', { name: /^Edit$/i });
     await user.click(renameBtns[0]);
 
     const editLabelInput = screen.getByLabelText(/Field Label/i);

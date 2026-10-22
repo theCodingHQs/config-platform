@@ -2,6 +2,7 @@ import type { StorageAdapter } from '../db/storage-adapter.js';
 import { defaultStorageAdapter } from '../db/storage-adapter.js';
 import { entityCache, type ResolvedEntity } from './entity-cache.js';
 import { recordValidator } from './record-validator.js';
+import { calculatedFieldsService } from './calculated-fields-service.js';
 import { queryBuilder, type QueryOptions } from './query-builder.js';
 import crypto from 'node:crypto';
 
@@ -72,8 +73,41 @@ export class RecordsService {
       RETURNING *;
     `;
 
-    const rows = await this.storage.query(tenantId, sql, params);
-    return this.mapRowToRecord(resolved, rows[0]);
+    const rows = await this.writeRow(tenantId, resolved, sql, params);
+    return this.mapRowToRecord(resolved, await this.withCalculatedFields(tenantId, resolved, rows[0]));
+  }
+
+  /**
+   * Runs an insert/update, turning a broken unique combination (e.g. a second sheet for the same
+   * machine and month) into a readable 409 instead of a database error.
+   */
+  private async writeRow(tenantId: string, resolved: ResolvedEntity, sql: string, params: any[]) {
+    try {
+      return await this.storage.query(tenantId, sql, params);
+    } catch (err: any) {
+      const rules: Array<{ id: string; fields: string[] }> = (resolved.entity as any).uniqueRules || [];
+      const rule = err?.code === '23505' ? rules.find((r) => String(err.constraint || '').endsWith(`_${r.id}`)) : undefined;
+      if (!rule) throw err;
+      const labels = rule.fields.map((id) => resolved.fieldById.get(id)?.label ?? id);
+      throw new RecordConflictError(
+        `A ${resolved.entity.label} with the same ${labels.join(' and ')} already exists. Each combination of ${labels.join(' + ')} can only be used once.`
+      );
+    }
+  }
+
+  /**
+   * Fills calculated fields of a just-written record (and refreshes records elsewhere that look
+   * it up), returning the row as stored.
+   */
+  private async withCalculatedFields(tenantId: string, resolved: ResolvedEntity, row: Record<string, any>) {
+    const changed = await calculatedFieldsService.recalculate(tenantId, resolved.entity.id, [String(row.id)]);
+    if (changed === 0) return row;
+    const fresh = await this.storage.query(
+      tenantId,
+      `SELECT * FROM "${this.storage.getTenantSchemaName(tenantId)}"."${resolved.entity.physicalTableName}" WHERE id = $1`,
+      [row.id]
+    );
+    return fresh[0] ?? row;
   }
 
   /**
@@ -174,12 +208,12 @@ export class RecordsService {
       RETURNING *;
     `;
 
-    const rows = await this.storage.query(tenantId, sql, params);
+    const rows = await this.writeRow(tenantId, resolved, sql, params);
     if (rows.length === 0) {
       throw new RecordNotFoundError(resolved.entity.name, id);
     }
 
-    return this.mapRowToRecord(resolved, rows[0]);
+    return this.mapRowToRecord(resolved, await this.withCalculatedFields(tenantId, resolved, rows[0]));
   }
 
   /**

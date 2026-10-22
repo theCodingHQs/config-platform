@@ -736,6 +736,20 @@ export async function addField(
   return handleResponse<any>(res);
 }
 
+/** Replaces an entity's unique combinations (field ids); rules without an id are new. */
+export async function setUniqueRules(
+  entityId: string,
+  rules: Array<{ id?: string; fields: string[] }>,
+  expectedVersion: number,
+): Promise<{ uniqueRules: Array<{ id: string; fields: string[] }> }> {
+  const res = await apiFetch(`${API_BASE_URL}/schema/entities/${entityId}/unique-rules`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rules, expectedVersion }),
+  });
+  return handleResponse(res);
+}
+
 export async function updateField(
   _tenantId: string,
   entityId: string,

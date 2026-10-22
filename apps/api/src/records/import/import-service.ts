@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { calculatedFieldsService } from '../calculated-fields-service.js';
 import type { StorageAdapter } from '../../db/storage-adapter.js';
 import { defaultStorageAdapter } from '../../db/storage-adapter.js';
 import { entityCache, type ResolvedEntity } from '../entity-cache.js';
@@ -280,6 +281,26 @@ export class ImportService {
       }
     }
 
+    // 5a. Unique combinations (e.g. Machine + Month): keys already stored, and keys seen in the file
+    const uniqueRules: Array<{ id: string; fields: string[] }> = (resolved.entity as any).uniqueRules || [];
+    const comboKey = (values: unknown[]) =>
+      values.some((v) => v === null || v === undefined || v === '')
+        ? null // like the database index, a combination with an empty part never conflicts
+        : JSON.stringify(values.map((v) => (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) ? String(Number(v)) : String(v))));
+    const existingCombos = new Map<string, Set<string>>();
+    const fileCombos = new Map<string, Map<string, number>>();
+    for (const rule of uniqueRules) {
+      const cols = rule.fields.map((id) => resolved.fieldById.get(id)?.physicalColumnName).filter(Boolean) as string[];
+      if (cols.length !== rule.fields.length) continue;
+      const rows = await this.storage.query<Record<string, unknown>>(
+        tenantId,
+        `SELECT ${cols.map((c) => `"${c}"`).join(', ')} FROM "${this.storage.getTenantSchemaName(tenantId)}"."${resolved.entity.physicalTableName}"`,
+        []
+      );
+      existingCombos.set(rule.id, new Set(rows.map((r) => comboKey(cols.map((c) => r[c]))).filter((k): k is string => k !== null)));
+      fileCombos.set(rule.id, new Map());
+    }
+
     // 5. Unique field tracking (exact comparison so indexes can be used, case-sensitive)
     const uniqueFields = resolved.fields.filter(
       (f) => (f as any).unique === true || (f.config as any)?.unique === true
@@ -509,6 +530,25 @@ export class ImportService {
           { skipReferenceDbCheck: true }
         );
 
+        // Unique combinations, in the file and against stored records
+        for (const rule of uniqueRules) {
+          const existing = existingCombos.get(rule.id);
+          const seen = fileCombos.get(rule.id);
+          if (!existing || !seen) continue;
+          const fields = rule.fields.map((id) => resolved.fieldById.get(id)!);
+          const key = comboKey(fields.map((f) => mappedPhysicalData[f.physicalColumnName]));
+          if (key === null) continue;
+          const labels = fields.map((f) => f.label || f.name).join(' + ');
+          if (seen.has(key)) {
+            rowErrors.push({ row: rowNumber, column: labels, message: `Same ${labels} as row ${seen.get(key)} (each combination can only be used once)` });
+          } else {
+            seen.set(key, rowNumber);
+          }
+          if (existing.has(key)) {
+            rowErrors.push({ row: rowNumber, column: labels, message: `A record with this ${labels} already exists` });
+          }
+        }
+
         if (rowErrors.length > 0) {
           errorRowsCount++;
           if (errors.length < 100) {
@@ -708,6 +748,11 @@ export class ImportService {
       },
       30000
     );
+
+    // Calculated fields (formulas, lookups) of the imported records
+    if (insertedCount > 0) {
+      await calculatedFieldsService.recalculate(tenantId, resolved.entity.id);
+    }
 
     // Audit log entry (strictly no row contents)
     await auditLogService.log({

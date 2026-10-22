@@ -211,6 +211,10 @@ export const FormComponent: React.FC<FormProps> = ({
       if (rolePerm?.readOnly || rolePerm?.hidden) {
         continue;
       }
+      // Calculated fields come from their formula on the server
+      if (fieldDef?.config?.formula) {
+        continue;
+      }
 
       if (formData[name] !== undefined) {
         payload[name] = formData[name];
@@ -328,7 +332,8 @@ export const FormComponent: React.FC<FormProps> = ({
           return null;
         }
 
-        const isReadOnly = Boolean(f.readOnly || rolePerm?.readOnly);
+        const isCalculated = Boolean(fieldDef.config?.formula);
+        const isReadOnly = Boolean(f.readOnly || rolePerm?.readOnly || isCalculated);
         const error = fieldErrors[fieldName];
         const val = formData[fieldName] ?? "";
         const displayLabel = f.label || fieldDef.label || fieldDef.name;
@@ -349,6 +354,11 @@ export const FormComponent: React.FC<FormProps> = ({
               }}
             >
               {displayLabel}
+              {isCalculated && (
+                <span className="badge" style={{ marginLeft: "var(--space-2)", fontWeight: 500 }}>
+                  Calculated
+                </span>
+              )}
               {fieldDef.required && !isReadOnly && (
                 <span
                   style={{
@@ -368,6 +378,12 @@ export const FormComponent: React.FC<FormProps> = ({
               isReadOnly,
               error,
               f.icon,
+            )}
+
+            {isCalculated && !f.helpText && (
+              <small style={{ color: "var(--text-muted)", fontSize: "var(--font-size-xs)" }}>
+                {mode === "create" ? "Calculated automatically when the record is saved." : "Calculated automatically from other fields."}
+              </small>
             )}
 
             {f.helpText && (

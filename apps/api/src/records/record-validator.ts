@@ -56,6 +56,9 @@ export class RecordValidator {
 
     // 2. Validate fields
     for (const field of resolvedEntity.fields) {
+      // Calculated fields get their value from the formula, never from input (an echoed value
+      // from a form or a full-row PATCH is ignored rather than rejected)
+      if ((field.config as any)?.formula) continue;
       const val = data[field.name];
       const isProvided = val !== undefined;
 

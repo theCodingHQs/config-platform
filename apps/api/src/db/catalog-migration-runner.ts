@@ -425,6 +425,17 @@ export const catalogMigrations: CatalogMigration[] = [
       `);
     },
   },
+  {
+    version: 16,
+    name: '016_entity_unique_rules',
+    up: async (client: PoolClient) => {
+      // Field combinations no two records may share (each backed by a unique index)
+      await client.query(`
+        ALTER TABLE public.entity_def
+        ADD COLUMN IF NOT EXISTS unique_rules JSONB NOT NULL DEFAULT '[]'::jsonb;
+      `);
+    },
+  },
 ];
 
 /**

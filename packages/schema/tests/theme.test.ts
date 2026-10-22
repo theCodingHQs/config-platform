@@ -308,7 +308,8 @@ describe('Theme Tokens & WCAG Contrast Tests', () => {
     const shippedCssPath = path.resolve(__dirname, '../../../apps/web/src/styles/tokens.css');
     assert.ok(fs.existsSync(shippedCssPath), 'apps/web/src/styles/tokens.css must exist');
 
-    const shippedCss = fs.readFileSync(shippedCssPath, 'utf8').trim();
+    // Line endings depend on the checkout (Git converts to CRLF on Windows); content must match
+    const shippedCss = fs.readFileSync(shippedCssPath, 'utf8').replace(/\r\n/g, '\n').trim();
     const generatedCss = generateTokensCss({ presetId: 'neutral', overrides: {} }).trim();
 
     assert.equal(shippedCss, generatedCss, 'Shipped tokens.css must exactly match generateTokensCss() schema output');
