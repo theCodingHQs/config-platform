@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   FileSpreadsheet,
   Plus,
+  Mail,
   Copy,
   Trash2,
   ChevronUp,
@@ -413,6 +414,10 @@ export function ExportTemplatesManager() {
             safe filenames for CSV and XLSX.
           </p>
         </div>
+        <div style={{ display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
+        <Link to="/studio/report-schedules" className="btn btn-secondary">
+          <Mail size={16} /> Report emails
+        </Link>
         <button
           type="button"
           className="btn btn-primary"
@@ -427,6 +432,7 @@ export function ExportTemplatesManager() {
         >
           <Plus size={16} /> New Template
         </button>
+        </div>
       </div>
 
       {/* Main Two-Panel Layout */}

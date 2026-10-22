@@ -19,3 +19,4 @@ export * from './export-template.js';
 export * from './export-template-grid.js';
 export * from './chart-spec.js';
 export * from './chart-option-builder.js';
+export * from './report-schedules.js';

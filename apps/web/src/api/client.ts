@@ -10,6 +10,10 @@ import type {
   WorkspaceDateSettings,
   WizardAnalysis,
   WizardPlan,
+  ReportSchedule,
+  ReportScheduleInput,
+  EmailDeliverySettings,
+  EmailDeliverySettingsInput,
 } from "@config-platform/schema";
 
 export class ApiError extends Error {
@@ -1293,4 +1297,45 @@ export async function fetchDatasetPreview(
     body: JSON.stringify({ dataset, parameters }),
   });
   return handleResponse(res);
+}
+
+// ─── Scheduled report emails & email delivery ────────────────────────────────
+
+export async function listReportSchedules(): Promise<ReportSchedule[]> {
+  return handleResponse<ReportSchedule[]>(await apiFetch(`${API_BASE_URL}/report-schedules`));
+}
+
+export async function saveReportSchedule(input: ReportScheduleInput, id?: string): Promise<ReportSchedule> {
+  const res = await apiFetch(id ? `${API_BASE_URL}/report-schedules/${id}` : `${API_BASE_URL}/report-schedules`, {
+    method: id ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return handleResponse<ReportSchedule>(res);
+}
+
+export async function deleteReportSchedule(id: string): Promise<void> {
+  const res = await apiFetch(`${API_BASE_URL}/report-schedules/${id}`, { method: "DELETE" });
+  if (!res.ok) await handleResponse(res);
+}
+
+export async function sendReportScheduleNow(id: string): Promise<ReportSchedule> {
+  return handleResponse<ReportSchedule>(await apiFetch(`${API_BASE_URL}/report-schedules/${id}/send-now`, { method: "POST" }));
+}
+
+export async function fetchEmailSettings(): Promise<EmailDeliverySettings> {
+  return handleResponse<EmailDeliverySettings>(await apiFetch(`${API_BASE_URL}/workspace/email-settings`));
+}
+
+export async function updateEmailSettings(input: EmailDeliverySettingsInput): Promise<EmailDeliverySettings> {
+  const res = await apiFetch(`${API_BASE_URL}/workspace/email-settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return handleResponse<EmailDeliverySettings>(res);
+}
+
+export async function sendTestEmail(): Promise<{ sentTo: string; from: string; via: string }> {
+  return handleResponse(await apiFetch(`${API_BASE_URL}/workspace/email-settings/test`, { method: "POST" }));
 }

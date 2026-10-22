@@ -25,11 +25,18 @@ import {
   RefreshCw,
   Sliders,
   Globe,
+  Mail,
 } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { EmailSettingsPanel } from './EmailSettingsPanel';
 
 export function WorkspaceSettings() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'usage' | 'regional' | 'audit' | 'export-import'>('usage');
+  type Tab = 'usage' | 'regional' | 'email' | 'audit' | 'export-import';
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<Tab>(() =>
+    (['usage', 'regional', 'email', 'audit', 'export-import'] as const).find((t) => t === searchParams.get('tab')) ?? 'usage'
+  );
 
   // Usage state
   const [usage, setUsage] = useState<WorkspaceUsage | null>(null);
@@ -192,6 +199,26 @@ export function WorkspaceSettings() {
 
         <button
           type="button"
+          onClick={() => setActiveTab('email')}
+          style={{
+            padding: 'var(--space-3) var(--space-4)',
+            border: 'none',
+            background: 'transparent',
+            fontWeight: 600,
+            fontSize: 'var(--font-size-sm)',
+            cursor: 'pointer',
+            color: activeTab === 'email' ? 'var(--accent)' : 'var(--muted)',
+            borderBottom: activeTab === 'email' ? '2px solid var(--accent)' : '2px solid transparent',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-1)',
+          }}
+        >
+          <Mail size={15} /> Email
+        </button>
+
+        <button
+          type="button"
           onClick={() => setActiveTab('export-import')}
           style={{
             padding: 'var(--space-3) var(--space-4)',
@@ -232,6 +259,10 @@ export function WorkspaceSettings() {
           </button>
         )}
       </div>
+
+      {activeTab === 'email' && (
+        <EmailSettingsPanel canEdit={user?.role === 'admin' || user?.role === 'owner'} />
+      )}
 
       {activeTab === 'regional' && (
         <RegionalSettingsPanel canEdit={user?.role === 'admin' || user?.role === 'owner'} />

@@ -13,6 +13,7 @@ import { permissionRoutes } from './permissions/permission-routes.js';
 import { authRoutes, memberRoutes } from './auth/auth-routes.js';
 import { workspaceRoutes } from './workspace/workspace-routes.js';
 import { auditRoutes } from './audit/audit-routes.js';
+import { reportScheduleRoutes } from './reports/report-schedule-routes.js';
 import { exportRoutes } from './records/export/export-routes.js';
 import { LimitExceededError } from './limits/tenant-limits.js';
 import { sessionMiddlewarePlugin, decorateSession, registerSessionHook } from './auth/session-middleware.js';
@@ -325,6 +326,7 @@ export async function buildServer() {
       await protectedApp.register(permissionRoutes);
       await protectedApp.register(workspaceRoutes);
       await protectedApp.register(auditRoutes);
+      await protectedApp.register(reportScheduleRoutes);
     });
   }, { prefix: '/api' });
 

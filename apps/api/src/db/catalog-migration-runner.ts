@@ -436,6 +436,37 @@ export const catalogMigrations: CatalogMigration[] = [
       `);
     },
   },
+  {
+    version: 17,
+    name: '017_report_schedules',
+    up: async (client: PoolClient) => {
+      // Reports emailed on a schedule, and how each workspace sends email
+      await client.query(`
+        ALTER TABLE public.tenant
+        ADD COLUMN IF NOT EXISTS email_settings JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+        CREATE TABLE IF NOT EXISTS public.report_schedule (
+          id VARCHAR(64) PRIMARY KEY,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          template_id VARCHAR(64) NOT NULL REFERENCES public.export_template(id) ON DELETE CASCADE,
+          name VARCHAR(120),
+          config JSONB NOT NULL,
+          enabled BOOLEAN NOT NULL DEFAULT TRUE,
+          created_by VARCHAR(64) REFERENCES public.app_user(id) ON DELETE SET NULL,
+          next_run_at TIMESTAMPTZ,
+          last_run_at TIMESTAMPTZ,
+          last_status VARCHAR(16),
+          last_error TEXT,
+          running_since TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_report_schedule_tenant ON public.report_schedule(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_report_schedule_due ON public.report_schedule(next_run_at) WHERE enabled;
+      `);
+    },
+  },
 ];
 
 /**

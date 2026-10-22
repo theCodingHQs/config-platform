@@ -51,6 +51,9 @@ const WorkspaceSettings = React.lazy(() =>
     default: m.WorkspaceSettings,
   }))
 );
+const ReportSchedules = React.lazy(() =>
+  import("./studio/ReportSchedules").then((m) => ({ default: m.ReportSchedules }))
+);
 const ThemeStudio = React.lazy(() =>
   import("./studio/ThemeStudio").then((m) => ({ default: m.ThemeStudio }))
 );
@@ -709,6 +712,10 @@ function AppContent({ user }: { user: CurrentUser }) {
               <Route
                 path="/studio/pages"
                 element={<div className="page-container"><PageManager /></div>}
+              />
+              <Route
+                path="/studio/report-schedules"
+                element={<div className="page-container"><ReportSchedules /></div>}
               />
               <Route
                 path="/studio/export-templates"

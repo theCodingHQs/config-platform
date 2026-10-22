@@ -1,6 +1,7 @@
 import { buildServer, checkDemoAccountWarning } from './server.js';
 import { initializeMetadataCatalog } from './db/catalog-init.js';
 import { pool } from './db/pool.js';
+import { startReportScheduler } from './reports/report-scheduler.js';
 
 async function start() {
   try {
@@ -18,6 +19,7 @@ async function start() {
 
     await server.listen({ port, host });
     console.log(`Backend API listening on http://${host}:${port}`);
+    startReportScheduler();
   } catch (err) {
     console.error('Failed to start server:', err);
     process.exit(1);
