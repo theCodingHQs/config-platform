@@ -8,6 +8,8 @@ import type {
   ImportCommitResult,
   UserDatePreferences,
   WorkspaceDateSettings,
+  WizardAnalysis,
+  WizardPlan,
 } from "@config-platform/schema";
 
 export class ApiError extends Error {
@@ -1015,6 +1017,35 @@ export async function updateWorkspaceTheme(
     body: JSON.stringify(themeConfig),
   });
   return handleResponse<{ success: boolean; themeConfig: WorkspaceThemeConfig; warning?: string }>(res);
+}
+
+export interface SheetAnalysis extends WizardAnalysis {
+  sheets: string[];
+  selectedSheet: string;
+  rowCount: number;
+  suggestedLabel: string;
+  suggestedName: string;
+}
+
+/** Import wizard: suggested fields for a spreadsheet (builder+). */
+export async function analyzeSheet(file: File, sheetName?: string): Promise<SheetAnalysis> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (sheetName) formData.append("sheetName", sheetName);
+  const res = await apiFetch(`${API_BASE_URL}/import-wizard/analyze`, { method: "POST", body: formData });
+  return handleResponse<SheetAnalysis>(res);
+}
+
+/** Import wizard: creates the entity and imports every row (all or nothing). */
+export async function createFromSheet(
+  file: File,
+  plan: WizardPlan,
+): Promise<{ entity: { id: string; name: string; label: string; physicalTableName: string; version: number; icon?: string | null }; fields: any[]; insertedCount: number }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("plan", JSON.stringify(plan));
+  const res = await apiFetch(`${API_BASE_URL}/import-wizard/create`, { method: "POST", body: formData });
+  return handleResponse(res);
 }
 
 export async function previewEntityImport(

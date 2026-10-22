@@ -2,6 +2,7 @@ import { Readable } from 'node:stream';
 import { parse } from 'csv-parse/sync';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
+import { createRequire } from 'node:module';
 import { inspectZipBuffer } from './zip-guard.js';
 
 export class InvalidFileContentError extends Error {
@@ -172,6 +173,24 @@ async function readSharedStrings(buffer: Buffer): Promise<string[]> {
   return strings;
 }
 
+// ExcelJS's styles reader (not part of its public types)
+const StylesXform = createRequire(import.meta.url)('exceljs/lib/xlsx/xform/style/styles-xform.js');
+
+/**
+ * Cell styles (number formats) read straight from the workbook. The streaming reader needs them
+ * to recognise date cells; Excel often stores styles.xml after the sheets in the zip, which the
+ * stream would only see too late, so dates came through as serial numbers (46296).
+ */
+async function readStyles(buffer: Buffer): Promise<any> {
+  const styles = new StylesXform();
+  styles.init();
+  const zip = await JSZip.loadAsync(buffer);
+  const file = zip.file('xl/styles.xml');
+  if (!file) return styles;
+  await styles.parseStream(Readable.from([await file.async('nodebuffer')]));
+  return styles;
+}
+
 /**
  * Parses an XLSX buffer using exceljs with zip-bomb protection.
  * Reads cached cell values/results, ignores formulas and hyperlinks, never executes macros.
@@ -190,12 +209,18 @@ export async function parseXlsxContent(
     // strings are therefore read directly from the zip and pre-loaded; the worksheet itself is
     // still streamed, keeping memory bounded for very large sheets.
     const sharedStrings = await readSharedStrings(buffer);
+    const styles = await readStyles(buffer);
     const reader = new ExcelJS.stream.xlsx.WorkbookReader(Readable.from(buffer), {
       worksheets: 'emit',
       sharedStrings: 'ignore', // keep the pre-read table below; don't reset it mid-stream
+      styles: 'ignore', // likewise for the pre-read styles (date cells)
     });
     (reader as any).model = { sheets: [] };
     (reader as any).sharedStrings = sharedStrings;
+    (reader as any).styles = styles;
+    // Date cells need the workbook's date system; this default is replaced when xl/workbook.xml
+    // is read (1904-based workbooks set date1904 there)
+    (reader as any).properties = { model: { date1904: false } };
 
     const sheets: string[] = [];
     let selectedSheet = '';

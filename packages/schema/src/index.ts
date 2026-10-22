@@ -12,6 +12,7 @@ export * from './migrator.js';
 export * from './theme.js';
 export * from './icons.js';
 export * from './import.js';
+export * from './import-wizard.js';
 export * from './export-template.js';
 export * from './export-template-grid.js';
 export * from './chart-spec.js';

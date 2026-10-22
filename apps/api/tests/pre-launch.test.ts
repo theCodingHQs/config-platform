@@ -14,15 +14,29 @@ import crypto from 'node:crypto';
 
 describe('Pre-Launch Fixes & Verification', () => {
   let server: FastifyInstance;
+  // A workspace with a member, so "tenants already exist" checks don't depend on what other
+  // test files happened to leave in the database
+  const fixtureTenant = `prelaunch_${crypto.randomBytes(3).toString('hex')}`;
+  let fixtureUserId: string;
 
   beforeAll(async () => {
     await initializeMetadataCatalog();
     server = await buildServer();
     await server.ready();
+    await defaultStorageAdapter.initTenant(fixtureTenant);
+    await pool.query(
+      `INSERT INTO public.tenant (id, name, schema_version) VALUES ($1, 'Pre-Launch Fixture', 1) ON CONFLICT (id) DO NOTHING`,
+      [fixtureTenant]
+    );
+    fixtureUserId = (await createTestSession(fixtureTenant, 'owner', 'prelaunch_fixture')).userId;
   });
 
   afterAll(async () => {
     if (server) await server.close();
+    await pool.query('DELETE FROM public.tenant_member WHERE user_id = $1', [fixtureUserId]);
+    await pool.query('DELETE FROM public.app_user WHERE id = $1', [fixtureUserId]);
+    await pool.query('DELETE FROM public.tenant WHERE id = $1', [fixtureTenant]);
+    await pool.query(`DROP SCHEMA IF EXISTS "${defaultStorageAdapter.getTenantSchemaName(fixtureTenant)}" CASCADE`);
   });
 
   beforeEach(() => {
@@ -216,7 +230,7 @@ describe('Pre-Launch Fixes & Verification', () => {
   // --------------------------------------------------------------------------
   describe('bootstrapOwner script', () => {
     it('refuses to run if any tenant already exists in the database', async () => {
-      // Ensure at least one tenant exists in test DB
+      // The fixture workspace exists
       const existing = await pool.query('SELECT COUNT(*)::int AS count FROM public.tenant');
       expect(existing.rows[0].count).toBeGreaterThan(0);
 

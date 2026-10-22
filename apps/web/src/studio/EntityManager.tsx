@@ -14,7 +14,7 @@ import {
   fetchLiveDdl,
   ApiError,
 } from '../api/client';
-import { Plus, X, AlertTriangle, ChevronUp, ChevronDown, Edit2, Upload } from 'lucide-react';
+import { Plus, X, AlertTriangle, ChevronUp, ChevronDown, Edit2, Upload, FileSpreadsheet } from 'lucide-react';
 import type { ErdTable, ErdColumn, FieldType } from '@config-platform/schema';
 import { DynamicIcon } from '../components/dynamic-icon';
 import { IconPicker } from '../components/icon-picker';
@@ -22,12 +22,14 @@ import { useStatusNotify } from '../context/app-bar-context';
 import { ImportDataModal } from './ImportDataModal';
 import { FormulaEditor, canBeCalculated } from './FormulaEditor';
 import { UniqueRulesPanel } from './UniqueRulesPanel';
+import { ImportWizard } from './ImportWizard';
 
 export const EntityManager: React.FC = () => {
   const { tenantId } = useMetadata();
   const queryClient = useQueryClient();
 
   const [selectedEntityId, setSelectedEntityId] = useState<string | null>(null);
+  const [showImportWizard, setShowImportWizard] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditEntityModal, setShowEditEntityModal] = useState(false);
   const [showAddFieldModal, setShowAddFieldModal] = useState(false);
@@ -371,6 +373,13 @@ export const EntityManager: React.FC = () => {
           </button>
           <button
             type="button"
+            className="btn btn-secondary"
+            onClick={() => setShowImportWizard(true)}
+          >
+            <FileSpreadsheet size="1.1em" /> New from Excel
+          </button>
+          <button
+            type="button"
             className="btn btn-primary"
             onClick={() => setShowCreateModal(true)}
             aria-label="+ Create Entity"
@@ -691,7 +700,7 @@ export const EntityManager: React.FC = () => {
             <p style={{ color: 'var(--text-muted)', fontSize: "var(--font-size-sm)", lineHeight: 1.6, margin: 0 }}>
               Workspaces start clean with no entities or pages.
               <br />
-              <strong>Step 1:</strong> Create a Data Entity (e.g. Products, Customers, Orders) to define your schema and fields.
+              <strong>Step 1:</strong> Start from an Excel sheet you already use, or create a Data Entity (e.g. Products, Customers, Orders) and its fields.
               <br />
               <strong>Step 2:</strong> Go to <em>Pages</em> in the top navigation to build and publish views bound to your entities.
             </p>
@@ -702,6 +711,13 @@ export const EntityManager: React.FC = () => {
               style={{ marginTop: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
             >
               <Plus size={16} /> Create Your First Entity
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setShowImportWizard(true)}
+            >
+              <FileSpreadsheet size="1.1em" /> Start from an Excel sheet
             </button>
           </div>
         ) : (
@@ -775,6 +791,14 @@ export const EntityManager: React.FC = () => {
           </div>
         )}
       </div>
+
+      {showImportWizard && (
+        <ImportWizard
+          tenantId={tenantId}
+          onClose={() => setShowImportWizard(false)}
+          onCreated={(result) => setSelectedEntityId(result.entityId)}
+        />
+      )}
 
       {/* Modal: Create Entity */}
       {showCreateModal && (
