@@ -13,6 +13,8 @@ export interface TemplatePageOptions {
   title?: string;
   /** Field ids shown as table columns (CRUD list); default the first four fields */
   tableColumns?: string[];
+  /** Record order (CRUD list); default the first date column shown, newest first */
+  sort?: { fieldId: string; order: 'asc' | 'desc' };
 }
 
 export function createTemplatePage(
@@ -189,6 +191,10 @@ export function createTemplatePage(
     }
 
     case 'CRUD list': {
+      // A log reads newest first: sort by the first date column on the table, if any
+      const shownIds = options.tableColumns ?? cols.slice(0, 4).map((c) => c.id);
+      const firstDate = shownIds.map((id) => cols.find((c) => c.id === id)).find((c) => c?.type === 'date');
+      const sort = options.sort ?? (firstDate ? { fieldId: firstDate.id, order: 'desc' as const } : undefined);
       return {
         schemaVersion: 2,
         id: pageId,
@@ -204,6 +210,7 @@ export function createTemplatePage(
             id: dsId,
             entityId: entity.id,
             limit: 10,
+            ...(sort ? { sort } : {}),
           },
         ],
         root: {
