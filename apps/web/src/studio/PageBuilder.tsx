@@ -402,6 +402,13 @@ const SortableTreeItem: React.FC<{
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: "var(--space-3)",
+    whiteSpace: "nowrap",
+    // As wide as its own content when that's wider than the panel (deep nesting), so the
+    // hover/selection box holds the whole row; the panel then scrolls sideways
+    width: "max-content",
+    minWidth: "100%",
+    boxSizing: "border-box",
     padding: "0.375rem 0.5rem",
     borderRadius: "var(--radius-control)",
     backgroundColor: isDragging
