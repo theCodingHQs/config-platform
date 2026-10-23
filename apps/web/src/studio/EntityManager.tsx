@@ -569,7 +569,8 @@ export const EntityManager: React.FC = () => {
                 <button
                   type="button"
                   className="btn btn-secondary"
-                  onClick={() => setShowAddFieldModal(true)}
+                  // The add and edit dialogs share these values: a new field always starts blank
+                  onClick={() => { resetFieldForm(); setShowAddFieldModal(true); }}
                   aria-label="+ Add Field"
                   style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}
                 >
@@ -1062,7 +1063,7 @@ export const EntityManager: React.FC = () => {
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setEditingField(null)}>Cancel</button>
+              <button type="button" className="btn btn-secondary" onClick={() => { setEditingField(null); resetFieldForm(); }}>Cancel</button>
               <button type="button" className="btn btn-primary" disabled={Boolean(editFormulaProblem)} onClick={() => updateFieldMut.mutate()}>Save Changes</button>
             </div>
           </div>
