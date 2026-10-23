@@ -366,7 +366,7 @@ describe('Pre-Deployment Hardening & Production Guards', () => {
       try {
         // Attempt login while unverified -> must throw 403
         await expect(authService.login(unverifiedEmail, pass)).rejects.toThrow(
-          /Email verification required before accessing workspace/i
+          /confirm your email address first/i
         );
 
         // Verify the user email

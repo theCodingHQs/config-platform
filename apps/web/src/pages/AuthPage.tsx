@@ -9,6 +9,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '../context/auth-context';
+import { forgotPassword } from '../api/client';
 
 export function AuthPage() {
   const { login, signup } = useAuth();
@@ -18,6 +19,7 @@ export function AuthPage() {
   const [tenantName, setTenantName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,6 +116,7 @@ export function AuthPage() {
             type="button"
             onClick={() => {
               setMode('login');
+              setForgotOpen(false);
               setError(null);
             }}
             style={{
@@ -135,6 +138,7 @@ export function AuthPage() {
             type="button"
             onClick={() => {
               setMode('signup');
+              setForgotOpen(false);
               setError(null);
             }}
             style={{
@@ -176,6 +180,9 @@ export function AuthPage() {
             </div>
           )}
 
+          {forgotOpen ? (
+            <ForgotPasswordForm initialEmail={email} onBack={() => setForgotOpen(false)} />
+          ) : (
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
             {mode === 'signup' && (
               <div>
@@ -269,6 +276,18 @@ export function AuthPage() {
                 {mode === 'signup' && (
                   <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--muted)' }}>Min. 10 characters</span>
                 )}
+                {mode === 'login' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError(null);
+                      setForgotOpen(true);
+                    }}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 'var(--font-size-xs)', color: 'var(--accent)' }}
+                  >
+                    Forgot password?
+                  </button>
+                )}
               </div>
               <div style={{ position: 'relative' }}>
                 <Lock
@@ -323,8 +342,83 @@ export function AuthPage() {
               )}
             </button>
           </form>
+          )}
         </div>
       </div>
     </div>
+  );
+}
+
+/** "Forgot password?": asks for the email and sends a one-time link to choose a new password. */
+function ForgotPasswordForm({ initialEmail, onBack }: { initialEmail: string; onBack: () => void }) {
+  const [email, setEmail] = useState(initialEmail);
+  const [sending, setSending] = useState(false);
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSending(true);
+    try {
+      await forgotPassword(email.trim());
+      setSentTo(email.trim());
+    } catch (err: any) {
+      setError(err.message || 'The link could not be sent. Try again in a few minutes.');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (sentTo) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+        <div role="status" style={{ padding: 'var(--space-3)', borderRadius: 'var(--radius-control)', fontSize: 'var(--font-size-sm)', backgroundColor: 'var(--success-subtle)', color: 'var(--success)' }}>
+          If <strong>{sentTo}</strong> has an account, we've emailed it a link to choose a new password. It works once, for one hour.
+          Check the spam folder if it doesn't arrive in a few minutes.
+        </div>
+        <button type="button" className="btn btn-secondary" onClick={onBack}>
+          Back to sign in
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+      <p style={{ margin: 0, fontSize: 'var(--font-size-sm)', color: 'var(--text-muted)' }}>
+        Enter your email and we'll send you a link to choose a new password.
+      </p>
+      <div>
+        <label htmlFor="forgot-email" style={{ display: 'block', fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: 'var(--space-1)' }}>
+          Email Address
+        </label>
+        <div style={{ position: 'relative' }}>
+          <Mail size={16} style={{ position: 'absolute', left: 'var(--space-3)', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} />
+          <input
+            id="forgot-email"
+            type="email"
+            className="form-input"
+            value={email}
+            placeholder="name@company.com"
+            onChange={(e) => setEmail(e.target.value)}
+            style={{ width: '100%', paddingLeft: 'calc(var(--space-3) + 16px + var(--space-2))' }}
+            required
+            autoFocus
+          />
+        </div>
+      </div>
+      {error && (
+        <div role="alert" style={{ padding: 'var(--space-3)', borderRadius: 'var(--radius-control)', fontSize: 'var(--font-size-sm)', backgroundColor: 'var(--danger-subtle)', color: 'var(--danger)' }}>
+          {error}
+        </div>
+      )}
+      <button type="submit" className="btn btn-primary" disabled={sending}>
+        {sending ? 'Sending…' : 'Send reset link'}
+      </button>
+      <button type="button" className="btn btn-ghost" onClick={onBack}>
+        Back to sign in
+      </button>
+    </form>
   );
 }

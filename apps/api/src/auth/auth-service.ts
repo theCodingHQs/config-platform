@@ -1,14 +1,14 @@
 /**
  * AuthService: handles signup, login, logout, invite flow, role management.
  * Password hashing via argon2. Sessions stored in public.app_session.
- * Password reset is stubbed – link is logged in dev.
+ * Password reset emails a one-time link (logged instead while no email service is set up).
  */
 
 import crypto from 'node:crypto';
 import { pool } from '../db/pool.js';
 import { defaultStorageAdapter } from '../db/storage-adapter.js';
 import { migrationService } from '../migrations/migration-service.js';
-import { defaultEmailVerifier, defaultEmailSender } from './email-verifier.js';
+import { defaultEmailVerifier, defaultEmailSender, PASSWORD_RESET_MINUTES } from './email-verifier.js';
 import type { AppUser, SessionPayload, TenantRole } from './auth-types.js';
 import { isValidRole } from './auth-types.js';
 import { platformSettings } from '../platform/platform-settings.js';
@@ -164,11 +164,11 @@ export class AuthService {
       [hashed]
     );
     if (res.rows.length === 0) {
-      throw new AuthError('Invalid verification token', 400);
+      throw new AuthError('This confirmation link is not valid, or your email is already confirmed. Try signing in; if that asks you to confirm, use "Forgot password?" on the sign-in page: resetting your password also confirms your email.', 400);
     }
     const row = res.rows[0];
     if (new Date(row.expires_at) < new Date()) {
-      throw new AuthError('Verification token has expired', 400);
+      throw new AuthError('This confirmation link has expired. Use "Forgot password?" on the sign-in page: resetting your password also confirms your email.', 400);
     }
     await pool.query(`UPDATE public.app_user SET email_verified = true WHERE id = $1`, [row.user_id]);
     await pool.query(`DELETE FROM public.email_verification_token WHERE token = $1`, [hashed]);
@@ -193,7 +193,7 @@ export class AuthService {
 
     const requireVerification = emailVerificationRequired();
     if (requireVerification && !user.email_verified) {
-      throw new AuthError('Email verification required before accessing workspace. Please check your inbox.', 403);
+      throw new AuthError(`Please confirm your email address first: open the link in the email we sent you. If you can't find it, use "Forgot password?": resetting your password also confirms your email.`, 403);
     }
 
     const lib = await getArgon2();
@@ -562,17 +562,75 @@ export class AuthService {
     }
   }
 
-  // ─── Password Reset (stubbed) ─────────────────────────────────
+  // ─── Password Reset ───────────────────────────────────────────
 
+  /**
+   * Emails a one-time link to choose a new password. Says nothing about whether the account
+   * exists (the caller always answers the same), so the form can't be used to discover accounts.
+   */
   async requestPasswordReset(email: string): Promise<void> {
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (!normalizedEmail) return;
+    const user = await pool.query<{ id: string }>('SELECT id FROM public.app_user WHERE email = $1', [normalizedEmail]);
+    const userId = user.rows[0]?.id;
+    if (!userId) return;
+
     const token = crypto.randomBytes(32).toString('hex');
-    const link = `${process.env.APP_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
-    // In dev, log the link. In production this would send an email.
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`[AUTH] Password reset link for ${normalizedEmail}: ${link}`);
+    // A new link replaces any earlier unused one
+    await pool.query('DELETE FROM public.password_reset_token WHERE user_id = $1', [userId]);
+    await pool.query(
+      `INSERT INTO public.password_reset_token (token, user_id, expires_at, created_at)
+       VALUES ($1, $2, NOW() + make_interval(mins => $3), NOW())`,
+      [hashToken(token), userId, PASSWORD_RESET_MINUTES]
+    );
+    await defaultEmailSender.sendPasswordResetEmail(normalizedEmail, token);
+  }
+
+  /** The account a reset link belongs to, if the link is still usable. */
+  async checkPasswordResetToken(rawToken: string): Promise<{ email: string }> {
+    const res = await pool.query<{ email: string }>(
+      `SELECT u.email FROM public.password_reset_token t JOIN public.app_user u ON u.id = t.user_id
+       WHERE t.token = $1 AND t.used_at IS NULL AND t.expires_at > NOW()`,
+      [hashToken(String(rawToken || ''))]
+    );
+    if (!res.rows[0]) throw new AuthError('This link has expired or was already used. Ask for a new one from the login page.', 400);
+    return { email: res.rows[0].email };
+  }
+
+  /**
+   * Sets the new password, uses up the link, and logs the account out everywhere (whoever
+   * might have had the old password loses access). Opening the emailed link also proves the
+   * person owns the address, so it counts as a confirmed email.
+   */
+  async resetPassword(rawToken: string, newPassword: string): Promise<{ email: string }> {
+    validatePassword(newPassword);
+    const lib = await getArgon2();
+    const hash = await lib.hash(newPassword);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const claimed = await client.query<{ user_id: string }>(
+        `UPDATE public.password_reset_token SET used_at = NOW()
+         WHERE token = $1 AND used_at IS NULL AND expires_at > NOW()
+         RETURNING user_id`,
+        [hashToken(String(rawToken || ''))]
+      );
+      const userId = claimed.rows[0]?.user_id;
+      if (!userId) throw new AuthError('This link has expired or was already used. Ask for a new one from the login page.', 400);
+      const user = await client.query<{ email: string }>(
+        'UPDATE public.app_user SET password_hash = $1, email_verified = TRUE, updated_at = NOW() WHERE id = $2 RETURNING email',
+        [hash, userId]
+      );
+      await client.query('DELETE FROM public.app_session WHERE user_id = $1', [userId]);
+      await client.query('DELETE FROM public.password_reset_token WHERE user_id = $1 AND used_at IS NULL', [userId]);
+      await client.query('COMMIT');
+      return { email: user.rows[0].email };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
     }
-    // Store the token (no-op stub in this skeleton)
   }
 }
 

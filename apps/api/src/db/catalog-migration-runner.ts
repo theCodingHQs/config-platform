@@ -491,6 +491,23 @@ export const catalogMigrations: CatalogMigration[] = [
       `);
     },
   },
+  {
+    version: 19,
+    name: '019_password_reset_tokens',
+    up: async (client: PoolClient) => {
+      // One-time "forgot password" links (only a hash of each is stored)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.password_reset_token (
+          token VARCHAR(128) PRIMARY KEY,
+          user_id VARCHAR(64) NOT NULL REFERENCES public.app_user(id) ON DELETE CASCADE,
+          expires_at TIMESTAMPTZ NOT NULL,
+          used_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_password_reset_token_user ON public.password_reset_token(user_id);
+      `);
+    },
+  },
 ];
 
 /**

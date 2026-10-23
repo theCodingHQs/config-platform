@@ -100,6 +100,8 @@ import {
 } from "./api/client";
 import { AuthPage } from "./pages/AuthPage";
 import { AcceptInvitePage } from "./pages/AcceptInvitePage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
+import { VerifyEmailPage } from "./pages/VerifyEmailPage";
 import { ThemeProvider } from "./context/theme-context";
 import { ThemeModeSwitch } from "./components/ThemeModeSwitch";
 import { DatePreferencesButton } from "./components/date-preferences-dialog";
@@ -932,6 +934,14 @@ function AuthenticatedApp() {
     window.location.pathname === "/accept-invite"
   ) {
     return <AcceptInvitePage />;
+  }
+
+  // Pages opened from emailed links work whether or not someone is signed in
+  if (typeof window !== "undefined" && window.location.pathname === "/reset-password") {
+    return <ResetPasswordPage />;
+  }
+  if (typeof window !== "undefined" && window.location.pathname === "/verify-email") {
+    return <VerifyEmailPage />;
   }
 
   if (!user) {

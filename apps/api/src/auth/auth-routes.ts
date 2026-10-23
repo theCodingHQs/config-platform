@@ -190,6 +190,24 @@ export async function authRoutes(fastify: FastifyInstance) {
     return { success: true };
   });
 
+  // ─── GET /auth/reset-password-info ───────────────────────────
+  // Which account a reset link is for (and whether it still works), before asking for a password
+  fastify.get('/auth/reset-password-info', {
+    preHandler: createRateLimitHook(30, 15 * 60 * 1000),
+  }, async (req: FastifyRequest) => {
+    const { token } = (req.query as any) || {};
+    return authService.checkPasswordResetToken(token);
+  });
+
+  // ─── POST /auth/reset-password ───────────────────────────────
+  fastify.post('/auth/reset-password', {
+    preHandler: [createRateLimitHook(10, 15 * 60 * 1000), csrfCheckHook],
+  }, async (req: FastifyRequest) => {
+    const { token, password } = (req.body as any) || {};
+    const { email } = await authService.resetPassword(token, password);
+    return { success: true, email };
+  });
+
   // ─── GET /auth/invite-info ──────────────────────────────────
   fastify.get('/auth/invite-info', async (req: FastifyRequest, reply: FastifyReply) => {
     const { token } = (req.query as any) || {};

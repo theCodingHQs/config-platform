@@ -10,6 +10,7 @@ import { platformSettings } from '../platform/platform-settings.js';
 export interface EmailSender {
   sendVerificationEmail(email: string, token: string): Promise<void>;
   sendInviteEmail(email: string, token: string, inviterEmail?: string, tenantName?: string): Promise<void>;
+  sendPasswordResetEmail(email: string, token: string): Promise<void>;
 }
 
 export type EmailVerifier = EmailSender;
@@ -43,6 +44,40 @@ export function buildVerificationEmailHtml(verificationUrl: string): string {
     <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
     <p style="font-size: 12px; color: #94a3b8; margin-bottom: 0;">
       If you did not create an account, you can safely ignore this email.
+    </p>
+  </div>
+</body>
+</html>`;
+}
+
+export const PASSWORD_RESET_MINUTES = 60;
+
+export function buildPasswordResetEmailHtml(resetUrl: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Reset your password</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; padding: 40px 20px; color: #1e293b;">
+  <div style="max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; padding: 32px;">
+    <h2 style="margin-top: 0; color: #0f172a; font-size: 20px;">Reset your password</h2>
+    <p style="font-size: 15px; line-height: 1.6; color: #475569;">
+      Someone (hopefully you) asked to reset the password for this account. Choose a new one with the button below.
+      The link works once, for ${PASSWORD_RESET_MINUTES} minutes.
+    </p>
+    <div style="margin: 28px 0;">
+      <a href="${resetUrl}" style="background-color: #0f172a; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 14px; display: inline-block;">
+        Choose a new password
+      </a>
+    </div>
+    <p style="font-size: 13px; color: #64748b; line-height: 1.5;">
+      If the button above does not work, copy and paste this URL into your browser:<br/>
+      <a href="${resetUrl}" style="color: #2563eb; word-break: break-all;">${resetUrl}</a>
+    </p>
+    <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+    <p style="font-size: 12px; color: #94a3b8; margin-bottom: 0;">
+      If you didn't ask for this, you can ignore this email: your password stays the same.
     </p>
   </div>
 </body>
@@ -106,6 +141,18 @@ export class ProductionEmailSender implements EmailSender {
     const html = buildInviteEmailHtml(inviteUrl, inviterEmail, tenantName);
     await this.sendMail({ to: email, subject, html, text });
   }
+
+  async sendPasswordResetEmail(email: string, token: string): Promise<void> {
+    const resetUrl = `${getPublicUrl()}/reset-password?token=${encodeURIComponent(token)}`;
+    await this.sendMail({
+      to: email,
+      subject: 'Reset your password',
+      text: `Choose a new password (the link works once, for ${PASSWORD_RESET_MINUTES} minutes): ${resetUrl}
+
+If you didn't ask for this, ignore this email: your password stays the same.`,
+      html: buildPasswordResetEmailHtml(resetUrl),
+    });
+  }
 }
 
 export class ConsoleEmailVerifier implements EmailSender {
@@ -113,7 +160,7 @@ export class ConsoleEmailVerifier implements EmailSender {
     email: string;
     token: string;
     link: string;
-    type?: 'verification' | 'invite';
+    type?: 'verification' | 'invite' | 'password_reset';
     subject?: string;
   } | null = null;
 
@@ -144,6 +191,14 @@ export class ConsoleEmailVerifier implements EmailSender {
     };
     if (process.env.NODE_ENV !== 'production') {
       console.log(`[EMAIL INVITE] Invite link for ${email}: ${link}`);
+    }
+  }
+
+  async sendPasswordResetEmail(email: string, token: string): Promise<void> {
+    const link = `${getPublicUrl()}/reset-password?token=${encodeURIComponent(token)}`;
+    this.lastSentEmail = { email, token, link, type: 'password_reset', subject: 'Reset your password' };
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[EMAIL PASSWORD RESET] Reset link for ${email}: ${link}`);
     }
   }
 }
@@ -184,6 +239,12 @@ export const defaultEmailVerifier: EmailSender & { lastSentEmail: any } = {
       return sender.sendInviteEmail(email, token, inviterEmail, tenantName);
     }
     return consoleEmailVerifier.sendInviteEmail(email, token, inviterEmail, tenantName);
+  },
+  async sendPasswordResetEmail(email: string, token: string) {
+    if (platformSettings.emailConfigured()) {
+      return new ProductionEmailSender().sendPasswordResetEmail(email, token);
+    }
+    return consoleEmailVerifier.sendPasswordResetEmail(email, token);
   },
   get lastSentEmail() {
     return consoleEmailVerifier.lastSentEmail;

@@ -205,6 +205,28 @@ export async function forgotPassword(
   return handleResponse<{ success: boolean }>(res);
 }
 
+export async function fetchResetPasswordInfo(token: string): Promise<{ email: string }> {
+  return handleResponse(await apiFetch(`${API_BASE_URL}/auth/reset-password-info?token=${encodeURIComponent(token)}`));
+}
+
+export async function resetPassword(token: string, password: string): Promise<{ success: boolean; email: string }> {
+  const res = await apiFetch(`${API_BASE_URL}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, password }),
+  });
+  return handleResponse(res);
+}
+
+export async function verifyEmail(token: string): Promise<{ success: boolean; email: string }> {
+  const res = await apiFetch(`${API_BASE_URL}/auth/verify-email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  });
+  return handleResponse(res);
+}
+
 export interface InviteInfo {
   email: string;
   role: string;
