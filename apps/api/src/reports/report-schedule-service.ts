@@ -273,7 +273,9 @@ class ReportScheduleService {
     const dateLabel = formatPlainDate(today, { dateFormat: !clock.dateFormat || clock.dateFormat === 'auto' ? 'D MMM YYYY' : clock.dateFormat });
     const subject = row.config.subject?.trim() || `${template.name} – ${dateLabel}`;
     const intro = row.config.message?.trim() || `Please find the ${template.name} attached.`;
-    const footer = `Sent automatically by ${clock.workspaceName} (${describeScheduleTiming(row.config.timing).toLowerCase()}). Set up by ${sender.email}.`;
+    // "every Monday at 07:00": only the first letter is lowered, day names keep their capital
+    const timing = describeScheduleTiming(row.config.timing);
+    const footer = `Sent automatically by ${clock.workspaceName} (${timing[0].toLowerCase()}${timing.slice(1)}). Set up by ${sender.email}.`;
 
     await workspaceMailer.send(row.tenant_id, {
       to: row.config.recipients,
