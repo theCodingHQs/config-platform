@@ -9,6 +9,7 @@ import {
   describeScheduleTiming,
   formatInstant,
   isRelativeDateToken,
+  sameTimeZone,
   type ReportSchedule,
   type ReportScheduleInput,
   type ReportScheduleTiming,
@@ -83,7 +84,7 @@ export function ReportSchedules() {
   // Schedules run on the workspace clock; when the viewer's differs, say which one the times use
   const { data: workspaceDates } = useQuery({ queryKey: WORKSPACE_DATE_SETTINGS_KEY, queryFn: fetchWorkspaceDateSettings });
   const viewerZone = prefs.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const workspaceZoneLabel = workspaceDates?.timeZone && workspaceDates.timeZone !== viewerZone ? `${workspaceDates.timeZone.replace(/_/g, " ")} time` : null;
+  const workspaceZoneLabel = workspaceDates?.timeZone && !sameTimeZone(workspaceDates.timeZone, viewerZone) ?`${workspaceDates.timeZone.replace(/_/g, " ")} time` : null;
 
   const emailsOnlyLogged = email && email.mode === "platform" && !email.platformConfigured;
 

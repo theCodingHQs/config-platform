@@ -19,6 +19,7 @@ import {
   parseTimeOfDay,
   resolveDateDisplayPrefs,
   resolveWeekStartDay,
+  sameTimeZone,
   WorkspaceDateSettingsSchema,
   UserDatePreferencesSchema,
 } from '../src/dates.ts';
@@ -128,5 +129,12 @@ describe(`dates (TZ=${process.env.TZ ?? 'system'})`, () => {
     assert.equal(resolveWeekStartDay(resolved.weekStart), 0);
     assert.equal(resolveWeekStartDay('monday'), 1);
     assert.equal(UserDatePreferencesSchema.safeParse({ timeZone: 'Mars/Base' }).success, false);
+  });
+
+  it('treats old and current names of a zone as the same zone', () => {
+    assert.equal(sameTimeZone('Asia/Kolkata', 'Asia/Calcutta'), true);
+    assert.equal(sameTimeZone('Asia/Kolkata', 'Asia/Kolkata'), true);
+    assert.equal(sameTimeZone('Asia/Kolkata', 'Europe/London'), false);
+    assert.equal(sameTimeZone('Mars/Base', 'Asia/Kolkata'), false);
   });
 });

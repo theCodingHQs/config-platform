@@ -143,6 +143,23 @@ export function isValidTimeZone(zone: string): boolean {
   }
 }
 
+/**
+ * Whether two zone names are the same zone. Browsers may report an older name for the same
+ * zone (Chrome says "Asia/Calcutta" for "Asia/Kolkata"), so both are compared as the runtime
+ * names them.
+ */
+export function sameTimeZone(a: string, b: string): boolean {
+  if (a === b) return true;
+  const canonical = (zone: string) => {
+    try {
+      return new Intl.DateTimeFormat('en-US', { timeZone: zone }).resolvedOptions().timeZone;
+    } catch {
+      return zone;
+    }
+  };
+  return canonical(a) === canonical(b);
+}
+
 const TimeZoneSchema = z.string().min(1).max(64).refine(isValidTimeZone, 'Unknown time zone');
 
 /**
