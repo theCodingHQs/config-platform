@@ -12,6 +12,8 @@ export interface SearchableSelectProps {
   disabled?: boolean;
   hasError?: boolean;
   placeholder?: string;
+  /** Extra style for the closed box (e.g. room for a leading icon). */
+  inputStyle?: React.CSSProperties;
 }
 
 export const SearchableSelect: React.FC<SearchableSelectProps> = ({
@@ -22,6 +24,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   disabled = false,
   hasError = false,
   placeholder = 'Select reference...',
+  inputStyle,
 }) => {
   const { tenantId, resolveEntity } = useMetadata();
   const [isOpen, setIsOpen] = useState(false);
@@ -111,6 +114,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           backgroundColor: disabled ? 'var(--surface-2)' : 'var(--surface)',
           opacity: disabled ? 0.6 : 1,
           padding: 'var(--spacing-1) var(--spacing-2)',
+          ...inputStyle,
         }}
         aria-haspopup="listbox"
         aria-expanded={isOpen}

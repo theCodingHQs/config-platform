@@ -558,6 +558,8 @@ function renderFieldInput(
           style={{
             position: "absolute",
             left: "var(--space-3)",
+            // Above inputs that are positioned themselves (e.g. the date picker), which would hide it
+            zIndex: 1,
             color: "var(--text-muted)",
             pointerEvents: "none",
             display: "flex",
@@ -677,6 +679,7 @@ function renderFieldInput(
           onChange={onChange}
           disabled={readOnly}
           hasError={Boolean(hasError)}
+          inputStyle={iconName ? { paddingLeft: "calc(var(--space-6) + var(--space-3))" } : undefined}
         />,
       );
     }

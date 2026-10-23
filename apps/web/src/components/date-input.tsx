@@ -105,7 +105,7 @@ export function DateInput({ id, value, onChange, kind = "day", disabled, invalid
   const showInvalid = invalid || typedInvalid;
 
   return (
-    <div ref={rootRef} style={{ position: "relative", display: "flex", gap: "var(--space-2)" }}>
+    <div ref={rootRef} style={{ position: "relative", display: "flex", gap: "var(--space-2)", width: "100%" }}>
       <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
         <input
           id={inputId}
