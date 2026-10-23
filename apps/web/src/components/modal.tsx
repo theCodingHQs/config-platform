@@ -184,7 +184,7 @@ export function ModalComponent({
         {/* Modal Body */}
         <div
           data-testid="modal-body"
-          className={body.className}
+          className={`runtime-modal-body ${body.className}`}
           style={{
             padding: 'var(--space-6)',
             overflowY: 'auto',

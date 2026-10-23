@@ -83,7 +83,7 @@ describe('Phones and tablets', () => {
     root.walkAtRules('media', (rule) => {
       if (rule.params === '(max-width: 640px)') rule.walkRules((r) => { phoneSelectors.push(r.selector); });
     });
-    for (const selector of ['.data-table.responsive-cards td[data-label]::before', '.table-container:has(> .data-table.responsive-cards)', '.runtime-modal', '.header-desktop-controls', '.layout-stack[data-direction="horizontal"]']) {
+    for (const selector of ['.data-table.responsive-cards td[data-label]::before', '.table-container:has(> .data-table.responsive-cards)', '.runtime-modal', '.runtime-modal-body', '.header-desktop-controls', '.layout-stack[data-direction="horizontal"]']) {
       expect(phoneSelectors).toContain(selector);
     }
   });

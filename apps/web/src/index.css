@@ -1358,9 +1358,10 @@ input:-webkit-autofill:active {
     text-align: center;
   }
 
-  /* Dialogs (add / edit forms) use the whole screen; inline sizes are set on the elements */
+  /* Dialogs (add / edit forms) use the whole screen down to the status bar (which stays on top
+     of dialogs and would hide their buttons); inline sizes are set on the elements */
   .runtime-modal-overlay {
-    padding: 0 !important;
+    padding: 0 0 calc(var(--control-height-sm) + var(--space-1)) !important;
     align-items: stretch !important;
   }
 
@@ -1370,6 +1371,13 @@ input:-webkit-autofill:active {
     height: 100%;
     border-radius: var(--radius-none) !important;
     border: 0 !important;
+  }
+
+  /* The body fills the screen below the header, instead of stopping short of the bottom */
+  .runtime-modal-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none !important;
   }
 }
 
