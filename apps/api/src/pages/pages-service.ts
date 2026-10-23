@@ -122,8 +122,11 @@ export class PagesService {
           const colSet = entityColumnsMap.get(ds.entityId) || new Set<string>();
           if (ds.filter && typeof ds.filter === 'object') {
             for (const key of Object.keys(ds.filter)) {
-              if (!colSet.has(key)) {
-                broken.push(`Data source [${ds.id}] filter references missing field '${key}'`);
+              // "machine_name,title" matches any of several fields: check each one
+              for (const field of key.split(',').map((f) => f.trim()).filter(Boolean)) {
+                if (!colSet.has(field)) {
+                  broken.push(`Data source [${ds.id}] filter references missing field '${field}'`);
+                }
               }
             }
           }

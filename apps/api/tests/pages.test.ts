@@ -180,6 +180,22 @@ describe('Pages Service & Publishing', () => {
     ).toBe(true);
   });
 
+  it('accepts a filter over any of several fields, and names a missing one', async () => {
+    const draftWith = (key: string): PageDefinition => ({
+      schemaVersion: 2,
+      id: createdPageId,
+      version: 1,
+      route: '/device-monitor',
+      state: { q: '' },
+      dataSources: [{ id: 'ds_devices', entityId: deviceEntityId, filter: { [key]: { contains: '{{ state.q }}' } } }],
+      root: { id: 'root_stack', type: 'stack', props: { direction: 'vertical' }, children: [] },
+    });
+    const ok = await pagesService.updatePage(tenantId, createdPageId, { draft: draftWith(`${nameFieldId},serial_no`) });
+    expect(ok.brokenBindings).toEqual([]);
+    const bad = await pagesService.updatePage(tenantId, createdPageId, { draft: draftWith(`${nameFieldId},nope`) });
+    expect(bad.brokenBindings).toEqual(["Data source [ds_devices] filter references missing field 'nope'"]);
+  });
+
   it('publishes a draft and ensures draft edits do not affect published page until publish', async () => {
     const v1Draft: PageDefinition = {
       schemaVersion: 1,

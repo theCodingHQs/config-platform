@@ -1287,39 +1287,51 @@ export const PageBuilder: React.FC = () => {
       }}
       className="main-height"
     >
-      {/* Builder Top Bar */}
+      {/* Builder Top Bar (wraps to two rows on narrow windows instead of overlapping) */}
       <div
         style={{
           display: "flex",
+          flexWrap: "wrap",
           alignItems: "center",
           justifyContent: "space-between",
-          gap: "var(--space-3)",
+          gap: "var(--space-2) var(--space-3)",
           padding: "var(--space-2) var(--space-4)",
           borderBottom: "var(--border-width-sm) solid var(--border)",
           backgroundColor: "var(--surface)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)", minWidth: 0, flex: "1 1 18rem" }}>
           <button
             type="button"
             className="btn btn-ghost btn-sm"
             onClick={() => navigate("/studio/pages")}
+            style={{ flexShrink: 0, whiteSpace: "nowrap" }}
           >
             <ArrowLeft size={TOOLBAR_ICON_SIZE} /> Pages
           </button>
           <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", minWidth: 0 }}>
-            <span style={{ fontWeight: 600, fontSize: "var(--font-size-sm)" }}>
+            {/* On a narrow window the name and route shorten (route first); the badges never wrap */}
+            <span
+              title={pageDetail.name}
+              style={{ fontWeight: 600, fontSize: "var(--font-size-sm)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: "3rem" }}
+            >
               {pageDetail.name}
             </span>
             <span
+              title={pageDetail.route}
               style={{
                 color: "var(--text-muted)",
                 fontSize: "var(--font-size-sm)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                minWidth: 0,
+                flexShrink: 3,
               }}
             >
               {pageDetail.route}
             </span>
-            <span className="badge" style={{ fontSize: "var(--font-size-xs)" }}>
+            <span className="badge" style={{ fontSize: "var(--font-size-xs)", flexShrink: 0 }}>
               v{pageDetail.version}
             </span>
 
@@ -1339,6 +1351,8 @@ export const PageBuilder: React.FC = () => {
                   gap: "var(--space-1)",
                   fontWeight: 600,
                   letterSpacing: "0.01em",
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
                 }}
                 title="Draft has changes that have not been published live yet"
               >
@@ -1366,6 +1380,8 @@ export const PageBuilder: React.FC = () => {
                   alignItems: "center",
                   gap: "var(--space-1)",
                   fontWeight: 600,
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
                 }}
                 title="All draft changes are published and live"
               >
