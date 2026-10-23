@@ -46,6 +46,17 @@ function formatFrom(name: string, address: string): string {
   return clean ? `"${clean}" <${address}>` : address;
 }
 
+/** The readable part of an email service's error reply ({"message": …}), else the reply itself */
+export function resendErrorMessage(status: number, body: string): string {
+  try {
+    const message = JSON.parse(body)?.message;
+    if (typeof message === 'string' && message.trim()) return message.trim();
+  } catch {
+    /* not JSON */
+  }
+  return body.trim() || `error ${status}`;
+}
+
 class PlatformSettingsService {
   private stored: StoredPlatformSettings = {};
   private storageKey = 'settings';
@@ -159,7 +170,7 @@ class PlatformSettingsService {
         attachments: (mail.attachments || []).map((a) => ({ filename: a.filename, content: a.content.toString('base64') })),
       }),
     });
-    if (!res.ok) throw new Error(`The email service refused the message (${res.status}): ${await res.text()}`);
+    if (!res.ok) throw new Error(`The email service refused the message: ${resendErrorMessage(res.status, await res.text())}`);
   }
 
   // ─── Platform setup screen ────────────────────────────────────────────────

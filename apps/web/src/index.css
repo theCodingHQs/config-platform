@@ -366,6 +366,8 @@ h3 {
   white-space: nowrap;
   line-height: 1.25;
   box-sizing: border-box;
+  /* Links styled as buttons (<a class="btn">) aren't underlined */
+  text-decoration: none;
   /* Space between an icon and its label */
   gap: var(--spacing-1);
 }
