@@ -15,7 +15,7 @@ import {
   ApiError,
 } from '../api/client';
 import { Plus, X, AlertTriangle, ChevronUp, ChevronDown, Edit2, Upload, FileSpreadsheet, LayoutGrid } from 'lucide-react';
-import type { ErdTable, ErdColumn, FieldType } from '@config-platform/schema';
+import { formulaProblem, type ErdTable, type ErdColumn, type FieldType, type FormulaField } from '@config-platform/schema';
 import { DynamicIcon } from '../components/dynamic-icon';
 import { IconPicker } from '../components/icon-picker';
 import { useStatusNotify } from '../context/app-bar-context';
@@ -79,6 +79,21 @@ export const EntityManager: React.FC = () => {
   });
 
   const selectedEntity = entities.find((e) => e.id === selectedEntityId) || entities[0];
+
+  /** Why the formula being typed can't work (checked against the fields' types), or null */
+  const formulaCheck = (type: string, otherColumns: ErdColumn[]): string | null => {
+    if (fieldFormula === null || !canBeCalculated(type)) return null;
+    if (!fieldFormula.trim()) return 'Type a formula, or choose "Entered by people".';
+    const asFormulaField = (c: ErdColumn): FormulaField => ({ name: c.name, type: c.type, config: c.config });
+    const field: FormulaField = { name: fieldName || '_new_field', type, config: { formula: fieldFormula } };
+    const targetFieldsOf = (link: FormulaField) =>
+      entities.find((e) => e.id === link.config?.targetEntityId)?.columns.map(asFormulaField);
+    return formulaProblem(field, [...otherColumns.map(asFormulaField), field], targetFieldsOf);
+  };
+  const addFormulaProblem = showAddFieldModal ? formulaCheck(fieldType, selectedEntity?.columns ?? []) : null;
+  const editFormulaProblem = editingField
+    ? formulaCheck(editingField.type, (selectedEntity?.columns ?? []).filter((c) => c.id !== editingField.id))
+    : null;
 
   // Helper to slugify & suggest icon
   const handleLabelChange = (lbl: string) => {
@@ -962,6 +977,7 @@ export const EntityManager: React.FC = () => {
               formula={fieldFormula}
               onChange={setFieldFormula}
               otherFields={selectedEntity?.columns ?? []}
+              problem={addFormulaProblem}
             />
 
             {fieldType === 'reference' && (
@@ -985,7 +1001,7 @@ export const EntityManager: React.FC = () => {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
               <button type="button" className="btn btn-secondary" onClick={() => { setShowAddFieldModal(false); resetFieldForm(); }}>Cancel</button>
-              <button type="button" className="btn btn-primary" disabled={!fieldLabel || !fieldName} onClick={() => addFieldMut.mutate()}>Add Field</button>
+              <button type="button" className="btn btn-primary" disabled={!fieldLabel || !fieldName || Boolean(addFormulaProblem)} onClick={() => addFieldMut.mutate()}>Add Field</button>
             </div>
           </div>
         </div>
@@ -1031,6 +1047,7 @@ export const EntityManager: React.FC = () => {
               formula={fieldFormula}
               onChange={setFieldFormula}
               otherFields={(selectedEntity?.columns ?? []).filter((c) => c.id !== editingField.id)}
+              problem={editFormulaProblem}
             />
             {editingField.type === 'select' && (
               <div>
@@ -1046,7 +1063,7 @@ export const EntityManager: React.FC = () => {
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setEditingField(null)}>Cancel</button>
-              <button type="button" className="btn btn-primary" onClick={() => updateFieldMut.mutate()}>Save Changes</button>
+              <button type="button" className="btn btn-primary" disabled={Boolean(editFormulaProblem)} onClick={() => updateFieldMut.mutate()}>Save Changes</button>
             </div>
           </div>
         </div>

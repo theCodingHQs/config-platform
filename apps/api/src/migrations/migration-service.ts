@@ -155,7 +155,7 @@ export class MigrationService {
   ): Promise<MigrationResult & { entity: EntityDef; fields: FieldDef[] }> {
     // Formulas in a new entity are checked before anything is created
     if (input.fields?.some((f: any) => f.config?.formula)) {
-      await calculatedFieldsService.plan(tenantId, input.fields as any);
+      await calculatedFieldsService.plan(tenantId, input.fields as any, input.fields.filter((f: any) => f.config?.formula).map((f: any) => f.name));
     }
     const result = await tenantMigrationQueue.enqueue(tenantId, async () => {
       return this.storage.transaction(tenantId, async (tx) => {
@@ -377,7 +377,7 @@ export class MigrationService {
     const addsFormula = Boolean((input.config as any)?.formula);
     if (addsFormula) {
       const current = await entityCache.resolveEntity(tenantId, input.entityId);
-      await calculatedFieldsService.plan(tenantId, [...current.fields, { name: input.name, type: input.type, config: input.config } as any]);
+      await calculatedFieldsService.plan(tenantId, [...current.fields, { name: input.name, type: input.type, config: input.config } as any], [input.name]);
     }
     const result = await tenantMigrationQueue.enqueue(tenantId, async () => {
       return this.storage.transaction(tenantId, async (tx) => {
@@ -507,7 +507,14 @@ export class MigrationService {
         config: input.config !== undefined ? input.config : currentField.config,
       };
       const prospective = before.fields.map((f) => (f.id === currentField.id ? nextField : f));
-      if (prospective.some((f) => (f.config as any)?.formula)) await calculatedFieldsService.plan(tenantId, prospective as any);
+      // Check this field's formula, and when its type changes, the formulas that use it
+      const checkTypesOf = (nextField.config as any)?.formula ? [nextName] : [];
+      if (nextField.type !== currentField.type) {
+        for (const f of prospective) {
+          if ((f.config as any)?.formula && f.name !== nextName && calculatedFieldsService.formulaUses(f as any, currentField.name)) checkTypesOf.push(f.name);
+        }
+      }
+      if (prospective.some((f) => (f.config as any)?.formula)) await calculatedFieldsService.plan(tenantId, prospective as any, checkTypesOf);
       formulaChanged = (currentField.config as any)?.formula !== (nextField.config as any)?.formula;
     }
     const result = await tenantMigrationQueue.enqueue(tenantId, async () => {

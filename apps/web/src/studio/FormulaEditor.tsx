@@ -26,6 +26,7 @@ export function FormulaEditor({
   formula,
   onChange,
   otherFields,
+  problem,
 }: {
   idPrefix: string;
   fieldType: string;
@@ -33,7 +34,10 @@ export function FormulaEditor({
   onChange: (formula: string | null) => void;
   /** Fields of this entity the formula can use (the field being edited excluded) */
   otherFields: ErdColumn[];
+  /** Why the formula can't work (see formulaProblem); the dialog can't be saved meanwhile */
+  problem?: string | null;
 }) {
+  const problemId = useId();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const helpId = useId();
   if (!canBeCalculated(fieldType)) return null;
@@ -84,10 +88,22 @@ export function FormulaEditor({
               value={formula ?? ""}
               onChange={(e) => onChange(e.target.value)}
               placeholder='e.g. countTrue(range("day_01", "day_31"))'
-              aria-describedby={helpId}
+              aria-describedby={problem ? `${problemId} ${helpId}` : helpId}
+              aria-invalid={problem ? true : undefined}
               spellCheck={false}
-              style={{ fontFamily: "var(--font-mono)", fontSize: "var(--font-size-sm)", height: "auto", resize: "vertical" }}
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: "var(--font-size-sm)",
+                height: "auto",
+                resize: "vertical",
+                ...(problem ? { borderColor: "var(--danger)" } : {}),
+              }}
             />
+            {problem && (
+              <p id={problemId} role="alert" style={{ margin: "var(--space-1) 0 0", fontSize: "var(--font-size-xs)", color: "var(--danger)" }}>
+                {problem}
+              </p>
+            )}
             <p id={helpId} style={{ margin: "var(--space-1) 0 0", fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
               Recalculated whenever a record is saved, and for all existing records when the formula changes. People can't type into it.
             </p>

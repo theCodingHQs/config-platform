@@ -5,8 +5,10 @@ import {
   calculateRecord,
   formulaReferences,
   FormulaError,
+  formulaProblem,
   type FormulaField,
 } from '../dist/calculated-fields.js';
+import { SOLUTION_TEMPLATES } from '../dist/solution-templates.js';
 
 const days = Array.from({ length: 31 }, (_, i) => ({ name: `day_${String(i + 1).padStart(2, '0')}`, type: 'boolean' }));
 
@@ -84,5 +86,80 @@ describe('calculated fields', () => {
     const plan = planCalculatedFields(fields, targets);
     assert.equal(calculateRecord(plan, fields, { note: 'abc' }).n, null);
     assert.equal(calculateRecord(plan, fields, { note: '21' }).n, 42);
+  });
+
+  it('a text field never stores "NaN" from maths that went wrong', () => {
+    const fields: FormulaField[] = [{ name: 'note', type: 'text' }, { name: 't', type: 'text', config: { formula: 'note - 1' } }];
+    const plan = planCalculatedFields(fields, targets);
+    assert.equal(calculateRecord(plan, fields, { note: 'abc' }).t, null);
+  });
+});
+
+describe('formula type check (field dialog and saving a field)', () => {
+  const inspection: FormulaField[] = [
+    { name: 'machine', type: 'reference', config: { targetEntityId: 't_machine' } },
+    { name: 'inspected_on', type: 'date' },
+    { name: 'sample_size', type: 'number' },
+    { name: 'defects', type: 'number' },
+    { name: 'notes', type: 'text' },
+    { name: 'checked', type: 'boolean' },
+    { name: 'defect_rate', type: 'number', config: { formula: 'if(sample_size > 0, round(defects * 100 / sample_size, 2), 0)' } },
+  ];
+  const problem = (type: string, formula: string) =>
+    formulaProblem({ name: 'new_field', type, config: { formula } }, [...inspection, { name: 'new_field', type, config: { formula } }], targets);
+
+  it('refuses maths on text, and says how to join text instead', () => {
+    const message = problem('text', 'machine.name - defect_rate');
+    assert.match(message!, /Can't subtract with text: machine\.name is text/);
+    assert.match(message!, /concat\(/);
+    assert.equal(problem('text', 'machine.name + " - " + defect_rate'), null);
+    assert.equal(problem('text', 'concat(machine.name, " - ", defect_rate)'), null);
+    assert.match(problem('number', 'notes * 2')!, /If notes holds numbers, make it a Number field/);
+  });
+
+  it('a number field must get a number', () => {
+    assert.match(problem('number', 'if(defect_rate <= 2, "Pass", "Reject")')!, /gives text, but this is a Number field/);
+    assert.equal(problem('text', 'if(defect_rate <= 2, "Pass", "Reject")'), null);
+    assert.equal(problem('number', 'round(defects / sample_size * 100, 1)'), null);
+    assert.equal(problem('boolean', 'defect_rate > 2'), null);
+  });
+
+  it('refuses comparing numbers with text, and functions given the wrong kind of data', () => {
+    assert.match(problem('boolean', 'defect_rate > notes')!, /compares defect_rate \(a number\) with notes \(text\)/);
+    assert.equal(problem('boolean', 'inspected_on > "2026-01-01"'), null);
+    assert.match(problem('number', 'sum(defects, notes)')!, /sum\(\) works on numbers, but notes is text/);
+    assert.match(problem('number', 'sum(range("sample_size", "notes"))')!, /includes text/);
+    assert.equal(problem('number', 'countTrue(range("checked", "checked"))'), null);
+    assert.match(problem('text', 'inspected_on + 7')!, /adding a number to a date isn't supported/);
+  });
+
+  it('checks how many values a function takes', () => {
+    assert.match(problem('text', 'if(defect_rate > 2, "Reject")')!, /if\(\) takes 3 values: if\(condition, value when true, value when false\)/);
+    assert.match(problem('number', 'round()')!, /round\(\) takes 1 or 2 values/);
+  });
+
+  it('still reports unknown fields and syntax, without "Formula for …" in front', () => {
+    assert.equal(problem('number', 'defectz * 2'), "Unknown field 'defectz'");
+    assert.match(problem('number', 'defects *')!, /^Formula syntax error/);
+  });
+
+  it('an older formula that fails the check doesn\'t stop records being calculated', () => {
+    const fields: FormulaField[] = [...inspection, { name: 'label', type: 'text', config: { formula: 'machine.name - defect_rate' } }];
+    assert.doesNotThrow(() => planCalculatedFields(fields, targets));
+    assert.throws(() => planCalculatedFields(fields, targets, { checkTypesOf: ['label'] }), /Formula for 'label': Can't subtract/);
+  });
+
+  it('every ready-made template passes the check', () => {
+    for (const template of SOLUTION_TEMPLATES) {
+      const byKey = new Map(template.entities.map((e) => [e.key, e]));
+      for (const entity of template.entities) {
+        const fields: FormulaField[] = entity.fields.map((f) => ({ name: f.name, type: f.type, config: { ...f.config, ...(f.link ? { targetEntityId: f.link } : {}) } }));
+        const linked = (link: FormulaField) => byKey.get(String(link.config?.targetEntityId))?.fields;
+        const calculated = fields.filter((f) => f.config?.formula).map((f) => f.name);
+        assert.doesNotThrow(() => planCalculatedFields(fields, linked, { checkTypesOf: calculated }), `${template.name} → ${entity.name}`);
+      }
+    }
+    const sheet = sheetFields.filter((f) => f.config?.formula).map((f) => f.name);
+    assert.doesNotThrow(() => planCalculatedFields(sheetFields, targets, { checkTypesOf: sheet }));
   });
 });

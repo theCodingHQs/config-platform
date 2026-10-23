@@ -136,54 +136,307 @@ export function rangeFieldNames(fields: FormulaField[], from: string, to: string
   return fields.slice(start, end + 1).map((f) => f.name);
 }
 
+// ─── Type check ──────────────────────────────────────────────────────────────
+
+/** What a part of a formula gives. `list` is range(); `any` is unknown (null, mixed). */
+type FormulaKind = 'number' | 'text' | 'boolean' | 'date' | 'list' | 'any';
+
+interface Typed {
+  kind: FormulaKind;
+  /** How the part is named in messages: a field name, machine.name, "Pass", or "a calculation" */
+  label: string;
+  /** For range(): the kinds of the fields it covers */
+  items?: FormulaKind[];
+}
+
+const KIND_WORDS: Record<FormulaKind, string> = {
+  number: 'a number',
+  text: 'text',
+  boolean: 'a yes/no value',
+  date: 'a date',
+  list: 'a list of fields',
+  any: 'a value',
+};
+
+function kindOfFieldType(type: string): FormulaKind {
+  if (type === 'number') return 'number';
+  if (type === 'boolean') return 'boolean';
+  if (type === 'date') return 'date';
+  return 'text'; // text, select, and a link field's own value (the linked record's id)
+}
+
+/** Kinds a number can be made from without surprises */
+const isNumeric = (t: Typed) => t.kind === 'number' || t.kind === 'boolean' || t.kind === 'any';
+
+/** One kind for two branches (if, ??, coalesce): text wins, since it can't go in a number field */
+function mergeKinds(a: FormulaKind, b: FormulaKind): FormulaKind {
+  if (a === b || b === 'any') return a;
+  if (a === 'any') return b;
+  if (a === 'text' || b === 'text') return 'text';
+  if ((a === 'number' && b === 'boolean') || (a === 'boolean' && b === 'number')) return 'number';
+  return 'any';
+}
+
+const OPERATOR_WORDS: Record<string, string> = { '-': 'subtract', '*': 'multiply', '/': 'divide', '%': 'take a remainder' };
+
+/** Functions that work on numbers, and how many arguments each takes ([min, max]) */
+const NUMBER_FUNCTIONS: Record<string, [number, number]> = {
+  sum: [1, Infinity], avg: [1, Infinity], min: [1, Infinity], max: [1, Infinity],
+  round: [1, 2], floor: [1, 1], ceil: [1, 1], abs: [1, 1], formatNumber: [1, 2],
+};
+const FUNCTION_ARITY: Record<string, [number, number]> = {
+  ...NUMBER_FUNCTIONS,
+  count: [1, Infinity], countTrue: [1, Infinity], concat: [1, Infinity], coalesce: [1, Infinity],
+  upper: [1, 1], lower: [1, 1], trim: [1, 1], isBlank: [1, 1], formatDate: [1, 1], default: [2, 2], if: [3, 3],
+};
+const FUNCTION_USAGE: Record<string, string> = {
+  if: 'if(condition, value when true, value when false)',
+  round: 'round(number) or round(number, decimals)',
+  default: 'default(value, value when empty)',
+};
+
+function typeOfFormula(
+  ast: any,
+  byName: Map<string, FormulaField>,
+  fields: FormulaField[],
+  targetFieldsOf: (linkField: FormulaField) => FormulaField[] | undefined,
+): Typed {
+  const infer = (node: any): Typed => {
+    switch (node.type) {
+      case 'Literal':
+        if (typeof node.value === 'number') return { kind: 'number', label: String(node.value) };
+        if (typeof node.value === 'boolean') return { kind: 'boolean', label: String(node.value) };
+        if (typeof node.value === 'string') return { kind: 'text', label: JSON.stringify(node.value) };
+        return { kind: 'any', label: 'null' };
+      case 'Identifier': {
+        if (node.name === 'true' || node.name === 'false') return { kind: 'boolean', label: node.name };
+        if (node.name === 'null') return { kind: 'any', label: 'null' };
+        const field = byName.get(node.name);
+        return { kind: field ? kindOfFieldType(field.type) : 'any', label: node.name };
+      }
+      case 'MemberExpression': {
+        const label = `${node.object.name}.${node.property.name}`;
+        const link = byName.get(node.object.name);
+        const target = link && targetFieldsOf(link)?.find((f) => f.name === node.property.name);
+        return { kind: target ? kindOfFieldType(target.type) : 'any', label };
+      }
+      case 'UnaryExpression': {
+        const arg = infer(node.argument);
+        if (node.operator === '!') return { kind: 'boolean', label: 'a calculation' };
+        if (!isNumeric(arg)) throw new FormulaError(`"${node.operator}" only works on numbers, but ${arg.label} is ${KIND_WORDS[arg.kind]}.`);
+        return { kind: 'number', label: 'a calculation' };
+      }
+      case 'BinaryExpression':
+      case 'LogicalExpression':
+        return binary(node);
+      case 'ConditionalExpression': {
+        infer(node.test);
+        return { kind: mergeKinds(infer(node.consequent).kind, infer(node.alternate).kind), label: 'a calculation' };
+      }
+      case 'CallExpression':
+        return call(node);
+      case 'ArrayExpression': {
+        const items = (node.elements ?? []).map((el: any) => infer(el).kind);
+        return { kind: 'list', label: 'a list', items };
+      }
+      default:
+        return { kind: 'any', label: 'a calculation' };
+    }
+  };
+
+  const notAList = (t: Typed) => {
+    if (t.kind === 'list') throw new FormulaError('range() gives a list of fields: use it inside sum(), avg(), min(), max(), count() or countTrue().');
+  };
+
+  const binary = (node: any): Typed => {
+    const left = infer(node.left);
+    const right = infer(node.right);
+    notAList(left);
+    notAList(right);
+    const op = node.operator as string;
+    if (op === '&&' || op === '||' || op === '??') return { kind: mergeKinds(left.kind, right.kind), label: 'a calculation' };
+    if (op === '+') {
+      if (isNumeric(left) && isNumeric(right)) return { kind: 'number', label: 'a calculation' };
+      const date = left.kind === 'date' ? left : right.kind === 'date' ? right : null;
+      const other = date === left ? right : left;
+      if (date && other.kind !== 'text') {
+        throw new FormulaError(`${date.label} is a date, and adding ${KIND_WORDS[other.kind]} to a date isn't supported.`);
+      }
+      return { kind: 'text', label: 'a calculation' }; // + with text joins: machine.name + " - " + notes
+    }
+    if (op in OPERATOR_WORDS) {
+      const bad = !isNumeric(left) ? left : !isNumeric(right) ? right : null;
+      if (bad) {
+        const hint =
+          bad.kind === 'text'
+            ? ` To join text, use + or concat(), e.g. concat(machine.name, " - ", notes).${
+                // Only this record's own fields can be changed from here (not machine.name)
+                byName.has(bad.label) ? ` If ${bad.label} holds numbers, make it a Number field.` : ''
+              }`
+            : '';
+        throw new FormulaError(`Can't ${OPERATOR_WORDS[op]} with ${KIND_WORDS[bad.kind]}: ${bad.label} is ${KIND_WORDS[bad.kind]}, and "${op}" only works on numbers.${hint}`);
+      }
+      return { kind: 'number', label: 'a calculation' };
+    }
+    if (['<', '<=', '>', '>='].includes(op)) {
+      const kinds = [left.kind, right.kind];
+      const mixed =
+        (kinds.includes('number') && (kinds.includes('text') || kinds.includes('date'))) ||
+        (kinds.includes('boolean') && (kinds.includes('text') || kinds.includes('date')));
+      if (mixed) {
+        throw new FormulaError(`"${op}" compares ${left.label} (${KIND_WORDS[left.kind]}) with ${right.label} (${KIND_WORDS[right.kind]}); only values of the same kind can be compared.`);
+      }
+    }
+    return { kind: 'boolean', label: 'a calculation' }; // comparisons, ==, !=
+  };
+
+  const call = (node: any): Typed => {
+    const name = node.callee.name as string;
+    const argNodes: any[] = node.arguments ?? [];
+    if (name === 'range') {
+      const [from, to] = argNodes.map((a) => a.value as string);
+      const items = rangeFieldNames(fields, from, to).map((n) => kindOfFieldType(byName.get(n)!.type));
+      return { kind: 'list', label: `range("${from}", "${to}")`, items };
+    }
+    const arity = FUNCTION_ARITY[name];
+    if (arity && (argNodes.length < arity[0] || argNodes.length > arity[1])) {
+      const usage = FUNCTION_USAGE[name];
+      const count = arity[0] === arity[1] ? `${arity[0]}` : arity[1] === Infinity ? `at least ${arity[0]}` : `${arity[0]} or ${arity[1]}`;
+      throw new FormulaError(`${name}() takes ${count} value${arity[1] === 1 ? '' : 's'}${usage ? `: ${usage}` : ''}.`);
+    }
+    const args = argNodes.map(infer);
+    if (name in NUMBER_FUNCTIONS) {
+      // sum(), avg(), min(), max() take every value; round(), floor()… only the first is the number
+      const numbersFrom = ['sum', 'avg', 'min', 'max'].includes(name) ? args : args.slice(0, 1);
+      for (const arg of numbersFrom) {
+        const kinds = arg.kind === 'list' ? arg.items ?? [] : [arg.kind];
+        const bad = kinds.find((k) => k === 'text' || k === 'date');
+        if (bad) {
+          const what = arg.kind === 'list' ? `${arg.label} includes ${KIND_WORDS[bad]}` : `${arg.label} is ${KIND_WORDS[bad]}`;
+          throw new FormulaError(`${name}() works on numbers, but ${what}.`);
+        }
+      }
+      return { kind: name === 'formatNumber' ? 'text' : 'number', label: `${name}()` };
+    }
+    if (name !== 'count' && name !== 'countTrue' && name !== 'concat') args.forEach(notAList);
+    switch (name) {
+      case 'count':
+      case 'countTrue':
+        return { kind: 'number', label: `${name}()` };
+      case 'isBlank':
+        return { kind: 'boolean', label: 'isBlank()' };
+      case 'if':
+        return { kind: mergeKinds(args[1].kind, args[2].kind), label: 'if()' };
+      case 'coalesce':
+      case 'default':
+        return { kind: args.map((a) => a.kind).reduce(mergeKinds), label: `${name}()` };
+      default:
+        return { kind: 'text', label: `${name}()` }; // concat, upper, lower, trim, formatDate
+    }
+  };
+
+  return infer(ast);
+}
+
+/**
+ * Checks that a calculated field's formula fits its kinds of data: no maths on text, no
+ * comparing numbers with text, functions given what they work on, and a number field getting
+ * a number. Throws FormulaError saying what's wrong and what to do instead.
+ */
+function checkFormulaTypes(
+  field: FormulaField,
+  byName: Map<string, FormulaField>,
+  fields: FormulaField[],
+  targetFieldsOf: (linkField: FormulaField) => FormulaField[] | undefined,
+): void {
+  const result = typeOfFormula(jsep(field.config!.formula!), byName, fields, targetFieldsOf);
+  if (result.kind === 'list') {
+    throw new FormulaError('range() gives a list of fields: use it inside sum(), avg(), min(), max(), count() or countTrue().');
+  }
+  if (field.type === 'number' && (result.kind === 'text' || result.kind === 'date')) {
+    throw new FormulaError(`This formula gives ${KIND_WORDS[result.kind]}, but this is a Number field. Make it a Text field, or change the formula to give a number.`);
+  }
+}
+
+/**
+ * What's wrong with one calculated field's formula among `fields` (which include it), or null
+ * when it's fine: the field dialog uses this to stop a formula that can't work being saved.
+ */
+export function formulaProblem(
+  field: FormulaField,
+  fields: FormulaField[],
+  targetFieldsOf: (linkField: FormulaField) => FormulaField[] | undefined,
+): string | null {
+  const others = fields.filter((f) => f.name !== field.name).map((f) => (f.config?.formula ? { ...f, config: { ...f.config, formula: undefined } } : f));
+  try {
+    planCalculatedFields([...others, field], targetFieldsOf, { checkTypesOf: [field.name], prefix: false });
+    return null;
+  } catch (err: any) {
+    // "unknown field …" reads as a sentence; "sum() works on…" keeps the function's name as typed
+    if (err instanceof FormulaError) return /^[a-zA-Z]+\(/.test(err.message) ? err.message : err.message.charAt(0).toUpperCase() + err.message.slice(1);
+    throw err;
+  }
+}
+
 /**
  * Checks every calculated field of an entity: syntax, known fields and functions, lookups
  * through link fields to existing target fields, and no formula depending on itself.
+ * `checkTypesOf` also checks those fields' kinds of data (only fields being created or edited:
+ * an older formula that doesn't pass must not stop records being saved).
  * Returns the calculated fields in the order they must be evaluated.
  */
 export function planCalculatedFields(
   fields: FormulaField[],
   /** Fields of a link field's target entity (for lookups). */
   targetFieldsOf: (linkField: FormulaField) => FormulaField[] | undefined,
+  options: { checkTypesOf?: string[]; prefix?: boolean } = {},
 ): FormulaField[] {
   const byName = new Map(fields.map((f) => [f.name, f]));
   const calculated = fields.filter((f) => f.config?.formula);
   const deps = new Map<string, Set<string>>();
 
   for (const field of calculated) {
-    const where = `Formula for '${field.name}'`;
+    // Inside the field's own dialog the message needs no 'Formula for …:' in front
+    const where = options.prefix === false ? '' : `Formula for '${field.name}': `;
     if (!(CALCULATED_FIELD_TYPES as readonly string[]).includes(field.type)) {
-      throw new FormulaError(`${where}: only number, text and yes/no fields can be calculated`);
+      throw new FormulaError(`${where}only number, text and yes/no fields can be calculated`);
     }
     let refs: FormulaReferences;
     try {
       refs = formulaReferences(field.config!.formula!);
     } catch (err: any) {
-      throw new FormulaError(`${where}: ${err.message}`);
+      throw new FormulaError(`${where}${err.message}`);
     }
     const used = new Set<string>();
     for (const name of refs.fields) {
-      if (!byName.has(name)) throw new FormulaError(`${where}: unknown field '${name}'`);
+      if (!byName.has(name)) throw new FormulaError(`${where}unknown field '${name}'`);
       used.add(name);
     }
     for (const [from, to] of refs.ranges) {
       try {
         for (const name of rangeFieldNames(fields, from, to)) used.add(name);
       } catch (err: any) {
-        throw new FormulaError(`${where}: ${err.message}`);
+        throw new FormulaError(`${where}${err.message}`);
       }
     }
     for (const { link, field: targetName } of refs.lookups) {
       const linkField = byName.get(link);
-      if (!linkField) throw new FormulaError(`${where}: unknown field '${link}'`);
-      if (linkField.type !== 'reference') throw new FormulaError(`${where}: '${link}' is not a link field, so '${link}.${targetName}' can't look anything up`);
+      if (!linkField) throw new FormulaError(`${where}unknown field '${link}'`);
+      if (linkField.type !== 'reference') throw new FormulaError(`${where}'${link}' is not a link field, so '${link}.${targetName}' can't look anything up`);
       const targetFields = targetFieldsOf(linkField);
       if (!targetFields?.some((f) => f.name === targetName)) {
-        throw new FormulaError(`${where}: the linked record has no field '${targetName}'`);
+        throw new FormulaError(`${where}the linked record has no field '${targetName}'`);
       }
       used.add(link);
     }
-    if (used.has(field.name)) throw new FormulaError(`${where}: a formula can't use its own field`);
+    if (used.has(field.name)) throw new FormulaError(`${where}a formula can't use its own field`);
+    if (options.checkTypesOf?.includes(field.name)) {
+      try {
+        checkFormulaTypes(field, byName, fields, targetFieldsOf);
+      } catch (err: any) {
+        throw new FormulaError(`${where}${err.message}`);
+      }
+    }
     deps.set(field.name, new Set([...used].filter((name) => byName.get(name)?.config?.formula)));
   }
 
@@ -207,6 +460,8 @@ export function planCalculatedFields(
 /** Turns a formula result into a value the field's column can store (null when it can't). */
 export function coerceCalculatedValue(value: unknown, type: string): number | string | boolean | null {
   if (value === null || value === undefined) return null;
+  // Maths that went wrong (text minus a number) is empty, never "NaN"
+  if (typeof value === 'number' && !Number.isFinite(value)) return null;
   if (type === 'number') {
     const n = typeof value === 'boolean' ? (value ? 1 : 0) : Number(value);
     return Number.isFinite(n) ? n : null;

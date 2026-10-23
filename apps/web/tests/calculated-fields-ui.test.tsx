@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { ErdTable } from '@config-platform/schema';
+import { formulaProblem, type ErdTable } from '@config-platform/schema';
 import { FormulaEditor } from '../src/studio/FormulaEditor';
 import { UniqueRulesPanel } from '../src/studio/UniqueRulesPanel';
 import { FormComponent } from '../src/components/form';
@@ -60,6 +60,17 @@ describe('Formula editor', () => {
   it('is offered only for number, text and yes/no fields', () => {
     render(<Harness type="date" />);
     expect(screen.queryByLabelText('Calculated')).toBeNull();
+  });
+
+  it('shows why a formula can\'t work, under the formula box', () => {
+    const problem = formulaProblem(
+      { name: 'label', type: 'text', config: { formula: 'machine - planned_days' } },
+      [...sheet.columns.map((c) => ({ name: c.name, type: c.type, config: c.config })), { name: 'label', type: 'text', config: { formula: 'machine - planned_days' } }],
+      () => undefined,
+    );
+    render(<FormulaEditor idPrefix="t" fieldType="text" formula="machine - planned_days" onChange={() => {}} otherFields={sheet.columns} problem={problem} />);
+    expect(screen.getByRole('alert')).toHaveTextContent(/Can't subtract with text: machine is text/);
+    expect(screen.getByLabelText('Formula')).toHaveAttribute('aria-invalid', 'true');
   });
 });
 

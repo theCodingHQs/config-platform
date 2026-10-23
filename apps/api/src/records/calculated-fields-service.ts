@@ -49,9 +49,10 @@ export class CalculatedFieldsService {
 
   /**
    * Validates an entity's formulas as they would be with `fields`, returning them in
-   * evaluation order. Throws CalculatedFieldError (422) explaining what's wrong.
+   * evaluation order. Throws CalculatedFieldError (422) explaining what's wrong. `checkTypesOf`
+   * names the fields being created or edited, whose formulas must also fit their kinds of data.
    */
-  async plan(tenantId: string, fields: FormulaField[]): Promise<FormulaField[]> {
+  async plan(tenantId: string, fields: FormulaField[], checkTypesOf: string[] = []): Promise<FormulaField[]> {
     const targets = new Map<string, FormulaField[]>();
     for (const field of fields) {
       const targetId = (field.config as any)?.targetEntityId;
@@ -64,7 +65,7 @@ export class CalculatedFieldsService {
       }
     }
     try {
-      return planCalculatedFields(fields, (link) => targets.get((link.config as any)?.targetEntityId));
+      return planCalculatedFields(fields, (link) => targets.get((link.config as any)?.targetEntityId), { checkTypesOf });
     } catch (err) {
       if (err instanceof FormulaError) throw new CalculatedFieldError(err.message);
       throw err;
@@ -254,6 +255,11 @@ export class CalculatedFieldsService {
     }
     this.graphs.set(tenantId, graph);
     return graph;
+  }
+
+  /** Whether a calculated field's formula uses `fieldName` directly (not through a lookup). */
+  formulaUses(field: { config?: unknown }, fieldName: string): boolean {
+    return Boolean(this.references(field)?.fields.has(fieldName));
   }
 
   private references(field: { config?: unknown }) {
