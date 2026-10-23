@@ -32,6 +32,7 @@ import { tenantMigrationQueue } from './queue.js';
 import { entityCache } from '../records/entity-cache.js';
 import { calculatedFieldsService, CalculatedFieldError } from '../records/calculated-fields-service.js';
 import { pool } from '../db/pool.js';
+import type { PoolClient } from 'pg';
 import crypto from 'node:crypto';
 
 /** A unique-combination change that can't be applied (409, with a readable reason). */
@@ -41,6 +42,26 @@ export class UniqueRuleError extends Error {
     super(message);
     this.name = 'Conflict';
   }
+}
+
+/**
+ * How a value of a unique combination is shown in messages: for a link (reference) field, the
+ * linked record's display name ("CNC Mill 01") rather than its id; other values as they are.
+ */
+async function linkedRecordName(client: PoolClient, schemaName: string, fieldId: string, value: unknown): Promise<string> {
+  if (value === null || value === undefined || typeof value !== 'string') return formatKeyValue(value);
+  const target = await client.query<{ physical_table_name: string; display_column: string | null }>(
+    `SELECT e.physical_table_name, d.physical_column_name AS display_column
+       FROM public.field_def f
+       JOIN public.entity_def e ON e.id = f.config->>'targetEntityId'
+       LEFT JOIN public.field_def d ON d.id = e.display_field_id
+      WHERE f.id = $1 AND f.type = 'reference'`,
+    [fieldId]
+  );
+  const t = target.rows[0];
+  if (!t?.display_column) return formatKeyValue(value);
+  const named = await client.query(`SELECT "${t.display_column}" AS name FROM "${schemaName}"."${t.physical_table_name}" WHERE id::text = $1`, [value]);
+  return named.rows[0]?.name != null ? String(named.rows[0].name) : formatKeyValue(value);
 }
 
 function formatKeyValue(value: unknown): string {
@@ -707,8 +728,14 @@ export class MigrationService {
           );
           if (dupes.rows.length > 0) {
             const labels = rule.fields.map((id) => fieldById.get(id)!.label).join(' + ');
+            // A link field stores the linked record's id: show that record's name instead
+            const shown = await Promise.all(
+              dupes.rows.map((row: any) =>
+                Promise.all(rule.fields.map((fieldId, i) => linkedRecordName(tx.client, tx.schemaName, fieldId, row[`v${i}`])))
+              )
+            );
             const examples = dupes.rows
-              .map((row: any) => `${rule.fields.map((_, i) => formatKeyValue(row[`v${i}`])).join(' / ')} (${row.n} records)`)
+              .map((row: any, r: number) => `${shown[r].join(' / ')} (${row.n} records)`)
               .join('; ');
             throw new UniqueRuleError(
               `${entity.label} already has records sharing the same ${labels}: ${examples}. Fix or remove those duplicates first.`

@@ -130,4 +130,18 @@ describe('Unique combinations (e.g. one sheet per machine per month)', () => {
       await pool.query(`DROP SCHEMA IF EXISTS "${defaultStorageAdapter.getTenantSchemaName(target)}" CASCADE`);
     }
   });
+
+  it('names linked records (not their ids) when existing records break a rule', async () => {
+    const install = await call('POST', '/api/solution-templates/maintenance-log/install', { sampleData: true });
+    expect(install.statusCode).toBe(201);
+    const job = (await pool.query(
+      `SELECT e.id, e.version, f.id AS machine_field FROM public.entity_def e JOIN public.field_def f ON f.entity_id = e.id
+        WHERE e.tenant_id = $1 AND e.name = 'maintenance_job' AND f.name = 'machine'`,
+      [tenantId]
+    )).rows[0];
+    const res = await call('PUT', `/api/schema/entities/${job.id}/unique-rules`, { rules: [{ fields: [job.machine_field] }], expectedVersion: job.version });
+    expect(res.statusCode).toBe(409);
+    // The sample data has two jobs on CNC Mill 01
+    expect(JSON.parse(res.body).message).toMatch(/sharing the same Machine: CNC Mill 01 \(2 records\)/);
+  }, 120000);
 });
