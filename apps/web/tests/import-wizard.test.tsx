@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within, cleanup } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ImportWizard } from '../src/studio/ImportWizard';
+import { ImportWizard, exampleText } from '../src/studio/ImportWizard';
 import { AppBarProvider } from '../src/context/app-bar-context';
 import * as apiClient from '../src/api/client';
 
@@ -146,5 +146,15 @@ describe('Import wizard (Start from an Excel sheet)', () => {
     expect(result).toMatchObject({ entityId: 't_new', reportId: 'r1' });
     expect(result.pageId).toBeUndefined();
     expect(result.warnings).toHaveLength(1);
+  });
+});
+
+describe('Import wizard examples', () => {
+  it('shows spreadsheet dates in the viewer date format, and text as written', () => {
+    const india = { locale: 'en-IN', dateFormat: 'DD/MM/YYYY' as const };
+    expect(exampleText('2026-10-01T00:00:00.000Z', 'date', india)).toBe('01/10/2026');
+    expect(exampleText('2026-10-01T00:00:00.000Z', 'month', { locale: 'en-GB' })).toMatch(/Oct(ober)? 2026/);
+    expect(exampleText('25/10/2026', 'date', india)).toBe('25/10/2026');
+    expect(exampleText('Tool change', 'text', india)).toBe('Tool change');
   });
 });

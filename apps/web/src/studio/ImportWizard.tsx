@@ -3,7 +3,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { FileSpreadsheet, Upload, X } from "lucide-react";
 import {
   buildExecutiveReportTemplate,
+  formatPlainDate,
+  formatPlainMonth,
+  normalizePlainDate,
   WIZARD_FIELD_KINDS,
+  type DateDisplayPrefs,
   type ErdTable,
   type WizardColumnSuggestion,
   type WizardDateFormat,
@@ -19,8 +23,22 @@ import {
   type SheetAnalysis,
 } from "../api/client";
 import { useStatusNotify } from "../context/app-bar-context";
+import { useDateDisplayPrefs } from "../context/date-display-context";
 import { IconPicker } from "../components/icon-picker";
 import { createTemplatePage } from "./templates";
+
+/**
+ * An example cell as people will see it: real spreadsheet dates (read as 2026-10-01T00:00:00.000Z)
+ * in the viewer's date format; dates typed as text stay as written (how they're read is chosen above).
+ */
+export function exampleText(sample: unknown, kind: WizardFieldKind, prefs: DateDisplayPrefs): string {
+  const text = String(sample);
+  if ((kind === "date" || kind === "month") && /^\d{4}-\d{2}-\d{2}/.test(text)) {
+    const plain = normalizePlainDate(text, kind === "month" ? "month" : "day");
+    if (plain) return kind === "month" ? formatPlainMonth(plain, prefs) : formatPlainDate(plain, prefs);
+  }
+  return text;
+}
 
 const KIND_LABELS: Record<WizardFieldKind, string> = {
   text: "Text",
@@ -61,6 +79,7 @@ export function ImportWizard({
   const notify = useStatusNotify();
   const ids = { file: useId(), label: useId(), name: useId(), sheet: useId(), dates: useId() };
 
+  const datePrefs = useDateDisplayPrefs();
   const [step, setStep] = useState<Step>("file");
   const [file, setFile] = useState<File | null>(null);
   const [analysis, setAnalysis] = useState<SheetAnalysis | null>(null);
@@ -362,7 +381,7 @@ export function ImportWizard({
                         <td style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)", maxWidth: "16rem" }}>
                           {col.kind === "select" && col.options
                             ? `${col.options.length} choices: ${col.options.slice(0, 4).join(", ")}${col.options.length > 4 ? "…" : ""}`
-                            : col.samples.join(", ") || "(empty)"}
+                            : col.samples.map((sample) => exampleText(sample, col.kind, datePrefs)).join(", ") || "(empty)"}
                         </td>
                       </tr>
                     ))}
