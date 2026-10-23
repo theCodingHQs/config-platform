@@ -347,6 +347,16 @@ function cloneNodeWithNewIds(node: NodeDefinition): NodeDefinition {
   };
 }
 
+/**
+ * Where a container's children go in the component tree: one fixed step in, whatever the depth,
+ * with a line down the left showing which container they belong to.
+ */
+const TREE_CHILDREN_STYLE: React.CSSProperties = {
+  marginLeft: "0.875rem", // the line runs under the container's drag handle
+  paddingLeft: "var(--space-1)",
+  borderLeft: "var(--border-width-sm) solid var(--border)",
+};
+
 // Tree view item component
 const SortableTreeItem: React.FC<{
   node: NodeDefinition;
@@ -434,7 +444,7 @@ const SortableTreeItem: React.FC<{
   };
 
   return (
-    <div style={{ marginLeft: `${depth * 14}px` }}>
+    <div>
       <div
         ref={setNodeRef}
         style={style}
@@ -596,9 +606,9 @@ const SortableTreeItem: React.FC<{
         </div>
       </div>
 
-      {/* Children */}
+      {/* Children: one fixed step in from their container, with a line marking its area */}
       {node.children && node.children.length > 0 && (
-        <div>
+        <div style={TREE_CHILDREN_STYLE}>
           {node.children.map((child) => (
             <SortableTreeItem
               key={child.id}
@@ -622,43 +632,44 @@ const SortableTreeItem: React.FC<{
 
       {/* Empty container indicator */}
       {isContainer && (!node.children || node.children.length === 0) && (
-        <div
-          style={{
-            marginLeft: "var(--space-3)",
-            padding: "var(--space-1) var(--space-2)",
-            fontSize: "var(--font-size-xs)",
-            color: "var(--muted)",
-            fontStyle: "italic",
-            border: "1px dashed var(--border)",
-            borderRadius: "var(--radius-control)",
-            marginBottom: "var(--spacing-1)",
-            backgroundColor: isOver ? "var(--accent-subtle)" : "transparent",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <span>Empty {node.type}</span>
-          {copiedNode && (
-            <button
-              type="button"
-              className="btn btn-ghost"
-              style={{
-                padding: "0.1rem var(--space-1)",
-                fontSize: "var(--font-size-xs)",
-                color: "var(--accent)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "var(--space-1)",
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                onPaste(node.id);
-              }}
-            >
-              <ClipboardPaste size={10} /> Paste inside
-            </button>
-          )}
+        <div style={TREE_CHILDREN_STYLE}>
+          <div
+            style={{
+              padding: "var(--space-1) var(--space-2)",
+              fontSize: "var(--font-size-xs)",
+              color: "var(--muted)",
+              fontStyle: "italic",
+              border: "1px dashed var(--border)",
+              borderRadius: "var(--radius-control)",
+              marginBottom: "var(--spacing-1)",
+              backgroundColor: isOver ? "var(--accent-subtle)" : "transparent",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <span>Empty {node.type}</span>
+            {copiedNode && (
+              <button
+                type="button"
+                className="btn btn-ghost"
+                style={{
+                  padding: "0.1rem var(--space-1)",
+                  fontSize: "var(--font-size-xs)",
+                  color: "var(--accent)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "var(--space-1)",
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPaste(node.id);
+                }}
+              >
+                <ClipboardPaste size={10} /> Paste inside
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
