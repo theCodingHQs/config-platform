@@ -400,7 +400,8 @@ function AppContent({ user }: { user: CurrentUser }) {
             to={page.route}
             title={title}
             className={({ isActive }) => `app-sidebar-item ${isActive ? "active" : ""}`}
-            style={{ paddingLeft: `${0.75 + depth * 0.9}rem` }}
+            // The indent is in CSS (--nav-depth), so the collapsed sidebar can line icons up
+            style={{ "--nav-depth": depth } as React.CSSProperties}
             onClick={() => setMobileMenuOpen(false)}
           >
             <span className="app-sidebar-icon">{icon}</span>
@@ -409,8 +410,8 @@ function AppContent({ user }: { user: CurrentUser }) {
         );
       })}
       {(pageNavigation?.folders ?? []).filter((folder) => folder.parentId === folderId).map((folder) => (
-        <details key={folder.id} open>
-          <summary style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.6rem 0.75rem", paddingLeft: `${0.75 + depth * 0.9}rem`, cursor: "pointer", color: "var(--text-muted)", listStyle: "none" }}>
+        <details key={folder.id} open className="app-sidebar-folder">
+          <summary className="app-sidebar-folder-summary" title={folder.name} style={{ "--nav-depth": depth } as React.CSSProperties}>
             {folder.icon ? <DynamicIcon name={folder.icon} size={16} /> : <Folder size={16} />}
             <span className="app-sidebar-item-title">{folder.name}</span>
           </summary>

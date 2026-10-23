@@ -894,6 +894,8 @@ input:-webkit-autofill:active {
   align-items: center;
   gap: var(--spacing-3);
   padding: var(--spacing-2) var(--spacing-3);
+  /* Pages inside folders are indented a step per level (--nav-depth is set on the link) */
+  padding-left: calc(var(--spacing-3) + var(--nav-depth, 0) * 0.9rem);
   border-radius: var(--radius-control);
   text-decoration: none;
   color: var(--text);
@@ -902,6 +904,41 @@ input:-webkit-autofill:active {
   transition: all 0.15s ease;
   border: var(--border-width-sm) solid transparent;
   white-space: nowrap;
+}
+
+/* Folders of pages: a header (icon + name) over the pages inside it */
+.app-sidebar-folder-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-2) var(--spacing-3);
+  padding-left: calc(var(--spacing-3) + var(--nav-depth, 0) * 0.9rem);
+  cursor: pointer;
+  color: var(--text-muted);
+  list-style: none;
+}
+
+.app-sidebar-folder-summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Collapsed: every icon on one centred line; a thin line above each folder shows where its
+   pages start, since the names (and indents) are hidden */
+.app-sidebar.collapsed .app-sidebar-folder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-1);
+  width: 100%;
+  padding-top: var(--spacing-1);
+  border-top: var(--border-width-sm) solid var(--border-subtle);
+}
+
+.app-sidebar.collapsed .app-sidebar-folder-summary {
+  justify-content: center;
+  padding: 0;
+  width: 44px;
+  height: 32px;
 }
 
 .app-sidebar.collapsed .app-sidebar-item {
