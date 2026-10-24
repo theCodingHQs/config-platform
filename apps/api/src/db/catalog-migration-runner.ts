@@ -554,6 +554,39 @@ export const catalogMigrations: CatalogMigration[] = [
       `);
     },
   },
+  {
+    version: 22,
+    name: '022_live_edge_agents',
+    up: async (client: PoolClient) => {
+      // Edge agents (programs inside the factory network) and which connections run on them
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.live_agent (
+          id VARCHAR(64) PRIMARY KEY,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          name VARCHAR(120) NOT NULL,
+          token_hash VARCHAR(64) NOT NULL UNIQUE,
+          last_seen_at TIMESTAMPTZ,
+          version VARCHAR(40),
+          hostname VARCHAR(255),
+          created_by VARCHAR(64) REFERENCES public.app_user(id) ON DELETE SET NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_live_agent_tenant ON public.live_agent(tenant_id);
+
+        ALTER TABLE public.live_connection
+        ADD COLUMN IF NOT EXISTS agent_id VARCHAR(64) REFERENCES public.live_agent(id) ON DELETE SET NULL;
+      `);
+    },
+  },
+  {
+    version: 23,
+    name: '023_live_agent_online',
+    up: async (client: PoolClient) => {
+      // An agent is online while this is in the future: renewed while connected, cleared when it
+      // disconnects, and running out on its own if the server holding it stops
+      await client.query(`ALTER TABLE public.live_agent ADD COLUMN IF NOT EXISTS online_until TIMESTAMPTZ;`);
+    },
+  },
 ];
 
 /**

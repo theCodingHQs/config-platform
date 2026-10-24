@@ -1,5 +1,5 @@
 /** Live connection settings (Studio → Live) and the socket's address. */
-import type { LiveConnection, LiveRule, LiveRuleRun, TagValueType } from "@config-platform/schema";
+import type { LiveAgent, LiveConnection, LiveRule, LiveRuleRun, TagValueType } from "@config-platform/schema";
 import { API_BASE_URL } from "../config";
 import { apiFetch, handleResponse } from "../api/client";
 
@@ -35,6 +35,18 @@ export const liveApi = {
     handleResponse<LiveConnection>(await apiFetch(`${BASE}/connections/${id}`, { method: "PUT", ...json(input) })),
   remove: async (id: string) => {
     const res = await apiFetch(`${BASE}/connections/${id}`, { method: "DELETE" });
+    if (!res.ok) await handleResponse(res);
+  },
+};
+
+export const liveAgentsApi = {
+  list: async () => handleResponse<LiveAgent[]>(await apiFetch(`${BASE}/agents`)),
+  /** Comes back with its token, this once */
+  create: async (name: string) => handleResponse<LiveAgent & { token: string }>(await apiFetch(`${BASE}/agents`, { method: "POST", ...json({ name }) })),
+  rename: async (id: string, name: string) => handleResponse<LiveAgent>(await apiFetch(`${BASE}/agents/${id}`, { method: "PUT", ...json({ name }) })),
+  newToken: async (id: string) => handleResponse<{ token: string }>(await apiFetch(`${BASE}/agents/${id}/token`, { method: "POST" })),
+  remove: async (id: string) => {
+    const res = await apiFetch(`${BASE}/agents/${id}`, { method: "DELETE" });
     if (!res.ok) await handleResponse(res);
   },
 };

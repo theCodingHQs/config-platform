@@ -6,6 +6,7 @@ import { liveApi } from "../../live/live-api";
 import { useStatusNotify } from "../../context/app-bar-context";
 import { draftFromConnection, draftToInput, newTagRule, type ConnectionDraft } from "./connection-draft";
 import { KIND_UI } from "./kinds";
+import { RunsOnField } from "./agents/RunsOnField";
 import { suggestTagName, type MessagePath } from "./message-paths";
 import { ConnectionStatusBadge } from "./ConnectionStatusBadge";
 import { Field } from "./Field";
@@ -102,6 +103,7 @@ export function ConnectionEditor({
       )}
 
       <Section title="Connection">
+        {draft.kind !== "http-push" && <RunsOnField value={draft.agentId} disabled={!canEdit} onChange={(agentId) => set({ agentId })} />}
         <kind.Fields value={draft.settings} disabled={!canEdit} onChange={(settings: unknown) => set({ settings })} connection={connection} shownOnce={shownOnce} />
       </Section>
 

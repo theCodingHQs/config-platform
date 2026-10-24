@@ -12,12 +12,14 @@ export interface ConnectionDraft {
   enabled: boolean;
   viewRoles: PageRole[];
   tags: TagRule[];
+  /** Runs on this edge agent; null = the app server */
+  agentId: string | null;
   /** The kind's own form values (see its KindUi) */
   settings: any;
 }
 
 export function emptyDraft(kind: LiveConnectionKind): ConnectionDraft {
-  return { name: "", kind, enabled: true, viewRoles: [], tags: [], settings: KIND_UI[kind].empty() };
+  return { name: "", kind, enabled: true, viewRoles: [], tags: [], agentId: null, settings: KIND_UI[kind].empty() };
 }
 
 export function draftFromConnection(c: LiveConnection): ConnectionDraft {
@@ -28,6 +30,7 @@ export function draftFromConnection(c: LiveConnection): ConnectionDraft {
     enabled: c.enabled,
     viewRoles: c.viewRoles,
     tags: c.tags,
+    agentId: c.agentId ?? null,
     settings: KIND_UI[c.kind].fromSaved(c.settings ?? {}),
   };
 }
@@ -43,7 +46,16 @@ export function draftToInput(d: ConnectionDraft): Record<string, unknown> {
     unit: optional(t.unit ?? ""),
     label: optional(t.label ?? ""),
   }));
-  return { name: d.name.trim(), kind: d.kind, enabled: d.enabled, viewRoles: d.viewRoles, tags, settings: KIND_UI[d.kind].toInput(d.settings) };
+  return {
+    name: d.name.trim(),
+    kind: d.kind,
+    enabled: d.enabled,
+    viewRoles: d.viewRoles,
+    tags,
+    // HTTP push is received by the app itself
+    agentId: d.kind === "http-push" ? null : d.agentId,
+    settings: KIND_UI[d.kind].toInput(d.settings),
+  };
 }
 
 /** A new tag rule, guessing a name from the connection's ("Line 1 gateway" → line_1_gateway.value) */

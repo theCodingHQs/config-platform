@@ -14,6 +14,8 @@ export interface StoredConnection {
   settings: Record<string, any>;
   tags: TagRule[];
   viewRoles: string[];
+  /** Runs on this edge agent; null = on the app server */
+  agentId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -27,6 +29,7 @@ interface Row {
   settings: Record<string, any>;
   tags: TagRule[];
   view_roles: string[];
+  agent_id: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -40,11 +43,12 @@ const toStored = (r: Row): StoredConnection => ({
   settings: r.settings,
   tags: r.tags ?? [],
   viewRoles: r.view_roles ?? [],
+  agentId: r.agent_id ?? null,
   createdAt: r.created_at.toISOString(),
   updatedAt: r.updated_at.toISOString(),
 });
 
-const COLUMNS = 'id, tenant_id, name, kind, enabled, settings, tags, view_roles, created_at, updated_at';
+const COLUMNS = 'id, tenant_id, name, kind, enabled, settings, tags, view_roles, agent_id, created_at, updated_at';
 
 export const connectionRepository = {
   async list(tenantId: string): Promise<StoredConnection[]> {
@@ -73,9 +77,9 @@ export const connectionRepository = {
   async create(tenantId: string, userId: string, input: LiveConnectionInput, serverSettings: Record<string, unknown> = {}): Promise<StoredConnection> {
     const id = `lc_${crypto.randomBytes(6).toString('hex')}`;
     const res = await pool.query<Row>(
-      `INSERT INTO public.live_connection (id, tenant_id, name, kind, enabled, settings, tags, view_roles, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING ${COLUMNS}`,
-      [id, tenantId, input.name, input.kind, input.enabled, { ...encryptSettings(input.kind, input.settings), ...serverSettings }, JSON.stringify(input.tags), JSON.stringify(input.viewRoles), userId],
+      `INSERT INTO public.live_connection (id, tenant_id, name, kind, enabled, settings, tags, view_roles, created_by, agent_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING ${COLUMNS}`,
+      [id, tenantId, input.name, input.kind, input.enabled, { ...encryptSettings(input.kind, input.settings), ...serverSettings }, JSON.stringify(input.tags), JSON.stringify(input.viewRoles), userId, input.agentId ?? null],
     );
     return toStored(res.rows[0]);
   },
@@ -84,9 +88,9 @@ export const connectionRepository = {
   async update(tenantId: string, previous: StoredConnection, input: LiveConnectionInput): Promise<StoredConnection> {
     const res = await pool.query<Row>(
       `UPDATE public.live_connection
-       SET name = $3, enabled = $4, settings = $5, tags = $6, view_roles = $7, updated_at = NOW()
+       SET name = $3, enabled = $4, settings = $5, tags = $6, view_roles = $7, agent_id = $8, updated_at = NOW()
        WHERE tenant_id = $1 AND id = $2 RETURNING ${COLUMNS}`,
-      [tenantId, previous.id, input.name, input.enabled, encryptSettings(input.kind, input.settings, previous.settings), JSON.stringify(input.tags), JSON.stringify(input.viewRoles)],
+      [tenantId, previous.id, input.name, input.enabled, encryptSettings(input.kind, input.settings, previous.settings), JSON.stringify(input.tags), JSON.stringify(input.viewRoles), input.agentId ?? null],
     );
     return toStored(res.rows[0]);
   },

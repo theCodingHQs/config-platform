@@ -12,6 +12,7 @@ import { MessageLog, type LoggedMessage } from './message-log.js';
 import { mapMessageToTags } from './tag-mapper.js';
 import { TagStore } from './tag-store.js';
 import { RemoteMirror } from './cluster/remote-mirror.js';
+import { agentHub } from './agents/agent-hub.js';
 
 interface Running {
   connection: StoredConnection;
@@ -63,7 +64,9 @@ export class LiveHub {
     this.running.set(connection.id, entry);
     if (connection.enabled) {
       try {
-        entry.adapter = ADAPTERS[connection.kind](decryptSettings(connection.kind, connection.settings), {
+        // On an edge agent: the agent runs the connector; here a proxy passes on what it reports
+        const factory = connection.agentId ? agentHub.proxyFor(connection.agentId, connection.kind) : ADAPTERS[connection.kind];
+        entry.adapter = factory(decryptSettings(connection.kind, connection.settings), {
           onMessage: (message) => this.receive(entry, message),
           onState: (state, error) => this.setState(entry, state, error),
           onWarning: (warning) => this.setWarning(entry, warning),

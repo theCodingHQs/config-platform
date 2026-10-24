@@ -18,6 +18,7 @@ COPY packages/schema/package.json ./packages/schema/
 COPY packages/live-connectors/package.json ./packages/live-connectors/
 COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
+COPY apps/edge-agent/package.json ./apps/edge-agent/
 
 # Install dependencies strictly with frozen lockfile
 RUN pnpm install --frozen-lockfile

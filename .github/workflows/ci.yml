@@ -65,5 +65,8 @@ jobs:
       - name: Web tests
         run: pnpm --filter @config-platform/web test
 
+      - name: Edge agent tests
+        run: pnpm --filter @config-platform/edge-agent test
+
       - name: Build (type-checks every package)
         run: pnpm build

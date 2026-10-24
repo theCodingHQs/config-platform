@@ -30,7 +30,13 @@ export type LiveBusEvent =
   /** New leader → all: forget mirrored statuses of the old one */
   | { t: 'leader'; serverId: string }
   /** A server that just started → leader: send me everything current */
-  | { t: 'hello' };
+  | { t: 'hello' }
+  /** Server holding an agent's socket → leader: what the agent said */
+  | { t: 'agent-in'; agentId: string; message: unknown }
+  /** Server holding an agent's socket → leader: the agent disconnected */
+  | { t: 'agent-offline'; agentId: string }
+  /** Leader → the server holding an agent's socket: send this to the agent */
+  | { t: 'agent-out'; agentId: string; message: unknown };
 
 interface Envelope {
   o: string; // origin server

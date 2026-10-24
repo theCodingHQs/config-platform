@@ -3,12 +3,14 @@ import { RadioTower } from "lucide-react";
 import { useAuth } from "../../context/auth-context";
 import { ConnectionsPanel } from "./ConnectionsPanel";
 import { RulesPanel } from "./rules/RulesPanel";
+import { AgentsPanel } from "./agents/AgentsPanel";
 
-type Tab = "connections" | "rules";
+type Tab = "connections" | "rules" | "agents";
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: "connections", label: "Connections" },
   { id: "rules", label: "Rules" },
+  { id: "agents", label: "Edge agents" },
 ];
 
 /** Studio → Live: live data sources and their tags, and rules that turn changes into records */
@@ -47,7 +49,9 @@ export function LiveStudio() {
           </button>
         ))}
       </div>
-      {tab === "connections" ? <ConnectionsPanel canEdit={canEdit} /> : <RulesPanel canEdit={canEdit} />}
+      {tab === "connections" && <ConnectionsPanel canEdit={canEdit} />}
+      {tab === "rules" && <RulesPanel canEdit={canEdit} />}
+      {tab === "agents" && <AgentsPanel canEdit={canEdit} />}
     </div>
   );
 }

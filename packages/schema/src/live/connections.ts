@@ -161,6 +161,8 @@ const base = {
   tags: z.array(TagRuleSchema).max(500).default([]),
   /** Roles that may see this connection's tags; empty = everyone in the workspace */
   viewRoles: z.array(PageRoleSchema).max(5).default([]),
+  /** Runs on this edge agent (inside the factory network); null = on the app server */
+  agentId: z.string().min(1).nullable().optional().default(null),
 };
 
 export const LiveConnectionInputSchema = z
@@ -174,6 +176,9 @@ export const LiveConnectionInputSchema = z
     z.object({ ...base, kind: z.literal('simulator'), settings: SimulatorSettingsSchema }),
   ])
   .superRefine((input, ctx) => {
+    if (input.kind === 'http-push' && input.agentId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['agentId'], message: "HTTP push is received by the app itself, so it can't run on an edge agent" });
+    }
     const seen = new Set<string>();
     input.tags.forEach((rule, i) => {
       if (seen.has(rule.tag)) {
@@ -209,6 +214,7 @@ export interface LiveConnection {
   settings: Record<string, any>;
   tags: TagRule[];
   viewRoles: Array<z.infer<typeof PageRoleSchema>>;
+  agentId: string | null;
   createdAt: string;
   updatedAt: string;
   status?: LiveConnectionStatus;

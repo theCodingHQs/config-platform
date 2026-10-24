@@ -10,6 +10,7 @@ import { liveCluster } from './cluster/index.js';
 import { checkTagRules } from './tag-mapper.js';
 import { LiveSettingsError } from './live-errors.js';
 import { newPushToken } from './adapters/http-push-adapter.js';
+import { agentRepository } from './agents/agent-repository.js';
 
 function toView(stored: StoredConnection): LiveConnection {
   const status = liveHub.statusOf(stored.tenantId)[stored.id];
@@ -21,6 +22,7 @@ function toView(stored: StoredConnection): LiveConnection {
     settings: redactSettings(stored.kind, stored.settings),
     tags: stored.tags,
     viewRoles: stored.viewRoles as LiveConnection['viewRoles'],
+    agentId: stored.agentId,
     createdAt: stored.createdAt,
     updatedAt: stored.updatedAt,
     ...(status ? { status: { state: status.state, error: status.error, warning: status.warning, lastMessageAt: status.lastMessageAt, messagesReceived: status.messagesReceived } } : {}),
@@ -35,6 +37,11 @@ function parse(body: unknown) {
   const problems = checkTagRules(parsed.data.tags);
   if (problems.length) throw new LiveSettingsError(problems.join('; '));
   return parsed.data;
+}
+
+/** An edge agent named as "runs on" must be one of this workspace's */
+async function checkAgent(tenantId: string, agentId: string | null | undefined): Promise<void> {
+  if (agentId && !(await agentRepository.get(tenantId, agentId))) throw new LiveSettingsError('That edge agent no longer exists. Choose another, or the app server.');
 }
 
 /** Another connection already produces one of these tags: two sources would overwrite each other */
@@ -55,6 +62,7 @@ export const liveConnectionService = {
 
   async create(tenantId: string, userId: string, body: unknown): Promise<LiveConnection> {
     const input = parse(body);
+    await checkAgent(tenantId, input.agentId);
     await checkTagsAreFree(tenantId, input.tags.map((t) => t.tag));
     // HTTP push: the token is made here and shown once; only its hash is stored
     const push = input.kind === 'http-push' ? newPushToken() : null;
@@ -78,6 +86,7 @@ export const liveConnectionService = {
     if (!previous) throw new LiveSettingsError('Connection not found', 404);
     const input = parse(body);
     if (input.kind !== previous.kind) throw new LiveSettingsError("A connection's kind can't be changed. Create a new connection instead.");
+    await checkAgent(tenantId, input.agentId);
     await checkTagsAreFree(tenantId, input.tags.map((t) => t.tag), id);
     const saved = await connectionRepository.update(tenantId, previous, input);
     await liveCluster.connectionChanged(tenantId, id, saved);

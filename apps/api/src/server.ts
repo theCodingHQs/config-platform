@@ -45,6 +45,8 @@ import { liveRoutes } from './live/live-routes.js';
 import { liveSocketRoutes } from './live/live-socket-routes.js';
 import { liveRuleRoutes } from './live/rules/live-rule-routes.js';
 import { livePushRoutes } from './live/live-push-routes.js';
+import { agentSocketRoutes } from './live/agents/agent-socket-routes.js';
+import { agentRoutes } from './live/agents/agent-routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -324,6 +326,8 @@ export async function buildServer() {
     await apiApp.register(authRoutes);
     // Devices push live messages with a connection token (no sign-in)
     await apiApp.register(livePushRoutes);
+    // Edge agents connect with their own token (no sign-in)
+    await apiApp.register(agentSocketRoutes);
 
     // Protected routes (session required)
     await apiApp.register(async (protectedApp) => {
@@ -344,6 +348,7 @@ export async function buildServer() {
       await protectedApp.register(liveRoutes);
       await protectedApp.register(liveSocketRoutes);
       await protectedApp.register(liveRuleRoutes);
+      await protectedApp.register(agentRoutes);
     });
   }, { prefix: '/api' });
 

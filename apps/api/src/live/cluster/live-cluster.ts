@@ -14,6 +14,7 @@ import { recordEvents } from '../record-events.js';
 import { deliverPush, deliverTrustedPush, pushTokenMatches, type PushResult } from '../adapters/http-push-adapter.js';
 import type { LiveBus, LiveBusEvent } from './live-bus.js';
 import type { LeaderLock } from './leader-lock.js';
+import type { AgentRelay } from './agent-relay.js';
 
 export interface ClusterStore {
   loadConnection(tenantId: string, id: string): Promise<StoredConnection | null>;
@@ -35,7 +36,11 @@ export class LiveCluster {
     private readonly bus: LiveBus,
     private readonly lock: LeaderLock,
     private readonly store: ClusterStore,
+    /** Edge agents connected to any server (optional: tests without agents leave it out) */
+    private readonly agents?: (isLeader: () => boolean, bus: LiveBus) => AgentRelay,
   ) {}
+
+  private relay: AgentRelay | null = null;
 
   get isLeader(): boolean {
     return this.leader;
@@ -43,6 +48,7 @@ export class LiveCluster {
 
   async start(): Promise<void> {
     await this.bus.start();
+    this.relay = this.agents?.(() => this.leader, this.bus) ?? null;
     this.offs.push(
       this.bus.on((event) => void this.onEvent(event)),
       recordEvents.subscribe((c) => !c.remote && this.bus.publish({ t: 'records', tenantId: c.tenantId, entityId: c.entityId, entityName: c.entityName })),
@@ -105,14 +111,17 @@ export class LiveCluster {
       await this.rules.start();
       this.refresh = setInterval(() => this.publishEverything(), STATUS_REFRESH_MS);
       this.refresh.unref();
+      this.relay?.leaderChanged(true);
     } else {
       if (this.refresh) clearInterval(this.refresh);
+      this.relay?.leaderChanged(false);
       this.rules.stopAll();
       await this.hub.stopAll();
     }
   }
 
   private async onEvent(event: LiveBusEvent): Promise<void> {
+    if (this.relay?.handle(event)) return;
     switch (event.t) {
       case 'records':
         recordEvents.publish({ tenantId: event.tenantId, entityId: event.entityId, entityName: event.entityName, remote: true });

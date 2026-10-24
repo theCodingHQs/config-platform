@@ -56,7 +56,7 @@ describe('connection form', () => {
 
   it('round-trips a saved MQTT connection without ever holding its password', () => {
     const saved: LiveConnection = {
-      id: 'lc_1', name: 'Broker', kind: 'mqtt', enabled: true, viewRoles: ['viewer'], createdAt: '', updatedAt: '',
+      id: 'lc_1', name: 'Broker', kind: 'mqtt', enabled: true, viewRoles: ['viewer'], agentId: null, createdAt: '', updatedAt: '',
       settings: { url: 'mqtts://b:8883', username: 'line', hasPassword: true, topics: ['factory/#', 'plant/+/status'], qos: 1, format: 'json' },
       tags: [{ tag: 'line1.speed', value: 'message.speed', type: 'number' }],
     };
@@ -114,7 +114,7 @@ describe('every connection kind', () => {
       const draft = { ...emptyDraft(kind), name: 'x' };
       draft.settings = filled[kind](draft.settings);
       const input = draftToInput(draft) as any;
-      const saved = { id: 'lc_1', name: 'x', kind, enabled: true, viewRoles: [], tags: [], createdAt: '', updatedAt: '', settings: input.settings } as LiveConnection;
+      const saved = { id: 'lc_1', name: 'x', kind, enabled: true, viewRoles: [], tags: [], agentId: null, createdAt: '', updatedAt: '', settings: input.settings } as LiveConnection;
       expect(draftToInput(draftFromConnection(saved)), kind).toEqual(input);
     }
   });

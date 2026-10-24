@@ -1,0 +1,27 @@
+{
+  "name": "@config-platform/edge-agent",
+  "version": "1.0.0",
+  "description": "Runs ConfigPlatform live connections inside a factory network and connects out to the app (no inbound ports)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "config-platform-agent": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "test": "tsc && node --experimental-strip-types --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@config-platform/live-connectors": "workspace:*",
+    "@config-platform/schema": "workspace:*",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/ws": "^8.18.2",
+    "tsx": "^4.23.15",
+    "typescript": "^5.7.3"
+  }
+}
