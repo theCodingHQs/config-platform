@@ -40,6 +40,13 @@ export async function liveRoutes(fastify: FastifyInstance) {
     return after;
   }));
 
+  fastify.post('/live/connections/:id/push-token', { preHandler: csrfCheckHook }, guarded('admin', async (req) => {
+    const { tenantId, userId, email } = req.session;
+    const result = await liveConnectionService.newPushToken(tenantId, idOf(req));
+    await auditLogService.log({ tenantId, userId, userEmail: email, action: 'live.connection.push_token', entityType: 'live_connection', entityId: idOf(req) });
+    return result;
+  }));
+
   fastify.delete('/live/connections/:id', { preHandler: csrfCheckHook }, guarded('admin', async (req, reply) => {
     const { tenantId, userId, email } = req.session;
     const removed = await liveConnectionService.remove(tenantId, idOf(req));

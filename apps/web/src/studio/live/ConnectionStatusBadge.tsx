@@ -13,7 +13,7 @@ const LOOK: Record<LiveConnectionStatus["state"], { label: string; className: st
 export function ConnectionStatusBadge({ status }: { status?: LiveConnectionStatus }) {
   const look = LOOK[status?.state ?? "connecting"];
   return (
-    <span className={look.className} title={status?.error}>
+    <span className={status?.state === "connected" && status.warning ? "badge badge-warning" : look.className} title={status?.error ?? status?.warning}>
       {look.label}
     </span>
   );

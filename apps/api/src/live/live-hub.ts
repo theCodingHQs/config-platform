@@ -61,7 +61,8 @@ export class LiveHub {
         entry.adapter = ADAPTERS[connection.kind](decryptSettings(connection.kind, connection.settings), {
           onMessage: (message) => this.receive(entry, message),
           onState: (state, error) => this.setState(entry, state, error),
-        });
+          onWarning: (warning) => this.setWarning(entry, warning),
+        }, { connectionId: connection.id });
         entry.adapter.start();
       } catch (err: any) {
         this.setState(entry, 'error', String(err?.message || err));
@@ -130,6 +131,12 @@ export class LiveHub {
     const keepError = state === 'disconnected' || state === 'connecting' ? entry.status.error : undefined;
     entry.status = { ...entry.status, state, error: state === 'connected' ? undefined : (error ?? keepError) };
     if (state !== 'connected') this.store.markConnectionStale(entry.connection.tenantId, entry.connection.id);
+    this.notifyStatus(entry.connection.tenantId);
+  }
+
+  private setWarning(entry: Running, warning: string): void {
+    if (this.running.get(entry.connection.id) !== entry || entry.status.warning === warning) return;
+    entry.status = { ...entry.status, warning };
     this.notifyStatus(entry.connection.tenantId);
   }
 

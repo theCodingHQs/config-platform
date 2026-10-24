@@ -6,13 +6,16 @@ import { liveApi } from "../../live/live-api";
 import { ConnectionEditor, LIVE_CONNECTIONS_KEY } from "./ConnectionEditor";
 import { ConnectionStatusBadge } from "./ConnectionStatusBadge";
 import { NewConnectionPicker } from "./NewConnectionPicker";
-import { draftFromConnection, emptyDraft, KIND_LABELS } from "./connection-draft";
+import { draftFromConnection, emptyDraft } from "./connection-draft";
+import { KIND_UI } from "./kinds";
 
 type View = { mode: "list" } | { mode: "pick" } | { mode: "new"; kind: LiveConnectionKind } | { mode: "edit"; id: string };
 
 /** Studio → Live → Connections: where live data comes from, and its tags */
 export function ConnectionsPanel({ canEdit }: { canEdit: boolean }) {
   const [view, setView] = useState<View>({ mode: "list" });
+  /** An HTTP push token from creating a connection, carried into its editor (shown once) */
+  const [createdToken, setCreatedToken] = useState<{ id: string; token: string } | null>(null);
   const { data: connections = [], isLoading, error } = useQuery({
     queryKey: LIVE_CONNECTIONS_KEY,
     queryFn: liveApi.connections,
@@ -32,10 +35,24 @@ export function ConnectionsPanel({ canEdit }: { canEdit: boolean }) {
       )}
       {view.mode === "pick" && <NewConnectionPicker onPick={(kind) => setView({ mode: "new", kind })} onCancel={() => setView({ mode: "list" })} />}
       {view.mode === "new" && (
-        <ConnectionEditor key="new" initial={emptyDraft(view.kind)} canEdit={canEdit} onSaved={(saved) => setView({ mode: "edit", id: saved.id })} onClose={() => setView({ mode: "list" })} />
+        <ConnectionEditor key="new" initial={emptyDraft(view.kind)} canEdit={canEdit} onSaved={(saved) => {
+            if (saved.pushToken) setCreatedToken({ id: saved.id, token: saved.pushToken });
+            setView({ mode: "edit", id: saved.id });
+          }} onClose={() => setView({ mode: "list" })} />
       )}
       {view.mode === "edit" && editing && (
-        <ConnectionEditor key={editing.id} connection={editing} initial={draftFromConnection(editing)} canEdit={canEdit} onSaved={() => undefined} onClose={() => setView({ mode: "list" })} />
+        <ConnectionEditor
+          key={editing.id}
+          connection={editing}
+          initial={draftFromConnection(editing)}
+          canEdit={canEdit}
+          justCreatedToken={createdToken?.id === editing.id ? createdToken.token : undefined}
+          onSaved={() => undefined}
+          onClose={() => {
+            setCreatedToken(null);
+            setView({ mode: "list" });
+          }}
+        />
       )}
       {view.mode === "list" && (
         <ConnectionList connections={connections} loading={isLoading} error={error as Error | null} onOpen={(id) => setView({ mode: "edit", id })} />
@@ -74,7 +91,7 @@ function ConnectionList({ connections, loading, error, onOpen }: { connections: 
                   {c.name}
                 </button>
               </td>
-              <td data-label="Kind">{KIND_LABELS[c.kind]}</td>
+              <td data-label="Kind">{KIND_UI[c.kind].label}</td>
               <td data-label="Tags">{c.tags.length}</td>
               <td data-label="Status">
                 <ConnectionStatusBadge status={c.status ?? (c.enabled ? undefined : { state: "disabled", messagesReceived: 0 })} />

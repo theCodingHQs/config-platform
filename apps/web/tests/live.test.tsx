@@ -1,7 +1,8 @@
 import React from 'react';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, act, cleanup } from '@testing-library/react';
-import { LiveConnectionInputSchema, LiveRuleInputSchema, type LiveConnection } from '@config-platform/schema';
+import { LIVE_CONNECTION_KINDS, LiveConnectionInputSchema, LiveRuleInputSchema, type LiveConnection } from '@config-platform/schema';
+import { KIND_UI } from '../src/studio/live/kinds';
 import { RULE_PRESETS, emptyRuleDraft, ruleDraftFromRule, ruleDraftToInput } from '../src/studio/live/rules/rule-draft';
 import { draftFromConnection, draftToInput, emptyDraft, newTagRule } from '../src/studio/live/connection-draft';
 import { messagePaths, suggestTagName } from '../src/studio/live/message-paths';
@@ -60,7 +61,7 @@ describe('connection form', () => {
       tags: [{ tag: 'line1.speed', value: 'message.speed', type: 'number' }],
     };
     const draft = draftFromConnection(saved);
-    expect(draft.mqtt).toMatchObject({ password: '', hasPassword: true, topics: 'factory/#\nplant/+/status' });
+    expect(draft.settings).toMatchObject({ password: '', hasPassword: true, topics: 'factory/#\nplant/+/status' });
     const input = draftToInput(draft) as any;
     expect(input.settings).not.toHaveProperty('password'); // empty = keep the saved one
     expect(input.settings.topics).toEqual(['factory/#', 'plant/+/status']);
@@ -82,6 +83,40 @@ describe('connection form', () => {
       { expression: 'message.list[0]', value: 5, type: 'number' },
     ]);
     expect(messagePaths(22.5)).toEqual([{ expression: 'message', value: 22.5, type: 'number' }]);
+  });
+});
+
+describe('every connection kind', () => {
+  // What a person would fill in for each kind (the rest is the kind's defaults)
+  const filled: Record<string, (s: any) => any> = {
+    websocket: (s) => ({ ...s, url: 'wss://gw.local/stream' }),
+    mqtt: (s) => ({ ...s, url: 'mqtts://broker:8883', topics: 'factory/#' }),
+    opcua: (s) => ({ ...s, endpointUrl: 'opc.tcp://plc:4840', nodes: [{ key: 'speed', nodeId: 'ns=2;s=Line1.Speed' }] }),
+    modbus: (s) => ({ ...s, host: '192.168.1.20' }),
+    'http-push': (s) => s,
+    'http-poll': (s) => ({ ...s, url: 'https://mes.local/api/status' }),
+    simulator: (s) => s,
+  };
+
+  it('has a label, form and defaults that make valid settings once the address is filled in', () => {
+    for (const kind of LIVE_CONNECTION_KINDS) {
+      const ui = KIND_UI[kind];
+      expect(ui.label, kind).toBeTruthy();
+      const draft = { ...emptyDraft(kind), name: `Test ${kind}` };
+      draft.settings = filled[kind](draft.settings);
+      const result = LiveConnectionInputSchema.safeParse(draftToInput(draft));
+      expect(result.success ? 'ok' : result.error.issues.map((i) => i.message).join('; '), kind).toBe('ok');
+    }
+  });
+
+  it('a saved connection comes back to the same input (secrets left out to keep them)', () => {
+    for (const kind of LIVE_CONNECTION_KINDS) {
+      const draft = { ...emptyDraft(kind), name: 'x' };
+      draft.settings = filled[kind](draft.settings);
+      const input = draftToInput(draft) as any;
+      const saved = { id: 'lc_1', name: 'x', kind, enabled: true, viewRoles: [], tags: [], createdAt: '', updatedAt: '', settings: input.settings } as LiveConnection;
+      expect(draftToInput(draftFromConnection(saved)), kind).toEqual(input);
+    }
   });
 });
 

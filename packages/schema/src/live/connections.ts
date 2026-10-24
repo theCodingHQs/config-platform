@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { TagNameSchema, TAG_VALUE_TYPES } from './tags.js';
 import { PageRoleSchema } from '../page.js';
 
-export const LIVE_CONNECTION_KINDS = ['websocket', 'mqtt', 'simulator'] as const;
+export const LIVE_CONNECTION_KINDS = ['websocket', 'mqtt', 'opcua', 'modbus', 'http-push', 'http-poll', 'simulator'] as const;
 export type LiveConnectionKind = (typeof LIVE_CONNECTION_KINDS)[number];
 
 /** How a message's bytes are read before tag rules see it as `message` */
@@ -53,6 +53,67 @@ export const MqttSettingsSchema = z.object({
   /** Topic filters; + matches one level, # the rest: factory/line1/+/status */
   topics: z.array(z.string().trim().min(1).max(500)).min(1, 'Add at least one topic').max(100),
   qos: z.union([z.literal(0), z.literal(1), z.literal(2)]).default(0),
+  format: MessageFormatSchema.default('json'),
+});
+
+/** OPC UA: the standard of modern PLCs and SCADA systems; values arrive as they change. */
+export const OpcUaSettingsSchema = z.object({
+  endpointUrl: z
+    .string()
+    .trim()
+    .refine((u) => /^opc\.tcp:\/\/[^\s/]+/i.test(u), 'The address must start with opc.tcp://, e.g. opc.tcp://plc-line1.local:4840'),
+  securityMode: z.enum(['None', 'Sign', 'SignAndEncrypt']).default('None'),
+  securityPolicy: z.enum(['None', 'Basic256Sha256', 'Aes128_Sha256_RsaOaep', 'Aes256_Sha256_RsaPss']).default('None'),
+  username: z.string().trim().max(200).optional().default(''),
+  password: SecretInputSchema,
+  /** Values to watch: a name for the message, and the node, e.g. ns=2;s=Line1.Speed */
+  nodes: z
+    .array(z.object({ key: z.string().trim().min(1).max(60).regex(/^[A-Za-z_]\w*$/, 'Use letters, numbers and _'), nodeId: z.string().trim().min(1).max(500) }))
+    .min(1, 'Add at least one value to watch')
+    .max(500),
+  samplingMs: z.number().int().min(100).max(60_000).default(1000),
+});
+
+export const MODBUS_AREAS = ['holding', 'input', 'coil', 'discrete'] as const;
+export const MODBUS_TYPES = ['uint16', 'int16', 'uint32', 'int32', 'float32', 'bool'] as const;
+
+/** Modbus TCP: PLCs, power meters and older equipment; registers read on a timer. */
+export const ModbusSettingsSchema = z.object({
+  host: z.string().trim().min(1, 'Enter the device address, e.g. 192.168.1.20').max(255),
+  port: z.number().int().min(1).max(65535).default(502),
+  unitId: z.number().int().min(0).max(255).default(1),
+  intervalMs: z.number().int().min(200, 'At most 5 reads a second').max(3_600_000).default(1000),
+  points: z
+    .array(
+      z.object({
+        key: z.string().trim().min(1).max(60).regex(/^[A-Za-z_]\w*$/, 'Use letters, numbers and _'),
+        area: z.enum(MODBUS_AREAS).default('holding'),
+        address: z.number().int().min(0).max(65535),
+        type: z.enum(MODBUS_TYPES).default('uint16'),
+        /** 32-bit values: which register holds the high word */
+        wordOrder: z.enum(['big', 'little']).default('big'),
+        /** Raw value × scale, e.g. 0.1 for a register holding tenths of a degree */
+        scale: z.number().default(1),
+      }),
+    )
+    .min(1, 'Add at least one register to read')
+    .max(200),
+});
+
+/** HTTP push: devices and systems send messages to the connection's own address with a token. */
+export const HttpPushSettingsSchema = z.object({
+  format: MessageFormatSchema.default('json'),
+});
+
+/** HTTP polling: an MES/ERP or device web API, fetched every few seconds. */
+export const HttpPollSettingsSchema = z.object({
+  url: z
+    .string()
+    .trim()
+    .url('Enter the address, e.g. https://mes.factory.local/api/line1/status')
+    .refine((u) => /^https?:\/\//i.test(u), 'The address must start with http:// or https://'),
+  headers: z.array(HeaderSchema).max(20).optional().default([]),
+  intervalSec: z.number().int().min(1, 'At most once a second').max(3600).default(10),
   format: MessageFormatSchema.default('json'),
 });
 
@@ -106,6 +167,10 @@ export const LiveConnectionInputSchema = z
   .discriminatedUnion('kind', [
     z.object({ ...base, kind: z.literal('websocket'), settings: WebSocketSettingsSchema }),
     z.object({ ...base, kind: z.literal('mqtt'), settings: MqttSettingsSchema }),
+    z.object({ ...base, kind: z.literal('opcua'), settings: OpcUaSettingsSchema }),
+    z.object({ ...base, kind: z.literal('modbus'), settings: ModbusSettingsSchema }),
+    z.object({ ...base, kind: z.literal('http-push'), settings: HttpPushSettingsSchema }),
+    z.object({ ...base, kind: z.literal('http-poll'), settings: HttpPollSettingsSchema }),
     z.object({ ...base, kind: z.literal('simulator'), settings: SimulatorSettingsSchema }),
   ])
   .superRefine((input, ctx) => {
@@ -125,6 +190,8 @@ export interface LiveConnectionStatus {
   state: ConnectionState;
   /** Why it isn't connected, in plain words */
   error?: string;
+  /** Connected, but something needs attention (e.g. one OPC UA value can't be watched) */
+  warning?: string;
   /** Last message received (ISO) */
   lastMessageAt?: string;
   messagesReceived: number;

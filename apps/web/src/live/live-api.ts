@@ -28,7 +28,9 @@ export const liveApi = {
   connections: async () => handleResponse<LiveConnection[]>(await apiFetch(`${BASE}/connections`)),
   tags: async () => handleResponse<LiveTagInfo[]>(await apiFetch(`${BASE}/tags`)),
   messages: async (id: string) => handleResponse<LoggedLiveMessage[]>(await apiFetch(`${BASE}/connections/${id}/messages`)),
-  create: async (input: unknown) => handleResponse<LiveConnection>(await apiFetch(`${BASE}/connections`, { method: "POST", ...json(input) })),
+  /** HTTP push connections come back with their token, this once */
+  create: async (input: unknown) => handleResponse<LiveConnection & { pushToken?: string }>(await apiFetch(`${BASE}/connections`, { method: "POST", ...json(input) })),
+  newPushToken: async (id: string) => handleResponse<{ pushToken: string }>(await apiFetch(`${BASE}/connections/${id}/push-token`, { method: "POST" })),
   update: async (id: string, input: unknown) =>
     handleResponse<LiveConnection>(await apiFetch(`${BASE}/connections/${id}`, { method: "PUT", ...json(input) })),
   remove: async (id: string) => {

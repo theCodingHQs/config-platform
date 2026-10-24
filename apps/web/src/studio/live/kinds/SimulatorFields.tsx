@@ -1,9 +1,23 @@
 import React from "react";
 import { Plus, X } from "lucide-react";
-import type { ConnectionDraft, SignalDraft } from "../connection-draft";
 import { Field } from "../Field";
 
-type Settings = ConnectionDraft["simulator"];
+export interface SignalDraft {
+  key: string;
+  pattern: "wave" | "random" | "counter" | "cycle";
+  min: number;
+  max: number;
+  period: number;
+  /** cycle: values separated by commas */
+  values: string;
+}
+
+export interface SimulatorDraft {
+  intervalMs: number;
+  signals: SignalDraft[];
+}
+
+type Settings = SimulatorDraft;
 
 const PATTERNS: Record<SignalDraft["pattern"], string> = {
   wave: "Wave between min and max",
@@ -14,7 +28,7 @@ const PATTERNS: Record<SignalDraft["pattern"], string> = {
 
 const cell: React.CSSProperties = { padding: "var(--space-1)", verticalAlign: "top" };
 
-export function SimulatorSettingsFields({ value, onChange, disabled }: { value: Settings; onChange: (next: Settings) => void; disabled?: boolean }) {
+export function SimulatorFields({ value, onChange, disabled }: { value: Settings; onChange: (next: Settings) => void; disabled?: boolean }) {
   const setSignal = (i: number, patch: Partial<SignalDraft>) => onChange({ ...value, signals: value.signals.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
   const num = (text: string) => (text.trim() === "" ? 0 : Number(text));
 

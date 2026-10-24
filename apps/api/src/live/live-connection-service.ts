@@ -8,6 +8,7 @@ import { redactSettings } from './connection-secrets.js';
 import { liveHub } from './live-hub.js';
 import { checkTagRules } from './tag-mapper.js';
 import { LiveSettingsError } from './live-errors.js';
+import { newPushToken } from './adapters/http-push-adapter.js';
 
 function toView(stored: StoredConnection): LiveConnection {
   const status = liveHub.statusOf(stored.tenantId)[stored.id];
@@ -21,7 +22,7 @@ function toView(stored: StoredConnection): LiveConnection {
     viewRoles: stored.viewRoles as LiveConnection['viewRoles'],
     createdAt: stored.createdAt,
     updatedAt: stored.updatedAt,
-    ...(status ? { status: { state: status.state, error: status.error, lastMessageAt: status.lastMessageAt, messagesReceived: status.messagesReceived } } : {}),
+    ...(status ? { status: { state: status.state, error: status.error, warning: status.warning, lastMessageAt: status.lastMessageAt, messagesReceived: status.messagesReceived } } : {}),
   };
 }
 
@@ -54,9 +55,21 @@ export const liveConnectionService = {
   async create(tenantId: string, userId: string, body: unknown): Promise<LiveConnection> {
     const input = parse(body);
     await checkTagsAreFree(tenantId, input.tags.map((t) => t.tag));
-    const saved = await connectionRepository.create(tenantId, userId, input);
+    // HTTP push: the token is made here and shown once; only its hash is stored
+    const push = input.kind === 'http-push' ? newPushToken() : null;
+    const saved = await connectionRepository.create(tenantId, userId, input, push ? { tokenHash: push.tokenHash } : {});
     liveHub.apply(saved);
-    return toView(saved);
+    return { ...toView(saved), ...(push ? { pushToken: push.token } : {}) };
+  },
+
+  /** A new HTTP push token (the old one stops working); shown once */
+  async newPushToken(tenantId: string, id: string): Promise<{ pushToken: string }> {
+    const previous = await connectionRepository.get(tenantId, id);
+    if (!previous || previous.kind !== 'http-push') throw new LiveSettingsError('HTTP push connection not found', 404);
+    const { token, tokenHash } = newPushToken();
+    const saved = await connectionRepository.mergeServerSettings(tenantId, id, { tokenHash });
+    liveHub.apply(saved!);
+    return { pushToken: token };
   },
 
   async update(tenantId: string, id: string, body: unknown): Promise<{ before: LiveConnection; after: LiveConnection }> {

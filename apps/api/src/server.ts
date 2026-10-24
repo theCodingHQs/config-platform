@@ -44,6 +44,7 @@ import { platformRoutes } from './platform/platform-routes.js';
 import { liveRoutes } from './live/live-routes.js';
 import { liveSocketRoutes } from './live/live-socket-routes.js';
 import { liveRuleRoutes } from './live/rules/live-rule-routes.js';
+import { livePushRoutes } from './live/live-push-routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -321,6 +322,8 @@ export async function buildServer() {
   await fastify.register(async (apiApp) => {
     // Auth routes (public – signup, login, logout, CSRF, etc.)
     await apiApp.register(authRoutes);
+    // Devices push live messages with a connection token (no sign-in)
+    await apiApp.register(livePushRoutes);
 
     // Protected routes (session required)
     await apiApp.register(async (protectedApp) => {

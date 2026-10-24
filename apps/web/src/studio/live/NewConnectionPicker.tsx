@@ -1,13 +1,6 @@
 import React from "react";
-import { Activity, Radio, Waves } from "lucide-react";
 import { LIVE_CONNECTION_KINDS, type LiveConnectionKind } from "@config-platform/schema";
-import { KIND_HINTS, KIND_LABELS } from "./connection-draft";
-
-const ICONS: Record<LiveConnectionKind, React.ReactNode> = {
-  websocket: <Activity size="1.4em" />,
-  mqtt: <Radio size="1.4em" />,
-  simulator: <Waves size="1.4em" />,
-};
+import { KIND_UI } from "./kinds";
 
 /** Step one of a new connection: what kind of source it is */
 export function NewConnectionPicker({ onPick, onCancel }: { onPick: (kind: LiveConnectionKind) => void; onCancel: () => void }) {
@@ -24,9 +17,9 @@ export function NewConnectionPicker({ onPick, onCancel }: { onPick: (kind: LiveC
             style={{ height: "auto", whiteSpace: "normal", flexDirection: "column", alignItems: "flex-start", textAlign: "left", gap: "var(--space-2)", padding: "var(--space-4)" }}
           >
             <span style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontWeight: 600 }}>
-              {ICONS[kind]} {KIND_LABELS[kind]}
+              {KIND_UI[kind].icon} {KIND_UI[kind].label}
             </span>
-            <span style={{ fontSize: "var(--font-size-sm)", color: "var(--text-muted)", fontWeight: 400 }}>{KIND_HINTS[kind]}</span>
+            <span style={{ fontSize: "var(--font-size-sm)", color: "var(--text-muted)", fontWeight: 400 }}>{KIND_UI[kind].hint}</span>
           </button>
         ))}
       </div>

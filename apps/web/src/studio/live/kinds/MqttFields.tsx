@@ -1,11 +1,23 @@
 import React from "react";
-import type { ConnectionDraft } from "../connection-draft";
 import { Field, FieldRow } from "../Field";
-import { FormatSelect } from "./FormatSelect";
+import { FormatSelect, type MessageFormat } from "./shared";
 
-type Settings = ConnectionDraft["mqtt"];
+export interface MqttDraft {
+  url: string;
+  username: string;
+  /** Typed password; empty = keep the saved one */
+  password: string;
+  hasPassword: boolean;
+  clientId: string;
+  /** One topic filter per line */
+  topics: string;
+  qos: 0 | 1 | 2;
+  format: MessageFormat;
+}
 
-export function MqttSettingsFields({ value, onChange, disabled }: { value: Settings; onChange: (next: Settings) => void; disabled?: boolean }) {
+type Settings = MqttDraft;
+
+export function MqttFields({ value, onChange, disabled }: { value: Settings; onChange: (next: Settings) => void; disabled?: boolean }) {
   const set = (patch: Partial<Settings>) => onChange({ ...value, ...patch });
   return (
     <fieldset disabled={disabled} style={{ border: 0, padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>

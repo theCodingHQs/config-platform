@@ -63,12 +63,13 @@ export const connectionRepository = {
     return res.rows[0] ? toStored(res.rows[0]) : null;
   },
 
-  async create(tenantId: string, userId: string, input: LiveConnectionInput): Promise<StoredConnection> {
+  /** `serverSettings` are set by the server, not typed in (e.g. the HTTP push token's hash) */
+  async create(tenantId: string, userId: string, input: LiveConnectionInput, serverSettings: Record<string, unknown> = {}): Promise<StoredConnection> {
     const id = `lc_${crypto.randomBytes(6).toString('hex')}`;
     const res = await pool.query<Row>(
       `INSERT INTO public.live_connection (id, tenant_id, name, kind, enabled, settings, tags, view_roles, created_by)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING ${COLUMNS}`,
-      [id, tenantId, input.name, input.kind, input.enabled, encryptSettings(input.kind, input.settings), JSON.stringify(input.tags), JSON.stringify(input.viewRoles), userId],
+      [id, tenantId, input.name, input.kind, input.enabled, { ...encryptSettings(input.kind, input.settings), ...serverSettings }, JSON.stringify(input.tags), JSON.stringify(input.viewRoles), userId],
     );
     return toStored(res.rows[0]);
   },
@@ -82,6 +83,16 @@ export const connectionRepository = {
       [tenantId, previous.id, input.name, input.enabled, encryptSettings(input.kind, input.settings, previous.settings), JSON.stringify(input.tags), JSON.stringify(input.viewRoles)],
     );
     return toStored(res.rows[0]);
+  },
+
+  /** Changes server-set settings only (e.g. a new push token's hash) */
+  async mergeServerSettings(tenantId: string, id: string, serverSettings: Record<string, unknown>): Promise<StoredConnection | null> {
+    const res = await pool.query<Row>(
+      `UPDATE public.live_connection SET settings = settings || $3::jsonb, updated_at = NOW()
+       WHERE tenant_id = $1 AND id = $2 RETURNING ${COLUMNS}`,
+      [tenantId, id, JSON.stringify(serverSettings)],
+    );
+    return res.rows[0] ? toStored(res.rows[0]) : null;
   },
 
   async remove(tenantId: string, id: string): Promise<boolean> {

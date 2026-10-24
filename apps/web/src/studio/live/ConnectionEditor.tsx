@@ -4,7 +4,8 @@ import { Trash2 } from "lucide-react";
 import type { LiveConnection, PageRole } from "@config-platform/schema";
 import { liveApi } from "../../live/live-api";
 import { useStatusNotify } from "../../context/app-bar-context";
-import { draftFromConnection, draftToInput, KIND_LABELS, newTagRule, type ConnectionDraft } from "./connection-draft";
+import { draftFromConnection, draftToInput, newTagRule, type ConnectionDraft } from "./connection-draft";
+import { KIND_UI } from "./kinds";
 import { suggestTagName, type MessagePath } from "./message-paths";
 import { ConnectionStatusBadge } from "./ConnectionStatusBadge";
 import { Field } from "./Field";
@@ -12,9 +13,6 @@ import { Section } from "./Section";
 import { TagRulesEditor } from "./TagRulesEditor";
 import { RecentMessages } from "./RecentMessages";
 import { LiveValues } from "./LiveValues";
-import { WebSocketSettingsFields } from "./settings/WebSocketSettingsFields";
-import { MqttSettingsFields } from "./settings/MqttSettingsFields";
-import { SimulatorSettingsFields } from "./settings/SimulatorSettingsFields";
 
 export const LIVE_CONNECTIONS_KEY = ["live-connections"];
 const ROLES: Array<{ role: PageRole; label: string }> = [
@@ -30,24 +28,31 @@ export function ConnectionEditor({
   canEdit,
   onSaved,
   onClose,
+  justCreatedToken,
 }: {
   /** The saved connection (undefined while creating) */
   connection?: LiveConnection;
   initial: ConnectionDraft;
   canEdit: boolean;
-  onSaved: (saved: LiveConnection) => void;
+  onSaved: (saved: LiveConnection & { pushToken?: string }) => void;
   onClose: () => void;
+  /** HTTP push: the token returned when this connection was just created (shown this once) */
+  justCreatedToken?: string;
 }) {
   const [draft, setDraft] = useState<ConnectionDraft>(initial);
   const [error, setError] = useState<string | null>(null);
+  /** HTTP push: the token the server returned on creation (never sent again) */
+  const [shownOnce, setShownOnce] = useState<string | undefined>(justCreatedToken);
+  const kind = KIND_UI[draft.kind];
   const queryClient = useQueryClient();
   const notify = useStatusNotify();
   const set = (patch: Partial<ConnectionDraft>) => setDraft((d) => ({ ...d, ...patch }));
 
   const save = useMutation({
     mutationFn: () => (draft.id ? liveApi.update(draft.id, draftToInput(draft)) : liveApi.create(draftToInput(draft))),
-    onSuccess: (saved) => {
+    onSuccess: (saved: LiveConnection & { pushToken?: string }) => {
       setError(null);
+      if (saved.pushToken) setShownOnce(saved.pushToken);
       queryClient.invalidateQueries({ queryKey: LIVE_CONNECTIONS_KEY });
       setDraft(draftFromConnection(saved));
       notify("success", `${saved.name} saved.`);
@@ -69,14 +74,14 @@ export function ConnectionEditor({
     const prefix = newTagRule(draft).tag.split(".")[0];
     const tag = suggestTagName(path.expression, prefix);
     if (draft.tags.some((t) => t.tag === tag)) return;
-    set({ tags: [...draft.tags, { tag, value: path.expression, type: path.type, ...(draft.kind === "mqtt" && topic ? { topic } : {}) }] });
+    set({ tags: [...draft.tags, { tag, value: path.expression, type: path.type, ...(kind.topics && topic ? { topic } : {}) }] });
   };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
       <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "flex-end", flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 18rem" }}>
-          <Field label={`${KIND_LABELS[draft.kind]} connection name`} htmlFor="lc-name">
+          <Field label={`${kind.label} connection name`} htmlFor="lc-name">
             <input id="lc-name" className="form-input" value={draft.name} disabled={!canEdit} placeholder="Line 1 gateway" onChange={(e) => set({ name: e.target.value })} />
           </Field>
         </div>
@@ -90,17 +95,20 @@ export function ConnectionEditor({
           {connection.status.error}
         </p>
       )}
+      {connection?.status?.state === "connected" && connection.status.warning && (
+        <p role="note" style={{ margin: 0, color: "var(--warning)", fontSize: "var(--font-size-sm)" }}>
+          {connection.status.warning}
+        </p>
+      )}
 
       <Section title="Connection">
-        {draft.kind === "websocket" && <WebSocketSettingsFields value={draft.websocket} disabled={!canEdit} onChange={(websocket) => set({ websocket })} />}
-        {draft.kind === "mqtt" && <MqttSettingsFields value={draft.mqtt} disabled={!canEdit} onChange={(mqtt) => set({ mqtt })} />}
-        {draft.kind === "simulator" && <SimulatorSettingsFields value={draft.simulator} disabled={!canEdit} onChange={(simulator) => set({ simulator })} />}
+        <kind.Fields value={draft.settings} disabled={!canEdit} onChange={(settings: unknown) => set({ settings })} connection={connection} shownOnce={shownOnce} />
       </Section>
 
       <Section title="Tags" intro="Named live values pages can show, such as line1.speed. Each says where its value is in a message.">
         <TagRulesEditor
           rules={draft.tags}
-          showTopic={draft.kind === "mqtt"}
+          showTopic={Boolean(kind.topics)}
           disabled={!canEdit}
           onChange={(tags) => set({ tags })}
           onAdd={() => set({ tags: [...draft.tags, newTagRule(draft)] })}

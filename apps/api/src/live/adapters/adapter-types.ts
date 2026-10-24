@@ -15,6 +15,8 @@ export interface AdapterEvents {
   onMessage: (message: AdapterMessage) => void;
   /** State changes; `error` says why, in plain words */
   onState: (state: ConnectionState, error?: string) => void;
+  /** Connected, but part of it doesn't work (cleared when the connection restarts) */
+  onWarning: (warning: string) => void;
 }
 
 export interface LiveAdapter {
@@ -29,4 +31,9 @@ export interface LiveAdapter {
  */
 export type AdapterSettings = Record<string, any>;
 
-export type AdapterFactory = (settings: AdapterSettings, events: AdapterEvents) => LiveAdapter;
+/** Which connection the adapter runs for (HTTP push receives at /api/live/push/<connectionId>) */
+export interface AdapterContext {
+  connectionId: string;
+}
+
+export type AdapterFactory = (settings: AdapterSettings, events: AdapterEvents, context: AdapterContext) => LiveAdapter;

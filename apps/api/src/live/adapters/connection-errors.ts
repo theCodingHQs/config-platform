@@ -1,6 +1,10 @@
 /** Network errors in plain words for the Live screen ("Couldn't reach …" rather than ECONNREFUSED). */
+const NETWORK_CODES = /(ECONNREFUSED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|EHOSTUNREACH|ENETUNREACH)/;
+
 export function describeConnectionError(err: any, address: string): string {
-  const code = err?.code as string | undefined;
+  // Some libraries only mention the code in their message ("connect ECONNREFUSED 10.0.0.5:4840")
+  const fromMessage = String(err?.message ?? '').match(NETWORK_CODES)?.[1];
+  const code = typeof err?.code === 'string' && NETWORK_CODES.test(err.code) ? err.code : (fromMessage ?? err?.code);
   let host = address;
   try {
     host = new URL(address).host;
@@ -13,6 +17,9 @@ export function describeConnectionError(err: any, address: string): string {
     case 'ENOTFOUND':
     case 'EAI_AGAIN':
       return `${host} wasn't found. Check the address.`;
+    case 'EHOSTUNREACH':
+    case 'ENETUNREACH':
+      return `${host} can't be reached from this server: check the network, or that it is switched on.`;
     case 'ETIMEDOUT':
     case 'ECONNRESET':
       return `The connection to ${host} timed out or was cut. Check the network between this server and ${host}.`;
