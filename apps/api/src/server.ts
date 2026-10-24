@@ -43,6 +43,7 @@ import { platformSettings } from './platform/platform-settings.js';
 import { platformRoutes } from './platform/platform-routes.js';
 import { liveRoutes } from './live/live-routes.js';
 import { liveSocketRoutes } from './live/live-socket-routes.js';
+import { liveRuleRoutes } from './live/rules/live-rule-routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -339,6 +340,7 @@ export async function buildServer() {
       await protectedApp.register(platformRoutes);
       await protectedApp.register(liveRoutes);
       await protectedApp.register(liveSocketRoutes);
+      await protectedApp.register(liveRuleRoutes);
     });
   }, { prefix: '/api' });
 

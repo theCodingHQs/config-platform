@@ -531,6 +531,29 @@ export const catalogMigrations: CatalogMigration[] = [
       `);
     },
   },
+  {
+    version: 21,
+    name: '021_live_rules',
+    up: async (client: PoolClient) => {
+      // Rules turning live tag changes into records (e.g. downtime start/stop)
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.live_rule (
+          id VARCHAR(64) PRIMARY KEY,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          name VARCHAR(120) NOT NULL,
+          enabled BOOLEAN NOT NULL DEFAULT TRUE,
+          config JSONB NOT NULL,
+          created_by VARCHAR(64) REFERENCES public.app_user(id) ON DELETE SET NULL,
+          last_run_at TIMESTAMPTZ,
+          last_status VARCHAR(16),
+          last_message TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_live_rule_tenant ON public.live_rule(tenant_id);
+      `);
+    },
+  },
 ];
 
 /**

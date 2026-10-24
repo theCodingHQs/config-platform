@@ -1,5 +1,5 @@
 /** Live connection settings (Studio → Live) and the socket's address. */
-import type { LiveConnection, TagValueType } from "@config-platform/schema";
+import type { LiveConnection, LiveRule, LiveRuleRun, TagValueType } from "@config-platform/schema";
 import { API_BASE_URL } from "../config";
 import { apiFetch, handleResponse } from "../api/client";
 
@@ -33,6 +33,17 @@ export const liveApi = {
     handleResponse<LiveConnection>(await apiFetch(`${BASE}/connections/${id}`, { method: "PUT", ...json(input) })),
   remove: async (id: string) => {
     const res = await apiFetch(`${BASE}/connections/${id}`, { method: "DELETE" });
+    if (!res.ok) await handleResponse(res);
+  },
+};
+
+export const liveRulesApi = {
+  list: async () => handleResponse<LiveRule[]>(await apiFetch(`${BASE}/rules`)),
+  runs: async (id: string) => handleResponse<LiveRuleRun[]>(await apiFetch(`${BASE}/rules/${id}/runs`)),
+  create: async (input: unknown) => handleResponse<LiveRule>(await apiFetch(`${BASE}/rules`, { method: "POST", ...json(input) })),
+  update: async (id: string, input: unknown) => handleResponse<LiveRule>(await apiFetch(`${BASE}/rules/${id}`, { method: "PUT", ...json(input) })),
+  remove: async (id: string) => {
+    const res = await apiFetch(`${BASE}/rules/${id}`, { method: "DELETE" });
     if (!res.ok) await handleResponse(res);
   },
 };

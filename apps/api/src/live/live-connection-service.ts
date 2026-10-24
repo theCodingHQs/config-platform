@@ -7,16 +7,7 @@ import { connectionRepository, type StoredConnection } from './connection-reposi
 import { redactSettings } from './connection-secrets.js';
 import { liveHub } from './live-hub.js';
 import { checkTagRules } from './tag-mapper.js';
-
-export class LiveConnectionError extends Error {
-  constructor(
-    message: string,
-    readonly statusCode = 422,
-  ) {
-    super(message);
-    this.name = 'LiveConnectionError';
-  }
-}
+import { LiveSettingsError } from './live-errors.js';
 
 function toView(stored: StoredConnection): LiveConnection {
   const status = liveHub.statusOf(stored.tenantId)[stored.id];
@@ -37,10 +28,10 @@ function toView(stored: StoredConnection): LiveConnection {
 function parse(body: unknown) {
   const parsed = LiveConnectionInputSchema.safeParse(body);
   if (!parsed.success) {
-    throw new LiveConnectionError(parsed.error.issues.map((i) => `${i.path.join('.') || 'connection'}: ${i.message}`).join('; '));
+    throw new LiveSettingsError(parsed.error.issues.map((i) => `${i.path.join('.') || 'connection'}: ${i.message}`).join('; '));
   }
   const problems = checkTagRules(parsed.data.tags);
-  if (problems.length) throw new LiveConnectionError(problems.join('; '));
+  if (problems.length) throw new LiveSettingsError(problems.join('; '));
   return parsed.data;
 }
 
@@ -52,7 +43,7 @@ async function checkTagsAreFree(tenantId: string, tags: string[], exceptId?: str
     for (const rule of other.tags) taken.set(rule.tag, other.name);
   }
   const clash = tags.find((tag) => taken.has(tag));
-  if (clash) throw new LiveConnectionError(`Tag "${clash}" already comes from "${taken.get(clash)}". Give it a different name.`, 409);
+  if (clash) throw new LiveSettingsError(`Tag "${clash}" already comes from "${taken.get(clash)}". Give it a different name.`, 409);
 }
 
 export const liveConnectionService = {
@@ -70,9 +61,9 @@ export const liveConnectionService = {
 
   async update(tenantId: string, id: string, body: unknown): Promise<{ before: LiveConnection; after: LiveConnection }> {
     const previous = await connectionRepository.get(tenantId, id);
-    if (!previous) throw new LiveConnectionError('Connection not found', 404);
+    if (!previous) throw new LiveSettingsError('Connection not found', 404);
     const input = parse(body);
-    if (input.kind !== previous.kind) throw new LiveConnectionError("A connection's kind can't be changed. Create a new connection instead.");
+    if (input.kind !== previous.kind) throw new LiveSettingsError("A connection's kind can't be changed. Create a new connection instead.");
     await checkTagsAreFree(tenantId, input.tags.map((t) => t.tag), id);
     const saved = await connectionRepository.update(tenantId, previous, input);
     liveHub.apply(saved);
@@ -81,7 +72,7 @@ export const liveConnectionService = {
 
   async remove(tenantId: string, id: string): Promise<LiveConnection> {
     const previous = await connectionRepository.get(tenantId, id);
-    if (!previous || !(await connectionRepository.remove(tenantId, id))) throw new LiveConnectionError('Connection not found', 404);
+    if (!previous || !(await connectionRepository.remove(tenantId, id))) throw new LiveSettingsError('Connection not found', 404);
     await liveHub.remove(tenantId, id);
     return toView(previous);
   },

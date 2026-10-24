@@ -3,32 +3,13 @@
  * messages (to bind pages); only admins and owners change connections, since they hold
  * passwords and reach into the factory's network.
  */
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { csrfCheckHook } from '../auth/session-middleware.js';
-import { hasMinRole, type TenantRole } from '../auth/auth-types.js';
 import { auditLogService } from '../audit/audit-service.js';
 import { liveHub } from './live-hub.js';
-import { liveConnectionService, LiveConnectionError } from './live-connection-service.js';
+import { liveConnectionService } from './live-connection-service.js';
+import { guarded, idOf } from './live-route-guard.js';
 
-type Handler = (req: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
-
-/** Runs a handler for `minRole` and above, turning LiveConnectionError into its status code */
-const guarded = (minRole: TenantRole, handler: Handler): Handler => async (req, reply) => {
-  if (!hasMinRole(req.session.role, minRole)) {
-    const who = minRole === 'admin' ? 'Admins and owners' : 'Builders, admins and owners';
-    return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: `${who} can do this` });
-  }
-  try {
-    return await handler(req, reply);
-  } catch (err) {
-    if (err instanceof LiveConnectionError) {
-      return reply.status(err.statusCode).send({ statusCode: err.statusCode, error: 'Error', message: err.message });
-    }
-    throw err;
-  }
-};
-
-const idOf = (req: FastifyRequest) => (req.params as { id: string }).id;
 
 export async function liveRoutes(fastify: FastifyInstance) {
   fastify.get('/live/connections', guarded('builder', async (req) => liveConnectionService.list(req.session.tenantId)));

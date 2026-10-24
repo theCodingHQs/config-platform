@@ -4,6 +4,7 @@ import { pool } from './db/pool.js';
 import { startReportScheduler } from './reports/report-scheduler.js';
 import { platformSettings } from './platform/platform-settings.js';
 import { liveHub } from './live/live-hub.js';
+import { ruleEngine } from './live/rules/live-rule-service.js';
 
 async function start() {
   try {
@@ -25,6 +26,7 @@ async function start() {
     platformSettings.startAutoRefresh();
     // Live connections (machine gateways, MQTT…) start after the server is up
     liveHub.start().catch((err) => console.error('[live] could not start connections:', err));
+    ruleEngine.start().catch((err) => console.error('[live] could not start rules:', err));
   } catch (err) {
     console.error('Failed to start server:', err);
     process.exit(1);

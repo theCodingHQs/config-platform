@@ -1,7 +1,8 @@
 import React from 'react';
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, act, cleanup } from '@testing-library/react';
-import { LiveConnectionInputSchema, type LiveConnection } from '@config-platform/schema';
+import { LiveConnectionInputSchema, LiveRuleInputSchema, type LiveConnection } from '@config-platform/schema';
+import { RULE_PRESETS, emptyRuleDraft, ruleDraftFromRule, ruleDraftToInput } from '../src/studio/live/rules/rule-draft';
 import { draftFromConnection, draftToInput, emptyDraft, newTagRule } from '../src/studio/live/connection-draft';
 import { messagePaths, suggestTagName } from '../src/studio/live/message-paths';
 import { LiveSocketClient } from '../src/live/live-socket-client';
@@ -77,6 +78,26 @@ describe('connection form', () => {
       { expression: 'message.list[0]', value: 5, type: 'number' },
     ]);
     expect(messagePaths(22.5)).toEqual([{ expression: 'message', value: 22.5, type: 'number' }]);
+  });
+});
+
+describe('rule form', () => {
+  it('a preset plus a tag, data and fields is a valid rule, and round-trips', () => {
+    const stopped = RULE_PRESETS.find((p) => p.id === 'stopped')!;
+    const draft = { ...stopped.apply(emptyRuleDraft()), name: 'Log Line 1 stops', tag: 'line1.status', entityId: 'e1', fields: [{ field: 'started_at', value: 'ts' }] };
+    const input = ruleDraftToInput(draft);
+    expect(LiveRuleInputSchema.safeParse(input).success).toBe(true);
+    expect(input).toMatchObject({ trigger: { tag: 'line1.status', when: 'value == "stopped"' }, cooldownSec: 5, action: { type: 'createRecord' } });
+    const saved = { ...LiveRuleInputSchema.parse(input), id: 'lr_1', createdByEmail: null, lastRunAt: null, lastStatus: null, lastMessage: null, createdAt: '', updatedAt: '' };
+    expect(ruleDraftToInput(ruleDraftFromRule(saved))).toEqual(input);
+  });
+
+  it('"update the latest" keeps its conditions; "every change" leaves the condition out', () => {
+    const restarted = RULE_PRESETS.find((p) => p.id === 'restarted')!.apply(emptyRuleDraft());
+    const input = ruleDraftToInput({ ...restarted, name: 'r', tag: 't', entityId: 'e', match: [{ field: 'ended_at', op: 'isEmpty' }], fields: [{ field: 'ended_at', value: 'ts' }] }) as any;
+    expect(input.action).toEqual({ type: 'updateLatest', entityId: 'e', match: [{ field: 'ended_at', op: 'isEmpty' }], fields: [{ field: 'ended_at', value: 'ts' }] });
+    const every = ruleDraftToInput({ ...RULE_PRESETS.find((p) => p.id === 'every')!.apply(emptyRuleDraft()), name: 'r', tag: 't', entityId: 'e' }) as any;
+    expect(every.trigger).toEqual({ tag: 't' });
   });
 });
 
