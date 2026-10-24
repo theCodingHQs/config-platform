@@ -23,6 +23,8 @@ type Listener = (changes: TagChange[]) => void;
 export class TagStore {
   private readonly tenants = new Map<string, Map<string, StoredTag>>();
   private readonly listeners = new Map<string, Set<Listener>>();
+  /** Every workspace's changes (the cluster shares them with the other servers) */
+  private readonly allListeners = new Set<(tenantId: string, changes: TagChange[]) => void>();
 
   private tagsOf(tenantId: string): Map<string, StoredTag> {
     let tags = this.tenants.get(tenantId);
@@ -75,6 +77,11 @@ export class TagStore {
     return result;
   }
 
+  /** Which connection a tag's value came from */
+  connectionOf(tenantId: string, tag: string): string | undefined {
+    return this.tenants.get(tenantId)?.get(tag)?.connectionId;
+  }
+
   subscribe(tenantId: string, listener: Listener): () => void {
     let set = this.listeners.get(tenantId);
     if (!set) {
@@ -86,6 +93,11 @@ export class TagStore {
       set!.delete(listener);
       if (set!.size === 0) this.listeners.delete(tenantId);
     };
+  }
+
+  subscribeAll(listener: (tenantId: string, changes: TagChange[]) => void): () => void {
+    this.allListeners.add(listener);
+    return () => this.allListeners.delete(listener);
   }
 
   private update(tenantId: string, becomesStale: (tag: StoredTag) => boolean): void {
@@ -101,5 +113,6 @@ export class TagStore {
   private emit(tenantId: string, changes: TagChange[]): void {
     if (changes.length === 0) return;
     for (const listener of this.listeners.get(tenantId) ?? []) listener(changes);
+    for (const listener of this.allListeners) listener(tenantId, changes);
   }
 }

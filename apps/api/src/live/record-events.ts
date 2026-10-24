@@ -9,6 +9,8 @@ export interface RecordChange {
   tenantId: string;
   entityId: string;
   entityName: string;
+  /** Arrived from another server (not to be sent back out) */
+  remote?: boolean;
 }
 
 type Listener = (change: RecordChange) => void;

@@ -63,6 +63,12 @@ export const connectionRepository = {
     return res.rows[0] ? toStored(res.rows[0]) : null;
   },
 
+  /** By id alone (an HTTP push names only the connection) */
+  async getById(id: string): Promise<StoredConnection | null> {
+    const res = await pool.query<Row>(`SELECT ${COLUMNS} FROM public.live_connection WHERE id = $1`, [id]);
+    return res.rows[0] ? toStored(res.rows[0]) : null;
+  },
+
   /** `serverSettings` are set by the server, not typed in (e.g. the HTTP push token's hash) */
   async create(tenantId: string, userId: string, input: LiveConnectionInput, serverSettings: Record<string, unknown> = {}): Promise<StoredConnection> {
     const id = `lc_${crypto.randomBytes(6).toString('hex')}`;

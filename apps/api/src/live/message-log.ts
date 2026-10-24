@@ -20,10 +20,13 @@ export class MessageLog {
 
   constructor(private readonly size = 20) {}
 
-  add(entry: Omit<LoggedMessage, 'raw'> & { raw: string | Buffer }): void {
+  /** Adds an entry (newest first) and returns it as kept */
+  add(entry: Omit<LoggedMessage, 'raw'> & { raw: string | Buffer }): LoggedMessage {
     const text = typeof entry.raw === 'string' ? entry.raw : entry.raw.toString('utf8');
-    this.entries.unshift({ ...entry, raw: text.length > MAX_RAW ? `${text.slice(0, MAX_RAW)}…` : text });
+    const kept = { ...entry, raw: text.length > MAX_RAW ? `${text.slice(0, MAX_RAW)}…` : text };
+    this.entries.unshift(kept);
     if (this.entries.length > this.size) this.entries.pop();
+    return kept;
   }
 
   /** Newest first */

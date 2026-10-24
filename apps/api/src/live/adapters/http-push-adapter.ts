@@ -26,11 +26,24 @@ export type PushResult = 'accepted' | 'unknown' | 'forbidden';
 export function deliverPush(connectionId: string, token: string, payload: string, topic?: string): PushResult {
   const target = targets.get(connectionId);
   if (!target) return 'unknown';
-  const given = Buffer.from(hashPushToken(token), 'hex');
-  const expected = Buffer.from(target.tokenHash, 'hex');
-  if (given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) return 'forbidden';
+  if (!pushTokenMatches(token, target.tokenHash)) return 'forbidden';
   target.events.onMessage({ payload, topic });
   return 'accepted';
+}
+
+/** Whether a token matches a stored hash (another server checks before forwarding to the leader) */
+export function pushTokenMatches(token: string, tokenHash: string): boolean {
+  const given = Buffer.from(hashPushToken(token), 'hex');
+  const expected = Buffer.from(tokenHash, 'hex');
+  return given.length === expected.length && crypto.timingSafeEqual(given, expected);
+}
+
+/** A push another server received and checked: deliver it to the running connection here */
+export function deliverTrustedPush(connectionId: string, payload: string, topic?: string): boolean {
+  const target = targets.get(connectionId);
+  if (!target) return false;
+  target.events.onMessage({ payload, topic });
+  return true;
 }
 
 export function createHttpPushAdapter(settings: AdapterSettings, events: AdapterEvents, context: AdapterContext): LiveAdapter {

@@ -1,13 +1,11 @@
 /** Saving live rules: validation against the entity's fields, storage, and the running engine. */
 import { LiveRuleInputSchema, type LiveRule, type LiveRuleInput } from '@config-platform/schema';
 import { entityCache } from '../../records/entity-cache.js';
-import { liveHub } from '../live-hub.js';
 import { LiveSettingsError } from '../live-errors.js';
-import { RuleEngine } from './rule-engine.js';
+import { ruleEngine } from './rule-engine-instance.js';
+import { liveCluster } from '../cluster/index.js';
 import { ruleRepository, type StoredRule } from './rule-repository.js';
 import { checkRuleExpressions } from './rule-evaluator.js';
-
-export const ruleEngine = new RuleEngine(liveHub.store);
 
 const toView = ({ tenantId: _t, createdBy: _c, ...rule }: StoredRule): LiveRule => rule;
 
@@ -38,7 +36,7 @@ async function parse(tenantId: string, body: unknown): Promise<LiveRuleInput> {
 }
 
 async function refreshEngine(tenantId: string): Promise<void> {
-  ruleEngine.setRules(tenantId, await ruleRepository.list(tenantId));
+  await liveCluster.rulesChanged(tenantId);
 }
 
 export const liveRuleService = {

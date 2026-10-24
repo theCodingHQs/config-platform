@@ -23,6 +23,7 @@ export class RuleEngine {
   private readonly conditionWasTrue = new Map<string, boolean>();
   private readonly lastRunAt = new Map<string, number>();
   private readonly runs = new Map<string, LiveRuleRun[]>();
+  private readonly runListeners = new Set<(tenantId: string, ruleId: string, run: LiveRuleRun) => void>();
 
   constructor(
     private readonly store: TagStore,
@@ -53,6 +54,23 @@ export class RuleEngine {
     const entry: TenantRules = { rules: enabled, lastValues, queue: Promise.resolve(), unsubscribe: () => undefined };
     entry.unsubscribe = this.store.subscribe(tenantId, (changes) => this.onChanges(tenantId, changes));
     this.tenants.set(tenantId, entry);
+  }
+
+  /** Stops running every workspace's rules (this server is no longer the leader) */
+  stopAll(): void {
+    for (const entry of this.tenants.values()) entry.unsubscribe();
+    this.tenants.clear();
+  }
+
+  /** Every run carried out here (the cluster shares them with the other servers) */
+  onRun(listener: (tenantId: string, ruleId: string, run: LiveRuleRun) => void): () => void {
+    this.runListeners.add(listener);
+    return () => this.runListeners.delete(listener);
+  }
+
+  /** A run carried out by the leader, so this server's Live screen lists it too */
+  applyRemoteRun(ruleId: string, run: LiveRuleRun): void {
+    this.runs.set(ruleId, [run, ...(this.runs.get(ruleId) ?? [])].slice(0, RUNS_KEPT));
   }
 
   recentRuns(ruleId: string): LiveRuleRun[] {
@@ -95,6 +113,7 @@ export class RuleEngine {
       result = { at: now.toISOString(), status: 'failed', message: String(err?.message || err) };
     }
     this.log(rule, result, true);
+    for (const listener of this.runListeners) listener(rule.tenantId, rule.id, result);
   }
 
   private log(rule: StoredRule, run: LiveRuleRun, persist: boolean): void {

@@ -3,8 +3,7 @@ import { initializeMetadataCatalog } from './db/catalog-init.js';
 import { pool } from './db/pool.js';
 import { startReportScheduler } from './reports/report-scheduler.js';
 import { platformSettings } from './platform/platform-settings.js';
-import { liveHub } from './live/live-hub.js';
-import { ruleEngine } from './live/rules/live-rule-service.js';
+import { liveCluster } from './live/cluster/index.js';
 
 async function start() {
   try {
@@ -24,9 +23,8 @@ async function start() {
     console.log(`Backend API listening on http://${host}:${port}`);
     startReportScheduler();
     platformSettings.startAutoRefresh();
-    // Live connections (machine gateways, MQTT…) start after the server is up
-    liveHub.start().catch((err) => console.error('[live] could not start connections:', err));
-    ruleEngine.start().catch((err) => console.error('[live] could not start rules:', err));
+    // Live connections and rules run on one server (the leader); all share live data
+    liveCluster.start().catch((err) => console.error('[live] could not start:', err));
   } catch (err) {
     console.error('Failed to start server:', err);
     process.exit(1);

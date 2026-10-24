@@ -6,6 +6,7 @@ import { LiveConnectionInputSchema, type LiveConnection } from '@config-platform
 import { connectionRepository, type StoredConnection } from './connection-repository.js';
 import { redactSettings } from './connection-secrets.js';
 import { liveHub } from './live-hub.js';
+import { liveCluster } from './cluster/index.js';
 import { checkTagRules } from './tag-mapper.js';
 import { LiveSettingsError } from './live-errors.js';
 import { newPushToken } from './adapters/http-push-adapter.js';
@@ -58,7 +59,7 @@ export const liveConnectionService = {
     // HTTP push: the token is made here and shown once; only its hash is stored
     const push = input.kind === 'http-push' ? newPushToken() : null;
     const saved = await connectionRepository.create(tenantId, userId, input, push ? { tokenHash: push.tokenHash } : {});
-    liveHub.apply(saved);
+    await liveCluster.connectionChanged(tenantId, saved.id, saved);
     return { ...toView(saved), ...(push ? { pushToken: push.token } : {}) };
   },
 
@@ -68,7 +69,7 @@ export const liveConnectionService = {
     if (!previous || previous.kind !== 'http-push') throw new LiveSettingsError('HTTP push connection not found', 404);
     const { token, tokenHash } = newPushToken();
     const saved = await connectionRepository.mergeServerSettings(tenantId, id, { tokenHash });
-    liveHub.apply(saved!);
+    await liveCluster.connectionChanged(tenantId, id, saved);
     return { pushToken: token };
   },
 
@@ -79,14 +80,14 @@ export const liveConnectionService = {
     if (input.kind !== previous.kind) throw new LiveSettingsError("A connection's kind can't be changed. Create a new connection instead.");
     await checkTagsAreFree(tenantId, input.tags.map((t) => t.tag), id);
     const saved = await connectionRepository.update(tenantId, previous, input);
-    liveHub.apply(saved);
+    await liveCluster.connectionChanged(tenantId, id, saved);
     return { before: toView(previous), after: toView(saved) };
   },
 
   async remove(tenantId: string, id: string): Promise<LiveConnection> {
     const previous = await connectionRepository.get(tenantId, id);
     if (!previous || !(await connectionRepository.remove(tenantId, id))) throw new LiveSettingsError('Connection not found', 404);
-    await liveHub.remove(tenantId, id);
+    await liveCluster.connectionChanged(tenantId, id, null);
     return toView(previous);
   },
 

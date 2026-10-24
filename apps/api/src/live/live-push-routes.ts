@@ -5,7 +5,7 @@
  * The body is the message (JSON or text); ?topic=… is passed to tag rules like an MQTT topic.
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { deliverPush } from './adapters/http-push-adapter.js';
+import { liveCluster } from './cluster/index.js';
 
 const MAX_BODY_BYTES = 256 * 1024;
 
@@ -25,7 +25,7 @@ export async function livePushRoutes(fastify: FastifyInstance) {
       if (!token) return reply.status(401).send({ statusCode: 401, error: 'Unauthorized', message: 'Send the connection token as "Authorization: Bearer <token>"' });
       const payload = typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? null);
       const topic = (req.query as { topic?: string }).topic;
-      const result = deliverPush((req.params as { connectionId: string }).connectionId, token, payload, typeof topic === 'string' ? topic : undefined);
+      const result = await liveCluster.push((req.params as { connectionId: string }).connectionId, token, payload, typeof topic === 'string' ? topic : undefined);
       if (result === 'unknown') return reply.status(404).send({ statusCode: 404, error: 'Not Found', message: 'No such connection, or it is switched off' });
       if (result === 'forbidden') return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'Wrong token for this connection' });
       return reply.status(202).send({ accepted: true });
