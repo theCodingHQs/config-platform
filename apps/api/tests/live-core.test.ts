@@ -176,6 +176,16 @@ describe('connection secrets', () => {
   });
 });
 
+describe('connection errors in plain words', () => {
+  it('explains refused, unknown and rejected connections', async () => {
+    const { describeConnectionError } = await import('../src/live/adapters/connection-errors.js');
+    expect(describeConnectionError({ code: 'ECONNREFUSED' }, 'ws://gw.local:4790/stream')).toMatch(/^gw\.local:4790 refused the connection/);
+    expect(describeConnectionError({ code: 'ENOTFOUND' }, 'mqtts://broker:8883')).toMatch(/wasn't found/);
+    expect(describeConnectionError({ message: '401 Unauthorized' }, 'wss://gw')).toMatch(/refused the sign-in/);
+    expect(describeConnectionError({ message: '404 Not Found' }, 'wss://gw/live')).toMatch(/no live stream at that address/);
+  });
+});
+
 describe('reconnect backoff', () => {
   it('doubles up to 30 s and starts over after a success', () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.5);

@@ -26,5 +26,8 @@ export function describeConnectionError(err: any, address: string): string {
   if (/not authori[sz]ed|bad user name or password|401|403/i.test(message)) {
     return `${host} refused the sign-in: check the user name, password or token.`;
   }
+  if (/^404\b/.test(message)) {
+    return `${host} has no live stream at that address: check the path after the host name.`;
+  }
   return message;
 }

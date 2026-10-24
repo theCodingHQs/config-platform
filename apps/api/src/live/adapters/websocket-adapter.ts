@@ -33,11 +33,17 @@ export function createWebSocketAdapter(settings: AdapterSettings, events: Adapte
     ws.on('message', (data, isBinary) => {
       events.onMessage({ payload: isBinary ? (data as Buffer) : data.toString() });
     });
+    // The gateway answered but refused (wrong token, wrong path): that reason is the useful one,
+    // not the "closed before the connection was established" that follows it
+    let refused = false;
     ws.on('unexpected-response', (_req, res) => {
+      refused = true;
       events.onState('error', describeConnectionError({ message: `${res.statusCode} ${res.statusMessage ?? ''}` }, url));
       ws.terminate();
     });
-    ws.on('error', (err) => events.onState('error', describeConnectionError(err, url)));
+    ws.on('error', (err) => {
+      if (!refused) events.onState('error', describeConnectionError(err, url));
+    });
     ws.on('close', () => {
       if (socket === ws) socket = null;
       if (stopped) return;
