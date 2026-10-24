@@ -508,6 +508,29 @@ export const catalogMigrations: CatalogMigration[] = [
       `);
     },
   },
+  {
+    version: 20,
+    name: '020_live_connections',
+    up: async (client: PoolClient) => {
+      // Live data sources (machine gateways, MQTT brokers, simulators) and their tag rules
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.live_connection (
+          id VARCHAR(64) PRIMARY KEY,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          name VARCHAR(120) NOT NULL,
+          kind VARCHAR(32) NOT NULL,
+          enabled BOOLEAN NOT NULL DEFAULT TRUE,
+          settings JSONB NOT NULL,
+          tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+          view_roles JSONB NOT NULL DEFAULT '[]'::jsonb,
+          created_by VARCHAR(64) REFERENCES public.app_user(id) ON DELETE SET NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_live_connection_tenant ON public.live_connection(tenant_id);
+      `);
+    },
+  },
 ];
 
 /**

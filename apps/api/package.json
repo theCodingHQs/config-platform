@@ -26,6 +26,7 @@
     "@fastify/rate-limit": "^11.2.0",
     "@fastify/sensible": "^6.0.3",
     "@fastify/static": "^10.1.5",
+    "@fastify/websocket": "^11.3.4",
     "@resvg/resvg-js": "^2.6.2",
     "argon2": "^0.45.1",
     "csv-parse": "^7.0.3",
@@ -34,14 +35,17 @@
     "exceljs": "^4.4.0",
     "fastify": "^5.2.1",
     "jszip": "3.10.1",
+    "mqtt": "^5.16.1",
     "nodemailer": "^10.0.13",
     "pg": "^8.13.3",
+    "ws": "^8.22.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
     "@types/node": "^22.13.9",
     "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.11.11",
+    "@types/ws": "^8.18.2",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",
     "vitest": "^3.0.7"

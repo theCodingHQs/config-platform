@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import fastifyMultipart from '@fastify/multipart';
+import fastifyWebsocket from '@fastify/websocket';
 import { schemaRoutes } from './schema/schema-routes.js';
 import { recordsRoutes } from './records/records-routes.js';
 import { importRoutes } from './records/import/import-routes.js';
@@ -40,6 +41,8 @@ import crypto from 'node:crypto';
 import { validateEmailConfig } from './auth/email-verifier.js';
 import { platformSettings } from './platform/platform-settings.js';
 import { platformRoutes } from './platform/platform-routes.js';
+import { liveRoutes } from './live/live-routes.js';
+import { liveSocketRoutes } from './live/live-socket-routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -147,6 +150,9 @@ export async function buildServer() {
       files: 1,
     },
   });
+
+  // Live data to browsers (/api/live/socket); messages are small JSON
+  await fastify.register(fastifyWebsocket, { options: { maxPayload: 64 * 1024 } });
 
   // ─── Body parser ──────────────────────────────────────────────
   fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
@@ -331,6 +337,8 @@ export async function buildServer() {
       await protectedApp.register(auditRoutes);
       await protectedApp.register(reportScheduleRoutes);
       await protectedApp.register(platformRoutes);
+      await protectedApp.register(liveRoutes);
+      await protectedApp.register(liveSocketRoutes);
     });
   }, { prefix: '/api' });
 
