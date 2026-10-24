@@ -37,7 +37,7 @@ export function LiveStudio() {
             className="btn btn-ghost"
             onClick={() => setTab(t.id)}
             style={{
-              borderRadius: 0,
+              borderRadius: "var(--radius-none)",
               borderBottom: `2px solid ${tab === t.id ? "var(--accent)" : "transparent"}`,
               color: tab === t.id ? "var(--accent)" : "var(--text-muted)",
               fontWeight: tab === t.id ? 600 : 500,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, act, cleanup } from '@testing-library/react';
 import { LiveConnectionInputSchema, LiveRuleInputSchema, type LiveConnection } from '@config-platform/schema';
 import { RULE_PRESETS, emptyRuleDraft, ruleDraftFromRule, ruleDraftToInput } from '../src/studio/live/rules/rule-draft';
@@ -8,6 +8,7 @@ import { messagePaths, suggestTagName } from '../src/studio/live/message-paths';
 import { LiveSocketClient } from '../src/live/live-socket-client';
 import { liveSocketUrl } from '../src/live/live-api';
 import { useLiveScope } from '../src/live/use-live';
+import { pageEntityRefs, useLiveRecordRefresh } from '../src/live/use-live-records';
 
 afterEach(() => cleanup());
 
@@ -37,6 +38,9 @@ class FakeSocket {
     this.onmessage?.({ data: JSON.stringify(message) });
   }
 }
+
+/** The latest tag subscription sent (record watches are sent alongside it) */
+const lastSubscribe = (socket: FakeSocket) => socket.sent.filter((m) => m.type === 'subscribe').at(-1);
 
 const fakeClient = () => {
   FakeSocket.instances = [];
@@ -115,9 +119,9 @@ describe('live socket (browser)', () => {
     const socket = FakeSocket.instances[0];
     (globalThis as any).WebSocket.OPEN ??= 1;
     socket.open();
-    expect(socket.sent.at(-1)).toEqual({ type: 'subscribe', tags: ['line1', 'press4.status'] });
+    expect(lastSubscribe(socket)).toEqual({ type: 'subscribe', tags: ['line1', 'press4.status'] });
     offA();
-    expect(socket.sent.at(-1)).toEqual({ type: 'subscribe', tags: ['press4.status'] });
+    expect(lastSubscribe(socket)).toEqual({ type: 'subscribe', tags: ['press4.status'] });
     offB();
     expect(socket.readyState).toBe(3);
     expect(client.getSnapshot().socket).toBe('idle');
@@ -144,9 +148,34 @@ describe('live socket (browser)', () => {
     render(<Page />);
     const socket = FakeSocket.instances[0];
     act(() => socket.open());
-    expect(socket.sent.at(-1)).toEqual({ type: 'subscribe', tags: ['line1.speed'] });
+    expect(lastSubscribe(socket)).toEqual({ type: 'subscribe', tags: ['line1.speed'] });
     act(() => socket.receive({ type: 'snapshot', values: { 'line1.speed': { value: 42, ts: 't', quality: 'good' } } }));
     expect(screen.getByTestId('out').textContent).toBe('42 on');
+  });
+
+  it('finds every entity a page shows, in data sources and components', () => {
+    expect(pageEntityRefs({ dataSources: [{ id: 'jobs', entityId: 'e_jobs' }], root: { children: [{ props: { entityId: 'machine' } }, { props: { entityId: 'e_jobs' } }] } })).toEqual(['e_jobs', 'machine']);
+  });
+
+  it('reloads the data sources and queries of an entity when its records change', () => {
+    const client = fakeClient();
+    const refetch = vi.fn();
+    const invalidate = vi.fn();
+    const page = { dataSources: [{ id: 'jobs', entityId: 'e_jobs' }, { id: 'other', entityId: 'e_other' }] };
+    function Page() {
+      useLiveRecordRefresh({ page, queryClient: { invalidateQueries: invalidate } as any, refetchDataSource: refetch }, client);
+      return null;
+    }
+    render(<Page />);
+    const socket = FakeSocket.instances[0];
+    act(() => socket.open());
+    expect(socket.sent).toContainEqual({ type: 'watchRecords', entities: ['e_jobs', 'e_other'] });
+    act(() => socket.receive({ type: 'records', entities: [{ entityId: 'e_jobs', entityName: 'maintenance_job' }] }));
+    expect(refetch).toHaveBeenCalledWith('jobs');
+    expect(refetch).not.toHaveBeenCalledWith('other');
+    const predicate = invalidate.mock.calls[0][0].predicate;
+    expect(predicate({ queryKey: ['records', 't1', 'maintenance_job'] })).toBe(true);
+    expect(predicate({ queryKey: ['records', 't1', 'e_other'] })).toBe(false);
   });
 
   it('pages without live tags open no socket', () => {

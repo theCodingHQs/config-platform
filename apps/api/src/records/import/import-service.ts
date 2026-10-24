@@ -7,6 +7,7 @@ import { recordValidator, RecordValidationError } from '../record-validator.js';
 import { permissionService } from '../../permissions/permission-service.js';
 import { tenantLimitsService, LimitExceededError } from '../../limits/tenant-limits.js';
 import { auditLogService } from '../../audit/audit-service.js';
+import { publishRecordChange } from '../../live/record-events.js';
 import {
   parseImportFile,
   type ParsedTableData,
@@ -773,6 +774,7 @@ export class ImportService {
       },
     });
 
+    publishRecordChange(tenantId, resolved.entity);
     return {
       success: true,
       insertedCount,

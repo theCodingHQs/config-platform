@@ -8,6 +8,8 @@ import type { WebSocket } from 'ws';
 import { authService, SESSION_COOKIE } from '../auth/auth-service.js';
 import { liveHub } from './live-hub.js';
 import { LiveViewer } from './live-viewer.js';
+import { recordEvents } from './record-events.js';
+import { permissionService } from '../permissions/permission-service.js';
 
 const SESSION_RECHECK_MS = 60_000;
 const MAX_MESSAGE_BYTES = 64 * 1024;
@@ -16,9 +18,18 @@ export async function liveSocketRoutes(fastify: FastifyInstance) {
   fastify.get('/live/socket', { websocket: true }, (socket: WebSocket, req: FastifyRequest) => {
     const { tenantId, role } = req.session;
     const sessionId = (req.cookies as Record<string, string> | undefined)?.[SESSION_COOKIE];
-    const viewer = new LiveViewer(liveHub, tenantId, role, (message) => {
-      if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
-    });
+    const viewer = new LiveViewer(
+      liveHub,
+      tenantId,
+      role,
+      (message) => {
+        if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
+      },
+      {
+        subscribe: (listener) => recordEvents.subscribe(listener),
+        canRead: async (entityId) => (await permissionService.getEntityPermission(tenantId, entityId, role)).canRead,
+      },
+    );
 
     const recheck = setInterval(async () => {
       const session = sessionId ? await authService.resolveSession(sessionId).catch(() => null) : null;

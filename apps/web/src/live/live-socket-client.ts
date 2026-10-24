@@ -6,6 +6,8 @@
 import type { LiveClientMessage, LiveConnectionStatus, LiveServerMessage, TagValue } from "@config-platform/schema";
 import { liveSocketUrl } from "./live-api";
 
+export type RecordsChanged = Array<{ entityId: string; entityName: string }>;
+
 export type SocketState = "idle" | "connecting" | "open" | "closed";
 
 export interface LiveSnapshot {
@@ -23,6 +25,9 @@ export class LiveSocketClient {
   private readonly listeners = new Set<() => void>();
   /** Each registration's tags; the socket subscribes to their union */
   private readonly registrations = new Map<number, string[]>();
+  /** Each registration's data entities; changes to their union are passed to record listeners */
+  private readonly entityRegistrations = new Map<number, string[]>();
+  private readonly recordListeners = new Set<(entities: RecordsChanged) => void>();
   private nextId = 1;
   private retryMs = 1000;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -41,8 +46,23 @@ export class LiveSocketClient {
     this.sendSubscription();
     return () => {
       this.registrations.delete(id);
-      if (this.registrations.size === 0) this.close();
-      else this.sendSubscription();
+      this.closeIfUnused();
+      this.sendSubscription();
+    };
+  }
+
+  /** Starts hearing about record changes to these entities (ids or names) */
+  watchRecords(entities: string[], onChange: (entities: RecordsChanged) => void): () => void {
+    const id = this.nextId++;
+    this.entityRegistrations.set(id, entities);
+    this.recordListeners.add(onChange);
+    this.ensureOpen();
+    this.sendWatch();
+    return () => {
+      this.entityRegistrations.delete(id);
+      this.recordListeners.delete(onChange);
+      this.closeIfUnused();
+      this.sendWatch();
     };
   }
 
@@ -57,6 +77,14 @@ export class LiveSocketClient {
     return [...new Set([...this.registrations.values()].flat())].sort();
   }
 
+  private inUse(): boolean {
+    return this.registrations.size > 0 || this.entityRegistrations.size > 0;
+  }
+
+  private closeIfUnused(): void {
+    if (!this.inUse()) this.close();
+  }
+
   private ensureOpen(): void {
     if (this.ws || this.retryTimer) return;
     this.update({ socket: "connecting" });
@@ -66,6 +94,7 @@ export class LiveSocketClient {
       this.retryMs = 1000;
       this.update({ socket: "open" });
       this.sendSubscription();
+      this.sendWatch();
       this.pingTimer = setInterval(() => this.send({ type: "ping" }), PING_MS);
     };
     ws.onmessage = (event) => this.receive(String(event.data));
@@ -74,7 +103,7 @@ export class LiveSocketClient {
       this.ws = null;
       if (this.pingTimer) clearInterval(this.pingTimer);
       this.markAllStale();
-      if (this.registrations.size === 0) return;
+      if (!this.inUse()) return;
       this.retryTimer = setTimeout(() => {
         this.retryTimer = null;
         this.ensureOpen();
@@ -97,6 +126,10 @@ export class LiveSocketClient {
     this.send({ type: "subscribe", tags: this.allTags() });
   }
 
+  private sendWatch(): void {
+    this.send({ type: "watchRecords", entities: [...new Set([...this.entityRegistrations.values()].flat())].sort() });
+  }
+
   private send(message: LiveClientMessage): void {
     if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(message));
   }
@@ -111,6 +144,7 @@ export class LiveSocketClient {
     if (message.type === "snapshot") this.update({ values: message.values });
     else if (message.type === "values") this.update({ values: { ...this.snapshot.values, ...message.values } });
     else if (message.type === "status") this.update({ connections: message.connections });
+    else if (message.type === "records") for (const listener of this.recordListeners) listener(message.entities);
   }
 
   /** The socket dropped: keep showing the last values, marked stale */

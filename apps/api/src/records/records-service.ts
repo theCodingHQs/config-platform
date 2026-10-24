@@ -3,6 +3,7 @@ import { defaultStorageAdapter } from '../db/storage-adapter.js';
 import { entityCache, type ResolvedEntity } from './entity-cache.js';
 import { recordValidator } from './record-validator.js';
 import { calculatedFieldsService } from './calculated-fields-service.js';
+import { publishRecordChange } from '../live/record-events.js';
 import { queryBuilder, type QueryOptions } from './query-builder.js';
 import crypto from 'node:crypto';
 
@@ -100,6 +101,8 @@ export class RecordsService {
    * it up), returning the row as stored.
    */
   private async withCalculatedFields(tenantId: string, resolved: ResolvedEntity, row: Record<string, any>) {
+    // Open pages showing this entity reload it (after create and update)
+    publishRecordChange(tenantId, resolved.entity);
     const changed = await calculatedFieldsService.recalculate(tenantId, resolved.entity.id, [String(row.id)]);
     if (changed === 0) return row;
     const fresh = await this.storage.query(
@@ -234,6 +237,7 @@ export class RecordsService {
       if (rows.length === 0) {
         throw new RecordNotFoundError(resolved.entity.name, id);
       }
+      publishRecordChange(tenantId, resolved.entity);
       return { success: true, id };
     } catch (err: any) {
       // Postgres error 23503 is foreign_key_violation

@@ -22,6 +22,7 @@ import {
 } from "../renderer/action-runner";
 import { useOptionalMetadata } from "./metadata-context";
 import { useLiveScope } from "../live/use-live";
+import { useLiveRecordRefresh } from "../live/use-live-records";
 
 /**
  * Resolves a data source filter value. A dynamic value ("{{ state.search }}") that resolves
@@ -554,6 +555,8 @@ export function PageRuntimeProvider({
   // Live machine data for the tags this page mentions ({{ live.line1.speed }}). Only in the scope
   // used for showing and actions: data source queries don't re-run on every live update.
   const liveScope = useLiveScope(page);
+  // Tables, stats and data sources reload when anyone saves records they show
+  useLiveRecordRefresh({ page, queryClient: queryClient ?? undefined, refetchDataSource });
 
   // 5. Full Expression Scope including ds
   const fullScope = useMemo<ExpressionScope>(() => {

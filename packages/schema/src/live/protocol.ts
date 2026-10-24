@@ -8,6 +8,8 @@ import type { LiveConnectionStatus } from './connections.js';
 export type LiveClientMessage =
   /** Tags (or groups, e.g. "line1") this page uses; replaces the previous list */
   | { type: 'subscribe'; tags: string[] }
+  /** Data entities (ids or names) this page shows; replaces the previous list */
+  | { type: 'watchRecords'; entities: string[] }
   | { type: 'ping' };
 
 export type LiveServerMessage =
@@ -17,6 +19,8 @@ export type LiveServerMessage =
   | { type: 'values'; values: Record<string, TagValue> }
   /** Connection states, by connection id (only the ones the viewer can see) */
   | { type: 'status'; connections: Record<string, LiveConnectionStatus & { name: string }> }
+  /** Records of these entities changed: reload what shows them (only entities the viewer may read) */
+  | { type: 'records'; entities: Array<{ entityId: string; entityName: string }> }
   | { type: 'pong' }
   | { type: 'error'; message: string };
 

@@ -10,6 +10,7 @@ import {
 import { pool } from '../db/pool.js';
 import { defaultStorageAdapter } from '../db/storage-adapter.js';
 import { entityCache, type ResolvedEntity } from './entity-cache.js';
+import { publishRecordChange } from '../live/record-events.js';
 
 /** Rows recalculated per query when a whole entity is backfilled. */
 const BATCH_SIZE = 500;
@@ -109,6 +110,8 @@ export class CalculatedFieldsService {
       }
     }
     if (depth < MAX_PROPAGATION_DEPTH) await this.refreshDependents(tenantId, dependents, ids, depth + 1);
+    // Pages showing these records reload them (e.g. sheets that look up a renamed machine)
+    if (changed > 0) publishRecordChange(tenantId, resolved.entity);
     return changed;
   }
 

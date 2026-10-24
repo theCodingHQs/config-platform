@@ -7,6 +7,7 @@ import { LIVE_BATCH_MS, tagMatchesRef, type LiveClientMessage, type LiveServerMe
 import type { TenantRole } from '../auth/auth-types.js';
 import type { LiveHub } from './live-hub.js';
 import type { TagChange } from './tag-store.js';
+import { RecordWatch, type RecordWatchDeps } from './record-watch.js';
 
 const MAX_REFS = 500;
 
@@ -15,13 +16,17 @@ export class LiveViewer {
   private pending: Record<string, TagValue> = {};
   private flushTimer: NodeJS.Timeout | null = null;
   private readonly unsubscribe: Array<() => void> = [];
+  /** Which records' changes this page wants to hear about (tables reloading live) */
+  private readonly records: RecordWatch | null;
 
   constructor(
     private readonly hub: LiveHub,
     private readonly tenantId: string,
     private readonly role: TenantRole,
     private readonly send: (message: LiveServerMessage) => void,
+    recordDeps?: RecordWatchDeps,
   ) {
+    this.records = recordDeps ? new RecordWatch(tenantId, recordDeps, send) : null;
     this.unsubscribe.push(hub.store.subscribe(tenantId, (changes) => this.onChanges(changes)));
     this.unsubscribe.push(hub.onStatus((changedTenant) => changedTenant === tenantId && this.sendStatus()));
     this.sendStatus();
@@ -41,12 +46,15 @@ export class LiveViewer {
       this.refs = message.tags.filter((t) => typeof t === 'string').slice(0, MAX_REFS);
       this.pending = {};
       this.send({ type: 'snapshot', values: this.hub.store.snapshot(this.tenantId, (tag, stored) => this.wants(tag, stored.connectionId)) });
+    } else if (message.type === 'watchRecords' && Array.isArray(message.entities)) {
+      this.records?.watch(message.entities);
     }
   }
 
   close(): void {
     if (this.flushTimer) clearTimeout(this.flushTimer);
     for (const off of this.unsubscribe) off();
+    this.records?.close();
   }
 
   private canSee(connectionId: string): boolean {
