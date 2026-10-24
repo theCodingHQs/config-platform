@@ -21,6 +21,7 @@ import {
   type ActionExecutionContext,
 } from "../renderer/action-runner";
 import { useOptionalMetadata } from "./metadata-context";
+import { useLiveScope } from "../live/use-live";
 
 /**
  * Resolves a data source filter value. A dynamic value ("{{ state.search }}") that resolves
@@ -550,6 +551,10 @@ export function PageRuntimeProvider({
     setDsPageSize,
   ]);
 
+  // Live machine data for the tags this page mentions ({{ live.line1.speed }}). Only in the scope
+  // used for showing and actions: data source queries don't re-run on every live update.
+  const liveScope = useLiveScope(page);
+
   // 5. Full Expression Scope including ds
   const fullScope = useMemo<ExpressionScope>(() => {
     const dsValues: Record<string, any[]> = {};
@@ -561,8 +566,9 @@ export function PageRuntimeProvider({
       params,
       user,
       ds: dsValues,
+      ...liveScope,
     };
-  }, [pageState, params, user, dataSources]);
+  }, [pageState, params, user, dataSources, liveScope]);
 
   const metadata = useOptionalMetadata();
 

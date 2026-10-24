@@ -83,7 +83,7 @@ export async function apiFetch(
   });
 }
 
-async function handleResponse<T>(res: Response): Promise<T> {
+export async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let errBody: any = {};
     try {

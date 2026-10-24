@@ -1259,6 +1259,18 @@ input:-webkit-autofill:active {
   outline-offset: 1px;
 }
 
+/* The workspace name stays on one line; on laptop-width screens the Studio links need the room,
+   so the "Workspace:" label goes (the name alone is enough) */
+.header-workspace {
+  white-space: nowrap;
+}
+
+@media (max-width: 1400px) {
+  .header-workspace-prefix {
+    display: none;
+  }
+}
+
 /* ─── Phones and tablets (runtime pages: data entry on the shop floor) ─── */
 
 /* Building happens on a big screen: below tablet width the top bar keeps only what people
@@ -1278,7 +1290,9 @@ input:-webkit-autofill:active {
   }
 }
 
-/* The "⋯" account menu only exists on phones */
+/* The "⋯" account menu (email, role, date preferences, theme, log out) replaces those controls
+   whenever the top bar would run out of room: the Studio links alone need most of a laptop
+   screen. Wide screens show them in the bar. */
 .header-mobile-menu {
   display: none;
 }
@@ -1289,8 +1303,18 @@ input:-webkit-autofill:active {
   gap: var(--spacing-3);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1599px) {
   .header-detail,
+  .header-desktop-controls {
+    display: none !important;
+  }
+
+  .header-mobile-menu {
+    display: block;
+  }
+}
+
+@media (max-width: 768px) {
   .header-label {
     display: none !important;
   }
@@ -1306,15 +1330,7 @@ input:-webkit-autofill:active {
     padding: var(--space-3);
   }
 
-  /* Top bar fits a phone: account controls move into the "⋯" menu, the workspace name shrinks */
-  .header-desktop-controls {
-    display: none !important;
-  }
-
-  .header-mobile-menu {
-    display: block;
-  }
-
+  /* Top bar fits a phone: the workspace name shrinks (account controls are already in "⋯") */
   .header-workspace-prefix {
     display: none;
   }

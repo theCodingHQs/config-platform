@@ -83,9 +83,19 @@ describe('Phones and tablets', () => {
     root.walkAtRules('media', (rule) => {
       if (rule.params === '(max-width: 640px)') rule.walkRules((r) => { phoneSelectors.push(r.selector); });
     });
-    for (const selector of ['.data-table.responsive-cards td[data-label]::before', '.table-container:has(> .data-table.responsive-cards)', '.runtime-modal', '.runtime-modal-body', '.header-desktop-controls', '.layout-stack[data-direction="horizontal"]']) {
+    for (const selector of ['.data-table.responsive-cards td[data-label]::before', '.table-container:has(> .data-table.responsive-cards)', '.runtime-modal', '.runtime-modal-body', '.layout-stack[data-direction="horizontal"]']) {
       expect(phoneSelectors).toContain(selector);
     }
+  });
+
+  it('below wide screens the account controls move into the "⋯" menu, so the top bar never overflows', () => {
+    const css = fs.readFileSync(path.resolve(__dirname, '../src/index.css'), 'utf8');
+    const selectors: string[] = [];
+    postcss.parse(css).walkAtRules('media', (rule) => {
+      if (rule.params === '(max-width: 1599px)') rule.walkRules((r) => { selectors.push(r.selector); });
+    });
+    expect(selectors.join(' ')).toMatch(/\.header-desktop-controls/);
+    expect(selectors).toContain('.header-mobile-menu');
   });
 
   it('layouts shrink with the window (no sideways scroll after making it narrower)', () => {

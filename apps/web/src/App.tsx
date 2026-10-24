@@ -57,6 +57,7 @@ const PlatformSetup = React.lazy(() =>
 const ReportSchedules = React.lazy(() =>
   import("./studio/ReportSchedules").then((m) => ({ default: m.ReportSchedules }))
 );
+const LiveStudio = React.lazy(() => import("./studio/live/LiveStudio").then((m) => ({ default: m.LiveStudio })));
 const ThemeStudio = React.lazy(() =>
   import("./studio/ThemeStudio").then((m) => ({ default: m.ThemeStudio }))
 );
@@ -571,6 +572,24 @@ function AppContent({ user }: { user: CurrentUser }) {
                 Export Templates
               </NavLink>
               <NavLink
+                to="/studio/live"
+                title="Live data from machines and systems"
+                className={({ isActive }) =>
+                  isActive ? "btn btn-secondary active" : "btn btn-ghost"
+                }
+                style={({ isActive }) => ({
+                  fontSize: "var(--font-size-sm)",
+                  padding: "0.25rem 0.625rem",
+                  fontWeight: isActive ? 600 : 500,
+                  color: isActive ? "var(--accent)" : "var(--text)",
+                  backgroundColor: isActive
+                    ? "var(--accent-subtle)"
+                    : "transparent",
+                })}
+              >
+                Live
+              </NavLink>
+              <NavLink
                 to="/studio/permissions"
                 className={({ isActive }) =>
                   isActive ? "btn btn-secondary active" : "btn btn-ghost"
@@ -748,6 +767,10 @@ function AppContent({ user }: { user: CurrentUser }) {
               <Route
                 path="/studio/report-schedules"
                 element={<div className="page-container"><ReportSchedules /></div>}
+              />
+              <Route
+                path="/studio/live"
+                element={<div className="page-container"><LiveStudio /></div>}
               />
               <Route
                 path="/studio/export-templates"
