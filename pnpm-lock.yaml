@@ -14,6 +14,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@config-platform/live-connectors':
+        specifier: workspace:*
+        version: link:../../packages/live-connectors
       '@config-platform/schema':
         specifier: workspace:*
         version: link:../../packages/schema
@@ -65,15 +68,6 @@ importers:
       jszip:
         specifier: 3.10.1
         version: 3.10.1
-      modbus-serial:
-        specifier: ^8.0.25
-        version: 8.0.25
-      mqtt:
-        specifier: ^5.16.1
-        version: 5.16.1
-      node-opcua-client:
-        specifier: ^2.187.12
-        version: 2.187.12
       nodemailer:
         specifier: ^10.0.13
         version: 10.0.13
@@ -250,6 +244,34 @@ importers:
       vitest:
         specifier: ^3.0.7
         version: 3.2.7(@types/node@22.20.5)(jsdom@26.1.0)(less@4.9.1)(tsx@4.23.15)
+
+  packages/live-connectors:
+    dependencies:
+      '@config-platform/schema':
+        specifier: workspace:*
+        version: link:../schema
+      modbus-serial:
+        specifier: ^8.0.25
+        version: 8.0.25
+      mqtt:
+        specifier: ^5.16.1
+        version: 5.16.1
+      node-opcua-client:
+        specifier: ^2.187.12
+        version: 2.187.12
+      ws:
+        specifier: ^8.22.0
+        version: 8.22.0
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
+      '@types/ws':
+        specifier: ^8.18.2
+        version: 8.18.2
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
 
   packages/schema:
     dependencies:

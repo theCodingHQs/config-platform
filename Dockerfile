@@ -15,6 +15,7 @@ WORKDIR /app
 # Copy workspace dependency manifests
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/schema/package.json ./packages/schema/
+COPY packages/live-connectors/package.json ./packages/live-connectors/
 COPY apps/api/package.json ./apps/api/
 COPY apps/web/package.json ./apps/web/
 
@@ -47,8 +48,9 @@ COPY --from=builder --chown=appuser:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=appuser:nodejs /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
 COPY --from=builder --chown=appuser:nodejs /app/node_modules ./node_modules
 
-# Copy schema workspace package
+# Copy shared workspace packages
 COPY --from=builder --chown=appuser:nodejs /app/packages/schema ./packages/schema
+COPY --from=builder --chown=appuser:nodejs /app/packages/live-connectors ./packages/live-connectors
 
 # Copy web built static assets (served by API via @fastify/static)
 COPY --from=builder --chown=appuser:nodejs /app/apps/web/dist ./apps/web/dist

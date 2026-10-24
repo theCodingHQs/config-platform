@@ -4,7 +4,7 @@
  * checks the token against the stored hash.
  */
 import crypto from 'node:crypto';
-import type { AdapterContext, AdapterEvents, AdapterSettings, LiveAdapter } from './adapter-types.js';
+import type { AdapterContext, AdapterEvents, AdapterSettings, LiveAdapter } from '@config-platform/live-connectors';
 
 interface PushTarget {
   tokenHash: string;

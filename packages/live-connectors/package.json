@@ -1,0 +1,30 @@
+{
+  "name": "@config-platform/live-connectors",
+  "version": "0.1.0",
+  "description": "Connectors to machines and systems (WebSocket, MQTT, OPC UA, Modbus TCP, HTTP polling, simulator), shared by the server and the edge agent",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "default": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@config-platform/schema": "workspace:*",
+    "modbus-serial": "^8.0.25",
+    "mqtt": "^5.16.1",
+    "node-opcua-client": "^2.187.12",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/ws": "^8.18.2",
+    "typescript": "^5.7.3"
+  }
+}

@@ -2,12 +2,11 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { LiveServerMessage, TagRule } from '@config-platform/schema';
 import { decodeMessage, topicMatches } from '../src/live/message-decoder.js';
 import { mapMessageToTags, checkTagRules } from '../src/live/tag-mapper.js';
-import { simulatedValue } from '../src/live/adapters/simulator-adapter.js';
+import { simulatedValue, Backoff } from '@config-platform/live-connectors';
 import { TagStore } from '../src/live/tag-store.js';
 import { LiveHub } from '../src/live/live-hub.js';
 import { LiveViewer } from '../src/live/live-viewer.js';
 import { encryptSettings, decryptSettings, redactSettings } from '../src/live/connection-secrets.js';
-import { Backoff } from '../src/live/adapters/backoff.js';
 
 const rule = (tag: string, value: string, extra: Partial<TagRule> = {}): TagRule => ({ tag, value, type: 'number', ...extra });
 
@@ -178,7 +177,7 @@ describe('connection secrets', () => {
 
 describe('connection errors in plain words', () => {
   it('explains refused, unknown and rejected connections', async () => {
-    const { describeConnectionError } = await import('../src/live/adapters/connection-errors.js');
+    const { describeConnectionError } = await import('@config-platform/live-connectors');
     expect(describeConnectionError({ code: 'ECONNREFUSED' }, 'ws://gw.local:4790/stream')).toMatch(/^gw\.local:4790 refused the connection/);
     expect(describeConnectionError({ code: 'ENOTFOUND' }, 'mqtts://broker:8883')).toMatch(/wasn't found/);
     expect(describeConnectionError({ message: '401 Unauthorized' }, 'wss://gw')).toMatch(/refused the sign-in/);

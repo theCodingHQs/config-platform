@@ -1,22 +1,14 @@
-/** The adapter for each connection kind. A new kind = its adapter file + one line here. */
+/**
+ * The adapter for each connection kind: the shared connectors (also used by the edge agent),
+ * plus HTTP push, which only the app server can receive.
+ */
 import type { LiveConnectionKind } from '@config-platform/schema';
-import type { AdapterFactory } from './adapter-types.js';
-import { createWebSocketAdapter } from './websocket-adapter.js';
-import { createMqttAdapter } from './mqtt-adapter.js';
-import { createOpcUaAdapter } from './opcua-adapter.js';
-import { createModbusAdapter } from './modbus-adapter.js';
+import { CONNECTORS, type AdapterFactory } from '@config-platform/live-connectors';
 import { createHttpPushAdapter } from './http-push-adapter.js';
-import { createHttpPollAdapter } from './http-poll-adapter.js';
-import { createSimulatorAdapter } from './simulator-adapter.js';
 
 export const ADAPTERS: Record<LiveConnectionKind, AdapterFactory> = {
-  websocket: createWebSocketAdapter,
-  mqtt: createMqttAdapter,
-  opcua: createOpcUaAdapter,
-  modbus: createModbusAdapter,
+  ...CONNECTORS,
   'http-push': createHttpPushAdapter,
-  'http-poll': createHttpPollAdapter,
-  simulator: createSimulatorAdapter,
 };
 
-export type { AdapterEvents, AdapterMessage, LiveAdapter } from './adapter-types.js';
+export type { AdapterEvents, AdapterMessage, LiveAdapter } from '@config-platform/live-connectors';

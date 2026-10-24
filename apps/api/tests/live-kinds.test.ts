@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LiveConnectionInputSchema } from '@config-platform/schema';
-import { decodeRegisters, registerCount } from '../src/live/adapters/modbus-decode.js';
-import { plainOpcUaValue } from '../src/live/adapters/opcua-adapter.js';
+import { decodeRegisters, registerCount, plainOpcUaValue } from '@config-platform/live-connectors';
 import { createHttpPushAdapter, deliverPush, newPushToken } from '../src/live/adapters/http-push-adapter.js';
 import { encryptSettings, decryptSettings, redactSettings } from '../src/live/connection-secrets.js';
 

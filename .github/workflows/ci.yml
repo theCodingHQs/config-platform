@@ -49,9 +49,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # The API and web app import the schema package's build output
-      - name: Build schema package
-        run: pnpm --filter @config-platform/schema build
+      # The API and web app import the shared packages' build output (connectors use the schema)
+      - name: Build shared packages
+        run: pnpm --filter @config-platform/schema build && pnpm --filter @config-platform/live-connectors build
 
       - name: Theme lint
         run: pnpm lint:theme
