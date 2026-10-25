@@ -36,7 +36,6 @@ interface Props {
   definition: VisualDefinition;
   specs: readonly PropSpec[];
   resolved: ResolvedNode | undefined;
-  tagListId: string;
   onPatch: (patch: NodePatch, group?: string) => void;
   onDuplicate: () => void;
   onRemove: () => void;
@@ -45,7 +44,7 @@ interface Props {
 
 const iconBtn = { padding: "var(--space-1)" } as const;
 
-export function NodeInspector({ node, definition, specs, resolved, tagListId, onPatch, onDuplicate, onRemove, onMakeSymbol }: Props) {
+export function NodeInspector({ node, definition, specs, resolved, onPatch, onDuplicate, onRemove, onMakeSymbol }: Props) {
   const paints = (definition.paints ?? []).map((p) => p.id);
   const iso = definition.mode === "isometric";
   const shown = specs.filter((s) => !s.isoOnly || iso);
@@ -61,7 +60,6 @@ export function NodeInspector({ node, definition, specs, resolved, tagListId, on
       binding={node.bindings?.[spec.name]}
       current={resolved?.attrs[spec.name]}
       problem={resolved?.problems[spec.name]}
-      tagListId={tagListId}
       paints={paints}
       onValue={(value) => onPatch({ attrs: { [spec.name]: value } }, group(`a-${spec.name}`))}
       onBinding={(expr) => {
@@ -118,7 +116,7 @@ export function NodeInspector({ node, definition, specs, resolved, tagListId, on
       <details open={live > 0}>
         <summary style={{ cursor: "pointer", fontSize: "var(--font-size-sm)", fontWeight: 600 }}>Rules</summary>
         <div style={{ paddingTop: "var(--space-2)" }}>
-          <RulesEditor rules={node.rules ?? []} specs={shown} resolved={resolved} tagListId={tagListId} paints={paints} onChange={(rules, g) => onPatch({ rules }, g && group(g))} />
+          <RulesEditor rules={node.rules ?? []} specs={shown} resolved={resolved} paints={paints} onChange={(rules, g) => onPatch({ rules }, g && group(g))} />
         </div>
       </details>
       <details open={Boolean(node.effects?.length || node.smooth)}>
@@ -128,7 +126,6 @@ export function NodeInspector({ node, definition, specs, resolved, tagListId, on
             effects={node.effects ?? []}
             smooth={node.smooth}
             resolved={resolved}
-            tagListId={tagListId}
             onEffects={(effects, g) => onPatch({ effects }, g && group(g))}
             onSmooth={(smooth) => onPatch({ smooth }, group("smooth"))}
           />

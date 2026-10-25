@@ -5,19 +5,19 @@ import { VISUAL_EFFECTS, type VisualEffect, type VisualEffectType } from "@confi
 import type { ResolvedNode } from "../../visuals/resolve-props";
 import { EFFECT_LABELS } from "./RulesEditor";
 import { Field } from "../live/Field";
+import { ExpressionInput } from "../../components/expression-input/ExpressionInput";
 
 interface Props {
   effects: readonly VisualEffect[];
   smooth: number | undefined;
   resolved: ResolvedNode | undefined;
-  tagListId: string;
   onEffects: (effects: VisualEffect[], group?: string) => void;
   onSmooth: (ms: number | undefined) => void;
 }
 
 const small = { fontSize: "var(--font-size-xs)" } as const;
 
-export function EffectsEditor({ effects, smooth, resolved, tagListId, onEffects, onSmooth }: Props) {
+export function EffectsEditor({ effects, smooth, resolved, onEffects, onSmooth }: Props) {
   const change = (i: number, fx: VisualEffect, group?: string) => onEffects(effects.map((e, j) => (j === i ? fx : e)), group);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
@@ -50,14 +50,11 @@ export function EffectsEditor({ effects, smooth, resolved, tagListId, onEffects,
                 <Trash2 size="1em" />
               </button>
             </div>
-            <input
-              className="form-input"
-              list={tagListId}
+            <ExpressionInput
               aria-label={`Animation ${i + 1} runs while`}
-              placeholder='Always, or while… e.g. live.fan1.running'
+              placeholder="Always, or while… e.g. live.fan1.running"
               value={fx.when ?? ""}
-              onChange={(e) => change(i, { ...fx, when: e.target.value || undefined }, `fx-${i}-when`)}
-              style={{ fontFamily: "var(--font-mono)", ...small }}
+              onChange={(v) => change(i, { ...fx, when: v || undefined }, `fx-${i}-when`)}
             />
             <span style={{ ...small, color: problem ? "var(--warning)" : "var(--text-muted)" }}>{problem ?? (running ? "Running now" : "Not running now")}</span>
           </div>

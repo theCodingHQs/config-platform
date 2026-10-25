@@ -32,10 +32,17 @@ export class LiveSocketClient {
   private retryMs = 1000;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly url: () => string = liveSocketUrl,
     private readonly createSocket: (url: string) => WebSocket = (u) => new WebSocket(u),
+    /**
+     * How long the socket stays open after the last registration goes. Screens often swap one
+     * list of tags for another (a page's tags change, a binding is being typed); without the wait
+     * the socket would close, drop every value and reconnect each time.
+     */
+    private readonly closeDelayMs = 2000,
   ) {}
 
   /** Starts receiving `tags` (names or groups like "line1"); returns the function that stops it */
@@ -46,7 +53,7 @@ export class LiveSocketClient {
     this.sendSubscription();
     return () => {
       this.registrations.delete(id);
-      this.closeIfUnused();
+      this.closeSoonIfUnused();
       this.sendSubscription();
     };
   }
@@ -61,7 +68,7 @@ export class LiveSocketClient {
     return () => {
       this.entityRegistrations.delete(id);
       this.recordListeners.delete(onChange);
-      this.closeIfUnused();
+      this.closeSoonIfUnused();
       this.sendWatch();
     };
   }
@@ -81,11 +88,17 @@ export class LiveSocketClient {
     return this.registrations.size > 0 || this.entityRegistrations.size > 0;
   }
 
-  private closeIfUnused(): void {
-    if (!this.inUse()) this.close();
+  private closeSoonIfUnused(): void {
+    if (this.inUse() || this.closeTimer) return;
+    this.closeTimer = setTimeout(() => {
+      this.closeTimer = null;
+      if (!this.inUse()) this.close();
+    }, this.closeDelayMs);
   }
 
   private ensureOpen(): void {
+    if (this.closeTimer) clearTimeout(this.closeTimer);
+    this.closeTimer = null;
     if (this.ws || this.retryTimer) return;
     this.update({ socket: "connecting" });
     const ws = this.createSocket(this.url());
@@ -122,8 +135,16 @@ export class LiveSocketClient {
     this.update({ socket: "idle", values: {}, connections: {} });
   }
 
+  private subscriptionQueued = false;
+
+  /** Changes made together (one list of tags swapped for another) go out as one message */
   private sendSubscription(): void {
-    this.send({ type: "subscribe", tags: this.allTags() });
+    if (this.subscriptionQueued) return;
+    this.subscriptionQueued = true;
+    queueMicrotask(() => {
+      this.subscriptionQueued = false;
+      this.send({ type: "subscribe", tags: this.allTags() });
+    });
   }
 
   private sendWatch(): void {

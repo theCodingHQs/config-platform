@@ -8,12 +8,12 @@ import { VISUAL_EFFECTS, type VisualAttrValue, type VisualEffectType, type Visua
 import type { PropSpec } from "../../visuals/shapes";
 import type { ResolvedNode } from "../../visuals/resolve-props";
 import { ValueInput } from "./PropField";
+import { ExpressionInput } from "../../components/expression-input/ExpressionInput";
 
 interface Props {
   rules: readonly VisualRule[];
   specs: readonly PropSpec[];
   resolved: ResolvedNode | undefined;
-  tagListId: string;
   paints: readonly string[];
   onChange: (rules: VisualRule[], group?: string) => void;
 }
@@ -22,7 +22,7 @@ export const EFFECT_LABELS: Record<VisualEffectType, string> = { blink: "Blink",
 
 const small = { fontSize: "var(--font-size-xs)" } as const;
 
-export function RulesEditor({ rules, specs, resolved, tagListId, paints, onChange }: Props) {
+export function RulesEditor({ rules, specs, resolved, paints, onChange }: Props) {
   const settable = specs.filter((s) => s.bindable !== false);
   const change = (i: number, rule: VisualRule, group?: string) => onChange(rules.map((r, j) => (j === i ? rule : r)), group);
 
@@ -36,14 +36,12 @@ export function RulesEditor({ rules, specs, resolved, tagListId, paints, onChang
           <div key={i} style={{ border: "var(--border-width-sm) solid var(--border)", borderRadius: "var(--radius-control)", padding: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "var(--space-1)" }}>
               <span style={{ ...small, fontWeight: 600 }}>When</span>
-              <input
-                className="form-input"
-                list={tagListId}
+              <ExpressionInput
                 aria-label={`Rule ${i + 1} condition`}
                 placeholder='live.sqf1.status == "alarm"'
                 value={rule.when}
-                onChange={(e) => change(i, { ...rule, when: e.target.value }, `rule-${i}-when`)}
-                style={{ flex: 1, fontFamily: "var(--font-mono)", ...small }}
+                onChange={(v) => change(i, { ...rule, when: v }, `rule-${i}-when`)}
+                style={{ flex: 1, minWidth: 0 }}
               />
               <button type="button" className="btn btn-ghost" aria-label={`Delete rule ${i + 1}`} title="Delete this rule" style={{ padding: "var(--space-1)", color: "var(--danger)" }} onClick={() => onChange(rules.filter((_, j) => j !== i))}>
                 <Trash2 size="1em" />

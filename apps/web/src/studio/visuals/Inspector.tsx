@@ -1,12 +1,10 @@
 /** Right-hand panel: the canvas when nothing is selected, one node's settings, or what can be done with several */
-import React, { useId, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import React, { useMemo } from "react";
 import { AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalSpaceAround, AlignStartHorizontal, AlignStartVertical, AlignVerticalSpaceAround, Component, Group, Trash2 } from "lucide-react";
 import type { AlignMode } from "./align";
 import type { ExpressionScope, VisualDefinition, VisualNode } from "@config-platform/schema";
 import { specsFor } from "../../visuals/node-specs";
 import { resolveNode } from "../../visuals/resolve-props";
-import { liveApi } from "../../live/live-api";
 import { CanvasSettings } from "./CanvasSettings";
 import { NodeInspector } from "./NodeInspector";
 import type { NodePatch } from "./node-tree";
@@ -17,8 +15,6 @@ interface Props {
   scope: ExpressionScope | null;
   symbols?: ReadonlyMap<string, VisualDefinition>;
   isSymbol?: boolean;
-  /** Extra binding suggestions (a symbol's inputs.<name>) */
-  suggestions?: readonly string[];
   onPatch: (id: string, patch: NodePatch, group?: string) => void;
   onCanvas: (patch: Partial<Omit<VisualDefinition, "nodes">>, group?: string) => void;
   onDuplicate: () => void;
@@ -39,9 +35,7 @@ const ALIGN: Array<{ mode: AlignMode; label: string; Icon: typeof Group }> = [
   { mode: "spread-y", label: "Space evenly up/down", Icon: AlignVerticalSpaceAround },
 ];
 
-export function Inspector({ definition, selected, scope, symbols, isSymbol, suggestions = [], onPatch, onCanvas, onDuplicate, onRemove, onGroup, onMakeSymbol, onAlign }: Props) {
-  const tagListId = useId();
-  const { data: tags = [] } = useQuery({ queryKey: ["live-tags"], queryFn: liveApi.tags, staleTime: 30_000 });
+export function Inspector({ definition, selected, scope, symbols, isSymbol, onPatch, onCanvas, onDuplicate, onRemove, onGroup, onMakeSymbol, onAlign }: Props) {
   const node = selected.length === 1 ? selected[0] : null;
   const inputs = node?.kind === "symbol" && node.ref ? symbols?.get(node.ref)?.inputs : undefined;
   const specs = useMemo(() => (node ? specsFor(node, inputs) : []), [node, inputs]);
@@ -49,23 +43,12 @@ export function Inspector({ definition, selected, scope, symbols, isSymbol, sugg
 
   return (
     <>
-      <datalist id={tagListId}>
-        {suggestions.map((s) => (
-          <option key={s} value={s} />
-        ))}
-        {tags.map((t) => (
-          <option key={t.tag} value={`live.${t.tag}`}>
-            {t.label ?? t.connectionName}
-          </option>
-        ))}
-      </datalist>
       {node ? (
         <NodeInspector
           node={node}
           definition={definition}
           specs={specs}
           resolved={resolved}
-          tagListId={tagListId}
           onPatch={(patch, group) => onPatch(node.id, patch, group)}
           onDuplicate={onDuplicate}
           onRemove={onRemove}

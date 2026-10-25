@@ -18,6 +18,8 @@ import { symbolFromNodes } from "./make-symbol";
 import { nodeBox, parentSpace, unionBox } from "./canvas-geometry";
 import { useSvgImport } from "./use-svg-import";
 import { alignMoves, type AlignMode } from "./align";
+import { useExpressionSuggestions, useLiveTags } from "./use-expression-suggestions";
+import { SuggestionsProvider } from "../../components/expression-input/suggestions-context";
 import { useVisualEditor } from "./editor-state";
 import { EditorCanvas } from "./EditorCanvas";
 import { ShapePalette } from "./ShapePalette";
@@ -51,11 +53,13 @@ export function VisualEditor({ visual }: { visual: Visual }) {
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
   const isSymbol = visual.kind === "symbol";
   const symbols = useSymbols(state.definition);
-  const watched = useMemo(() => [state.definition, ...symbols.values()], [state.definition, symbols]);
+  const tags = useLiveTags();
+  // Every tag, not just the ones drawn with, so suggestions can show their values now
+  const watched = useMemo(() => [state.definition, ...symbols.values(), tags.map((t) => `live.${t.tag}`)], [state.definition, symbols, tags]);
   const live = useLiveScope(watched);
   // Editing a symbol: its shapes see the inputs' starting values
   const scope = useMemo(() => (isSymbol ? { ...live, inputs: inputDefaults(state.definition.inputs) } : live), [isSymbol, live, state.definition.inputs]);
-  const suggestions = useMemo(() => (state.definition.inputs ?? []).map((i) => `inputs.${i.name}`), [state.definition.inputs]);
+  const suggestions = useExpressionSuggestions(tags, scope, isSymbol ? state.definition.inputs : undefined);
   const svgRef = useRef<SVGSVGElement | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const nodes = state.definition.nodes;
@@ -204,140 +208,141 @@ export function VisualEditor({ visual }: { visual: Visual }) {
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", height: "calc(100vh - 7rem)", minHeight: "32rem" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
-        <Link to="/studio/visuals" className="btn btn-ghost" style={iconBtn} title="All visuals" aria-label="All visuals">
-          <ArrowLeft size="1em" />
-        </Link>
-        <input className="form-input" aria-label="Visual name" value={state.name} onChange={(e) => dispatch({ type: "rename", name: e.target.value, group: "name" })} style={{ fontWeight: 600, maxWidth: "18rem" }} />
-        {openPath.length > 0 && (
-          <nav aria-label="Open group" style={{ display: "flex", alignItems: "center", gap: "var(--space-1)", fontSize: "var(--font-size-xs)" }}>
-            <button type="button" className="btn btn-ghost" style={{ padding: "0 var(--space-1)", fontSize: "inherit" }} onClick={() => dispatch({ type: "open", id: null })}>
-              Drawing
-            </button>
-            {openPath.map((id) => {
-              const n = findNode(nodes, id);
-              return (
-                <React.Fragment key={id}>
-                  <ChevronRight size="1em" aria-hidden="true" />
-                  <button type="button" className="btn btn-ghost" style={{ padding: "0 var(--space-1)", fontSize: "inherit", fontWeight: id === state.openGroup ? 600 : 400 }} onClick={() => dispatch({ type: "open", id })}>
-                    {n ? nodeLabel(n) : id}
-                  </button>
-                </React.Fragment>
-              );
-            })}
-          </nav>
-        )}
-        <div style={{ flex: 1 }} />
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".svg,image/svg+xml"
-          hidden
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            e.target.value = "";
-            if (!file) return;
-            if (file.size > 5_000_000) return report("error", "That file is too big (over 5 MB)");
-            importSvg(await file.text(), file.name.replace(/.svg$/i, ""));
-          }}
-        />
-        <button type="button" className="btn btn-ghost" style={iconBtn} title="Bring in an SVG file (or paste SVG with Ctrl+V)" onClick={() => fileRef.current?.click()}>
-          <FileUp size="1em" /> Import SVG
-        </button>
-        <button type="button" className="btn btn-ghost" style={iconBtn} title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!state.past.length} onClick={() => dispatch({ type: "undo" })}>
-          <Undo2 size="1em" />
-        </button>
-        <button type="button" className="btn btn-ghost" style={iconBtn} title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!state.future.length} onClick={() => dispatch({ type: "redo" })}>
-          <Redo2 size="1em" />
-        </button>
-        <button type="button" className="btn btn-ghost" style={iconBtn} title="Zoom out" aria-label="Zoom out" onClick={() => zoomBy(-1)}>
-          <ZoomOut size="1em" />
-        </button>
-        <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)", minWidth: "2.5rem", textAlign: "center" }}>{Math.round(zoom * 100)}%</span>
-        <button type="button" className="btn btn-ghost" style={iconBtn} title="Zoom in" aria-label="Zoom in" onClick={() => zoomBy(1)}>
-          <ZoomIn size="1em" />
-        </button>
-        <button type="button" className={chosenZoom === null ? "btn btn-secondary" : "btn btn-ghost"} style={iconBtn} title="Fit to the window" aria-label="Fit to the window" aria-pressed={chosenZoom === null} onClick={() => setZoom(null)}>
-          <Maximize size="1em" />
-        </button>
-        {message && (
-          <span role="status" style={{ fontSize: "var(--font-size-sm)", color: message.tone === "error" ? "var(--danger)" : "var(--success)", maxWidth: "24rem" }}>
-            {message.text}
-          </span>
-        )}
-        <button type="button" className="btn btn-primary" disabled={!state.dirty || save.isPending} onClick={() => save.mutate()} title="Save (Ctrl+S)">
-          <Save size="1em" /> {save.isPending ? "Saving…" : state.dirty ? "Save" : "Saved"}
-        </button>
-      </div>
+    <SuggestionsProvider value={suggestions}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", height: "calc(100vh - 7rem)", minHeight: "32rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexWrap: "wrap" }}>
+          <Link to="/studio/visuals" className="btn btn-ghost" style={iconBtn} title="All visuals" aria-label="All visuals">
+            <ArrowLeft size="1em" />
+          </Link>
+          <input className="form-input" aria-label="Visual name" value={state.name} onChange={(e) => dispatch({ type: "rename", name: e.target.value, group: "name" })} style={{ fontWeight: 600, maxWidth: "18rem" }} />
+          {openPath.length > 0 && (
+            <nav aria-label="Open group" style={{ display: "flex", alignItems: "center", gap: "var(--space-1)", fontSize: "var(--font-size-xs)" }}>
+              <button type="button" className="btn btn-ghost" style={{ padding: "0 var(--space-1)", fontSize: "inherit" }} onClick={() => dispatch({ type: "open", id: null })}>
+                Drawing
+              </button>
+              {openPath.map((id) => {
+                const n = findNode(nodes, id);
+                return (
+                  <React.Fragment key={id}>
+                    <ChevronRight size="1em" aria-hidden="true" />
+                    <button type="button" className="btn btn-ghost" style={{ padding: "0 var(--space-1)", fontSize: "inherit", fontWeight: id === state.openGroup ? 600 : 400 }} onClick={() => dispatch({ type: "open", id })}>
+                      {n ? nodeLabel(n) : id}
+                    </button>
+                  </React.Fragment>
+                );
+              })}
+            </nav>
+          )}
+          <div style={{ flex: 1 }} />
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".svg,image/svg+xml"
+            hidden
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (!file) return;
+              if (file.size > 5_000_000) return report("error", "That file is too big (over 5 MB)");
+              importSvg(await file.text(), file.name.replace(/.svg$/i, ""));
+            }}
+          />
+          <button type="button" className="btn btn-ghost" style={iconBtn} title="Bring in an SVG file (or paste SVG with Ctrl+V)" onClick={() => fileRef.current?.click()}>
+            <FileUp size="1em" /> Import SVG
+          </button>
+          <button type="button" className="btn btn-ghost" style={iconBtn} title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!state.past.length} onClick={() => dispatch({ type: "undo" })}>
+            <Undo2 size="1em" />
+          </button>
+          <button type="button" className="btn btn-ghost" style={iconBtn} title="Redo (Ctrl+Y)" aria-label="Redo" disabled={!state.future.length} onClick={() => dispatch({ type: "redo" })}>
+            <Redo2 size="1em" />
+          </button>
+          <button type="button" className="btn btn-ghost" style={iconBtn} title="Zoom out" aria-label="Zoom out" onClick={() => zoomBy(-1)}>
+            <ZoomOut size="1em" />
+          </button>
+          <span style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)", minWidth: "2.5rem", textAlign: "center" }}>{Math.round(zoom * 100)}%</span>
+          <button type="button" className="btn btn-ghost" style={iconBtn} title="Zoom in" aria-label="Zoom in" onClick={() => zoomBy(1)}>
+            <ZoomIn size="1em" />
+          </button>
+          <button type="button" className={chosenZoom === null ? "btn btn-secondary" : "btn btn-ghost"} style={iconBtn} title="Fit to the window" aria-label="Fit to the window" aria-pressed={chosenZoom === null} onClick={() => setZoom(null)}>
+            <Maximize size="1em" />
+          </button>
+          {message && (
+            <span role="status" style={{ fontSize: "var(--font-size-sm)", color: message.tone === "error" ? "var(--danger)" : "var(--success)", maxWidth: "24rem" }}>
+              {message.text}
+            </span>
+          )}
+          <button type="button" className="btn btn-primary" disabled={!state.dirty || save.isPending} onClick={() => save.mutate()} title="Save (Ctrl+S)">
+            <Save size="1em" /> {save.isPending ? "Saving…" : state.dirty ? "Save" : "Saved"}
+          </button>
+        </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "auto 13rem minmax(0, 1fr) 20rem", gap: "var(--space-3)", flex: 1, minHeight: 0 }}>
-        <ToolBar tool={tool} onTool={setTool} />
-        <aside style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", minHeight: 0 }}>
-          <div role="tablist" style={{ display: "flex", gap: "var(--space-1)" }}>
-            {tab("layers", "Layers")}
-            {tab("parts", "Parts")}
-          </div>
-          <div style={{ overflowY: "auto", flex: 1, paddingRight: "var(--space-1)" }}>
-            {panel === "parts" && (
-              <div style={{ marginBottom: "var(--space-3)" }}>
-                <SymbolsPalette exclude={visual.id} onAdd={(id) => addSymbol(id)} />
-              </div>
-            )}
-            {panel === "layers" ? (
-              <LayersPanel
-                nodes={nodes}
-                selection={state.selection}
-                openGroup={state.openGroup}
-                onSelect={(ids, parentId) => {
-                  if (parentId !== state.openGroup) dispatch({ type: "open", id: parentId });
-                  dispatch({ type: "select", ids });
+        <div style={{ display: "grid", gridTemplateColumns: "auto 13rem minmax(0, 1fr) 20rem", gap: "var(--space-3)", flex: 1, minHeight: 0 }}>
+          <ToolBar tool={tool} onTool={setTool} />
+          <aside style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", minHeight: 0 }}>
+            <div role="tablist" style={{ display: "flex", gap: "var(--space-1)" }}>
+              {tab("layers", "Layers")}
+              {tab("parts", "Parts")}
+            </div>
+            <div style={{ overflowY: "auto", flex: 1, paddingRight: "var(--space-1)" }}>
+              {panel === "parts" && (
+                <div style={{ marginBottom: "var(--space-3)" }}>
+                  <SymbolsPalette exclude={visual.id} onAdd={(id) => addSymbol(id)} />
+                </div>
+              )}
+              {panel === "layers" ? (
+                <LayersPanel
+                  nodes={nodes}
+                  selection={state.selection}
+                  openGroup={state.openGroup}
+                  onSelect={(ids, parentId) => {
+                    if (parentId !== state.openGroup) dispatch({ type: "open", id: parentId });
+                    dispatch({ type: "select", ids });
+                  }}
+                  onToggleHidden={(n) => update(n.id, { hidden: !n.hidden })}
+                />
+              ) : (
+                <ShapePalette onAdd={(shape) => addPart(shape)} />
+              )}
+            </div>
+          </aside>
+          <div ref={areaRef} style={{ overflow: "auto", border: "var(--border-width-sm) solid var(--border)", borderRadius: "var(--radius-surface)", background: "var(--surface-2)", padding: "var(--space-4)", display: "flex" }}>
+            <div style={{ margin: "auto" }}>
+              <EditorCanvas
+                state={state}
+                dispatch={dispatch}
+                scope={scope}
+                symbols={symbols}
+                svgRef={svgRef}
+                zoom={zoom}
+                tool={tool}
+                onToolDone={() => setTool("select")}
+                onEditText={editText}
+                onDrop={(what, ref, x, y) => {
+                  if (what === "symbol") return addSymbol(ref, { x, y });
+                  const shape = shapeOf(ref);
+                  if (shape) addPart(shape, { x, y });
                 }}
-                onToggleHidden={(n) => update(n.id, { hidden: !n.hidden })}
               />
-            ) : (
-              <ShapePalette onAdd={(shape) => addPart(shape)} />
-            )}
+            </div>
           </div>
-        </aside>
-        <div ref={areaRef} style={{ overflow: "auto", border: "var(--border-width-sm) solid var(--border)", borderRadius: "var(--radius-surface)", background: "var(--surface-2)", padding: "var(--space-4)", display: "flex" }}>
-          <div style={{ margin: "auto" }}>
-            <EditorCanvas
-              state={state}
-              dispatch={dispatch}
+          <aside style={{ overflowY: "auto", border: "var(--border-width-sm) solid var(--border)", borderRadius: "var(--radius-surface)", background: "var(--surface)", padding: "var(--space-3)" }}>
+            <Inspector
+              definition={state.definition}
+              selected={selected}
               scope={scope}
               symbols={symbols}
-              svgRef={svgRef}
-              zoom={zoom}
-              tool={tool}
-              onToolDone={() => setTool("select")}
-              onEditText={editText}
-              onDrop={(what, ref, x, y) => {
-                if (what === "symbol") return addSymbol(ref, { x, y });
-                const shape = shapeOf(ref);
-                if (shape) addPart(shape, { x, y });
-              }}
+              isSymbol={isSymbol}
+              onMakeSymbol={askSymbolName}
+              onAlign={align}
+              onPatch={update}
+              onCanvas={(patch, group) => dispatch({ type: "canvas", patch, group })}
+              onDuplicate={duplicate}
+              onRemove={remove}
+              onGroup={() => dispatch({ type: "group", ids: selected.map((n) => n.id) })}
             />
-          </div>
+          </aside>
         </div>
-        <aside style={{ overflowY: "auto", border: "var(--border-width-sm) solid var(--border)", borderRadius: "var(--radius-surface)", background: "var(--surface)", padding: "var(--space-3)" }}>
-          <Inspector
-            definition={state.definition}
-            selected={selected}
-            scope={scope}
-            symbols={symbols}
-            isSymbol={isSymbol}
-            suggestions={suggestions}
-            onMakeSymbol={askSymbolName}
-            onAlign={align}
-            onPatch={update}
-            onCanvas={(patch, group) => dispatch({ type: "canvas", patch, group })}
-            onDuplicate={duplicate}
-            onRemove={remove}
-            onGroup={() => dispatch({ type: "group", ids: selected.map((n) => n.id) })}
-          />
-        </aside>
       </div>
-    </div>
+    </SuggestionsProvider>
   );
 }

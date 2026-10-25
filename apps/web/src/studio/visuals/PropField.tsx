@@ -8,6 +8,7 @@ import { SWATCHES, type PropSpec } from "../../visuals/shapes";
 import { Field } from "../live/Field";
 import { ColorInput } from "./ColorInput";
 import { RangeMapper } from "./RangeMapper";
+import { ExpressionInput } from "../../components/expression-input/ExpressionInput";
 
 interface Props {
   spec: PropSpec;
@@ -16,7 +17,6 @@ interface Props {
   /** What the property is right now (with the binding applied) */
   current: unknown;
   problem?: string;
-  tagListId: string;
   /** The drawing's gradients, offered for colours */
   paints?: readonly string[];
   onValue: (value: string | number | boolean) => void;
@@ -106,7 +106,7 @@ export function ValueInput({ spec, value, id, paints, onValue }: { spec: PropSpe
 
 const show = (v: unknown) => (typeof v === "string" ? `"${v}"` : String(v));
 
-export function PropField({ spec, value, binding, current, problem, tagListId, paints = [], onValue, onBinding }: Props) {
+export function PropField({ spec, value, binding, current, problem, paints = [], onValue, onBinding }: Props) {
   const reactId = useId();
   // Stable ids for fields other parts of the editor focus (double-clicking text focuses "Text")
   const id = spec.name === "text" ? "vis-attr-text" : reactId;
@@ -137,14 +137,11 @@ export function PropField({ spec, value, binding, current, problem, tagListId, p
       </div>
       {bound && (
         <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
-          <input
-            className="form-input"
-            list={tagListId}
+          <ExpressionInput
             aria-label={`${spec.label} binding`}
             placeholder={example ?? (spec.kind === "number" ? "e.g. scale(live.cart.position, 0, 30700, 20, 1380)" : "live.line1.speed")}
-            value={binding}
-            onChange={(e) => onBinding(e.target.value)}
-            style={{ fontFamily: "var(--font-mono)", fontSize: "var(--font-size-xs)" }}
+            value={binding ?? ""}
+            onChange={onBinding}
           />
           <span style={{ fontSize: "var(--font-size-xs)", color: problem && binding?.trim() ? "var(--warning)" : "var(--text-muted)" }}>
             {!binding?.trim() ? "Type an expression, e.g. live.line1.speed" : problem ? `${problem}; using the set value` : `Now: ${show(current)}`}
@@ -157,7 +154,6 @@ export function PropField({ spec, value, binding, current, problem, tagListId, p
           {mapping && (
             <RangeMapper
               binding={binding ?? ""}
-              tagListId={tagListId}
               label={spec.label}
               onUse={(b) => {
                 onBinding(b);

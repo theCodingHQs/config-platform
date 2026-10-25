@@ -24,3 +24,10 @@ export const VISUAL_FUNCTIONS: ExpressionFunctions = {
     return pairs.length % 2 === 1 ? pairs[pairs.length - 1] : null;
   },
 };
+
+/** The functions above, described for suggestions while typing */
+export const VISUAL_FUNCTION_DOCS = [
+  { name: "scale", signature: "scale(value, from, to, newFrom, newTo)", detail: "A value in one range → the same place in another" },
+  { name: "clamp", signature: "clamp(value, min, max)", detail: "Kept between min and max" },
+  { name: "pick", signature: "pick(value, match, result, …, otherwise)", detail: "The result for whichever match the value is" },
+] as const;

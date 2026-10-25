@@ -146,7 +146,7 @@ describe('live socket (browser)', () => {
     expect(liveSocketUrl({ protocol: 'http:', host: 'localhost:3000' })).toBe('ws://localhost:3000/api/live/socket');
   });
 
-  it('opens one socket for everyone, subscribes to all their tags, and closes when nobody needs it', () => {
+  it('opens one socket for everyone, subscribes to all their tags, and closes when nobody needs it', async () => {
     const client = fakeClient();
     const offA = client.register(['line1']);
     const offB = client.register(['press4.status']);
@@ -154,12 +154,40 @@ describe('live socket (browser)', () => {
     const socket = FakeSocket.instances[0];
     (globalThis as any).WebSocket.OPEN ??= 1;
     socket.open();
+    await Promise.resolve();
     expect(lastSubscribe(socket)).toEqual({ type: 'subscribe', tags: ['line1', 'press4.status'] });
     offA();
+    await Promise.resolve();
     expect(lastSubscribe(socket)).toEqual({ type: 'subscribe', tags: ['press4.status'] });
-    offB();
-    expect(socket.readyState).toBe(3);
-    expect(client.getSnapshot().socket).toBe('idle');
+    vi.useFakeTimers();
+    try {
+      offB();
+      // Kept open a moment in case another list of tags replaces this one
+      expect(socket.readyState).not.toBe(3);
+      vi.advanceTimersByTime(2000);
+      expect(socket.readyState).toBe(3);
+      expect(client.getSnapshot().socket).toBe('idle');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('swapping one list of tags for another keeps the socket and its values', async () => {
+    const client = fakeClient();
+    const off = client.register(['line1']);
+    const socket = FakeSocket.instances[0];
+    (globalThis as any).WebSocket.OPEN ??= 1;
+    socket.open();
+    socket.receive({ type: 'snapshot', values: { 'line1.speed': { value: 40, ts: 't', quality: 'good' } } });
+    const sent = socket.sent.length;
+    off();
+    client.register(['line1', 'line1.count']);
+    await Promise.resolve();
+    expect(FakeSocket.instances).toHaveLength(1);
+    // One subscription for the swap, not an empty one first
+    expect(socket.sent.length - sent).toBe(1);
+    expect(client.getSnapshot()).toMatchObject({ socket: 'open', values: { 'line1.speed': { value: 40 } } });
+    expect(lastSubscribe(socket)).toEqual({ type: 'subscribe', tags: ['line1', 'line1.count'] });
   });
 
   it('keeps values from the snapshot and changes, and marks them stale when the socket drops', () => {
@@ -174,7 +202,7 @@ describe('live socket (browser)', () => {
     expect(client.getSnapshot()).toMatchObject({ socket: 'closed', values: { 'line1.speed': { value: 40, quality: 'stale' } } });
   });
 
-  it('gives a page {{ live.line1.speed }} for the tags its definition mentions', () => {
+  it('gives a page {{ live.line1.speed }} for the tags its definition mentions', async () => {
     const client = fakeClient();
     function Page() {
       const { live, liveInfo } = useLiveScope({ root: { props: { text: '{{ live.line1.speed }} pcs/min' } } }, client);
@@ -183,6 +211,7 @@ describe('live socket (browser)', () => {
     render(<Page />);
     const socket = FakeSocket.instances[0];
     act(() => socket.open());
+    await Promise.resolve();
     expect(lastSubscribe(socket)).toEqual({ type: 'subscribe', tags: ['line1.speed'] });
     act(() => socket.receive({ type: 'snapshot', values: { 'line1.speed': { value: 42, ts: 't', quality: 'good' } } }));
     expect(screen.getByTestId('out').textContent).toBe('42 on');

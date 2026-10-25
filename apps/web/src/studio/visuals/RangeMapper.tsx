@@ -3,6 +3,7 @@
  * 20 to 1380". Opens with the current binding's values when it already is one.
  */
 import React, { useState } from "react";
+import { ExpressionInput } from "../../components/expression-input/ExpressionInput";
 
 const SCALE = /^scale\((.+),\s*(-?[\d.]+),\s*(-?[\d.]+),\s*(-?[\d.]+),\s*(-?[\d.]+)\)$/;
 
@@ -16,7 +17,7 @@ export const scaleBinding = (expr: string, [a, b, c, d]: readonly string[]) => `
 
 const small = { fontSize: "var(--font-size-xs)" } as const;
 
-export function RangeMapper({ binding, tagListId, label, onUse }: { binding: string; tagListId: string; label: string; onUse: (binding: string) => void }) {
+export function RangeMapper({ binding, label, onUse }: { binding: string; label: string; onUse: (binding: string) => void }) {
   const start = parseScale(binding);
   const [expr, setExpr] = useState(start.expr);
   const [range, setRange] = useState(start.range);
@@ -32,7 +33,7 @@ export function RangeMapper({ binding, tagListId, label, onUse }: { binding: str
   );
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)", padding: "var(--space-2)", border: "var(--border-width-sm) dashed var(--border)", borderRadius: "var(--radius-control)" }}>
-      <input className="form-input" list={tagListId} aria-label="Value to follow" placeholder="live.cart.position" value={expr} onChange={(e) => setExpr(e.target.value)} style={{ fontFamily: "var(--font-mono)", ...small }} />
+      <ExpressionInput aria-label="Value to follow" placeholder="live.cart.position" value={expr} onChange={setExpr} />
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "var(--space-1)", ...small }}>
         when it goes from {box(0, "From")} to {box(1, "To")}
       </div>
