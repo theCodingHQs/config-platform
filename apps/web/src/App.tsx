@@ -58,6 +58,7 @@ const ReportSchedules = React.lazy(() =>
   import("./studio/ReportSchedules").then((m) => ({ default: m.ReportSchedules }))
 );
 const LiveStudio = React.lazy(() => import("./studio/live/LiveStudio").then((m) => ({ default: m.LiveStudio })));
+const VisualsStudio = React.lazy(() => import("./studio/visuals/VisualsStudio").then((m) => ({ default: m.VisualsStudio })));
 const ThemeStudio = React.lazy(() =>
   import("./studio/ThemeStudio").then((m) => ({ default: m.ThemeStudio }))
 );
@@ -590,6 +591,24 @@ function AppContent({ user }: { user: CurrentUser }) {
                 Live
               </NavLink>
               <NavLink
+                to="/studio/visuals"
+                title="Animated 2.5D drawings of lines and plants"
+                className={({ isActive }) =>
+                  isActive ? "btn btn-secondary active" : "btn btn-ghost"
+                }
+                style={({ isActive }) => ({
+                  fontSize: "var(--font-size-sm)",
+                  padding: "0.25rem 0.625rem",
+                  fontWeight: isActive ? 600 : 500,
+                  color: isActive ? "var(--accent)" : "var(--text)",
+                  backgroundColor: isActive
+                    ? "var(--accent-subtle)"
+                    : "transparent",
+                })}
+              >
+                Visuals
+              </NavLink>
+              <NavLink
                 to="/studio/permissions"
                 className={({ isActive }) =>
                   isActive ? "btn btn-secondary active" : "btn btn-ghost"
@@ -771,6 +790,14 @@ function AppContent({ user }: { user: CurrentUser }) {
               <Route
                 path="/studio/live"
                 element={<div className="page-container"><LiveStudio /></div>}
+              />
+              <Route
+                path="/studio/visuals"
+                element={<div className="page-container"><VisualsStudio /></div>}
+              />
+              <Route
+                path="/studio/visuals/:id"
+                element={<div className="page-container"><VisualsStudio /></div>}
               />
               <Route
                 path="/studio/export-templates"

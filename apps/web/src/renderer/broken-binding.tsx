@@ -2,7 +2,7 @@ import React from 'react';
 import { AlertTriangle } from 'lucide-react';
 
 export interface BrokenBindingProps {
-  type: 'entity' | 'field';
+  type: 'entity' | 'field' | 'visual';
   id: string;
 }
 

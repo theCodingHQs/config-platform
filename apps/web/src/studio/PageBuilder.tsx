@@ -53,6 +53,7 @@ import { ComponentOverlay } from "./ComponentOverlay";
 import { defaultChartAxisTitles } from "../components/chart-axis-titles";
 import { ContentLayoutFields, ContentLayoutSection } from "./ContentLayoutFields";
 import { IconPicker } from "../components/icon-picker";
+import { VisualPropsEditor } from "./VisualPropsEditor";
 import { createTemplatePage, type TemplateType } from "./templates";
 import {
   fetchPage,
@@ -1027,6 +1028,9 @@ export const PageBuilder: React.FC = () => {
               aggregateOp: "count",
             };
         break;
+      case "visual":
+        newProps = {};
+        break;
       case "modal":
         newProps = { title: "Modal Window", openStateKey: "isModalOpen" };
         break;
@@ -1731,6 +1735,7 @@ export const PageBuilder: React.FC = () => {
                   "form",
                   "stat",
                   "chart",
+                  "visual",
                   "modal",
                   "select",
                   "input",
@@ -4814,6 +4819,10 @@ export const PageBuilder: React.FC = () => {
                     </div>
                   </div>
                 </>
+              )}
+
+              {selectedNode.type === "visual" && (
+                <VisualPropsEditor props={selectedNode.props ?? {}} onChange={handleUpdateProps} />
               )}
 
               {/* Chart Properties */}

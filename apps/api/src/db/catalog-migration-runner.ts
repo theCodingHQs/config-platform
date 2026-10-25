@@ -587,6 +587,26 @@ export const catalogMigrations: CatalogMigration[] = [
       await client.query(`ALTER TABLE public.live_agent ADD COLUMN IF NOT EXISTS online_until TIMESTAMPTZ;`);
     },
   },
+  {
+    version: 24,
+    name: '024_visuals',
+    up: async (client: PoolClient) => {
+      // Animated 2.5D drawings (Studio → Visuals) shown on pages by the Visual component
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.visual_def (
+          id VARCHAR(64) PRIMARY KEY,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          name VARCHAR(120) NOT NULL,
+          definition JSONB NOT NULL,
+          version INTEGER NOT NULL DEFAULT 1,
+          created_by VARCHAR(64) REFERENCES public.app_user(id) ON DELETE SET NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_visual_def_tenant ON public.visual_def(tenant_id);
+      `);
+    },
+  },
 ];
 
 /**

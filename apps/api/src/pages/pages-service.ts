@@ -11,6 +11,7 @@ import {
   type DataSourceDefinition,
 } from '@config-platform/schema';
 import { erdService } from '../schema/erd-service.js';
+import { visualRepository } from '../visuals/visual-repository.js';
 import crypto from 'node:crypto';
 
 /** A page request the client can fix; the error handler answers with its status and message. */
@@ -107,6 +108,8 @@ export class PagesService {
       entityColumnsMap.set(table.id, colSet);
       entityColumnsMap.set(table.name, colSet);
     }
+
+    const visualIds = await visualRepository.ids(tenantId, externalClient);
 
     const broken: string[] = [];
     const dataSourceMap = new Map<string, DataSourceDefinition>();
@@ -243,6 +246,13 @@ export class PagesService {
           if (aggregateFieldId && aggregateFieldId !== 'id' && !colSet.has(aggregateFieldId)) {
             broken.push(`Chart [${node.id}] references missing field '${aggregateFieldId}'`);
           }
+        }
+      }
+
+      if (node.type === 'visual') {
+        const visualId = node.props?.visualId;
+        if (visualId && !visualIds.has(visualId)) {
+          broken.push(`Visual [${node.id}] references missing visual '${visualId}'`);
         }
       }
 

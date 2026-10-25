@@ -23,6 +23,7 @@ export const NodeTypeSchema = z.enum([
   'tabs',
   'stat',
   'chart',
+  'visual',
 ]);
 export type NodeType = z.infer<typeof NodeTypeSchema>;
 
@@ -275,6 +276,15 @@ export const ChartPropsSchema = z.object({
   yAxisTitle: z.string().max(120).optional(),
 }).merge(LayoutPropsSchema);
 export type ChartProps = z.infer<typeof ChartPropsSchema>;
+
+/** Shows a visual from Studio → Visuals, its shapes moving with live data */
+export const VisualPropsSchema = z.object({
+  visualId: z.string().optional(),
+  /** Height in px; the drawing scales to fit. Empty = its own proportions at full width. */
+  height: z.number().int().min(80).max(3000).optional(),
+  title: z.string().max(120).optional(),
+}).merge(LayoutPropsSchema);
+export type VisualProps = z.infer<typeof VisualPropsSchema>;
 
 export interface NodeDefinition {
   id: string;

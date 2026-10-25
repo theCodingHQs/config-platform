@@ -16,6 +16,7 @@ import {
   TabsPropsSchema,
   StatPropsSchema,
   ChartPropsSchema,
+  VisualPropsSchema,
 } from '@config-platform/schema';
 import { StackComponent } from '../components/stack';
 import { TextComponent } from '../components/text';
@@ -32,6 +33,7 @@ import { CardComponent } from '../components/card';
 import { TabsComponent } from '../components/tabs';
 import { StatComponent } from '../components/stat';
 import { ChartComponent } from '../components/chart';
+import { VisualComponent } from '../components/visual';
 
 export interface ComponentRegistration<P = any> {
   component: React.ComponentType<P>;
@@ -131,4 +133,9 @@ defaultRegistry.register('stat', {
 defaultRegistry.register('chart', {
   component: ChartComponent,
   propsSchema: ChartPropsSchema,
+});
+
+defaultRegistry.register('visual', {
+  component: VisualComponent,
+  propsSchema: VisualPropsSchema,
 });

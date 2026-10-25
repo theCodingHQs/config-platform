@@ -1,0 +1,66 @@
+/* Visuals: shading of box faces and the animations shapes use. A shape sets --c (its colour);
+   animations read their timing from custom properties the shape sets from its props. */
+
+.vis-face-top { fill: var(--c); }
+.vis-face-left { fill: color-mix(in srgb, var(--c) 80%, var(--vis-shade)); }
+.vis-face-right { fill: color-mix(in srgb, var(--c) 62%, var(--vis-shade)); }
+.vis-cyl-side { fill: color-mix(in srgb, var(--c) 72%, var(--vis-shade)); }
+.vis-face-top, .vis-face-left, .vis-face-right, .vis-cyl-side {
+  stroke: color-mix(in srgb, var(--c) 55%, var(--vis-shade));
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+}
+.vis-flat { fill: var(--c); }
+
+.vis-scene { display: block; width: 100%; height: 100%; user-select: none; }
+.vis-text { fill: var(--vis-label); font-family: inherit; font-weight: 600; }
+.vis-text-strong { fill: var(--vis-label); font-family: inherit; font-weight: 700; }
+.vis-plate { fill: var(--vis-label-bg); stroke: var(--vis-floor-line); stroke-width: 1; }
+
+/* Moving along the shape's length: the element sets --vis-dx/--vis-dy (one step) and --vis-dur */
+@keyframes vis-slide {
+  from { transform: translate(0, 0); }
+  to { transform: translate(var(--vis-dx), var(--vis-dy)); }
+}
+.vis-slide { animation: vis-slide var(--vis-dur, 1s) linear infinite; }
+
+/* Items riding a conveyor from one end to the other */
+@keyframes vis-ride {
+  0% { transform: translate(0, 0); opacity: 0; }
+  6% { opacity: 1; }
+  94% { opacity: 1; }
+  100% { transform: translate(var(--vis-dx), var(--vis-dy)); opacity: 0; }
+}
+.vis-ride { animation: vis-ride var(--vis-dur, 4s) linear infinite; }
+
+@keyframes vis-spin { to { transform: rotate(360deg); } }
+.vis-spin { transform-box: fill-box; transform-origin: center; animation: vis-spin var(--vis-dur, 1s) linear infinite; }
+
+@keyframes vis-flow { to { stroke-dashoffset: calc(var(--vis-dash, 12) * -1); } }
+.vis-flow { animation: vis-flow var(--vis-dur, 0.6s) linear infinite; }
+
+@keyframes vis-blink { 50% { opacity: 0.25; } }
+.vis-blink { animation: vis-blink 0.9s steps(1, end) infinite; }
+
+@keyframes vis-pulse { 50% { opacity: 0.35; } }
+.vis-pulse { animation: vis-pulse 1.6s ease-in-out infinite; }
+
+@keyframes vis-swing {
+  0%, 100% { transform: rotate(calc(var(--vis-swing, 30deg) * -1)); }
+  50% { transform: rotate(var(--vis-swing, 30deg)); }
+}
+.vis-swing { animation: vis-swing var(--vis-dur, 3s) ease-in-out infinite; }
+
+.vis-paused, .vis-paused * { animation-play-state: paused !important; }
+.vis-level { transition: transform 0.6s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .vis-slide, .vis-ride, .vis-spin, .vis-flow, .vis-swing { animation-duration: 0s; animation-iteration-count: 0; }
+  .vis-blink, .vis-pulse { animation: none; }
+}
+
+/* Editor */
+.vis-selection { fill: none; stroke: var(--vis-select); stroke-width: 1.5; stroke-dasharray: 5 3; pointer-events: none; }
+.vis-hit { cursor: grab; }
+.vis-hit:active { cursor: grabbing; }
+.vis-grid-line { stroke: var(--vis-floor-line); stroke-width: 1; }
