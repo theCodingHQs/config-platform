@@ -1,17 +1,10 @@
 /**
- * Starting points for a new visual. Positions are given on the floor grid (u, v in tiles) and
- * turned into canvas positions here, so templates stay easy to read and change.
+ * The isometric assembly line, wired to the training simulator's Line 1 tags. Positions are given
+ * on the floor grid (u, v in tiles) and turned into canvas positions here.
  */
 import { emptyVisualDefinition, isoPoint, type VisualDefinition, type VisualNode } from "@config-platform/schema";
-import { shapeOf } from "./shapes";
-import { defaultProps } from "./resolve-props";
-
-export interface VisualTemplate {
-  id: string;
-  label: string;
-  description: string;
-  build: () => VisualDefinition;
-}
+import { shapeOf } from "../shapes";
+import { defaultProps } from "../resolve-props";
 
 const ORIGIN = { x: 450, y: 165 };
 
@@ -39,8 +32,7 @@ function place({ at: [u, v], id, type, name, flip, props, bindings }: Placed): V
   };
 }
 
-/** Assembly line wired to the training simulator's tags (line1.speed, line1.status, line1.count) */
-function assemblyLine(): VisualDefinition {
+export function assemblyLine(): VisualDefinition {
   const running = 'live.line1.status == "running"';
   const speed = "live.line1.speed / 40";
   const elements: Placed[] = [
@@ -61,9 +53,3 @@ function assemblyLine(): VisualDefinition {
   const depth = (e: Placed) => (e.type === "zone" ? -Infinity : e.at[0] + e.at[1]);
   return { ...emptyVisualDefinition("isometric"), nodes: [...elements].sort((a, b) => depth(a) - depth(b)).map(place) };
 }
-
-export const VISUAL_TEMPLATES: readonly VisualTemplate[] = [
-  { id: "blank", label: "Blank (flat)", description: "An empty 2D canvas", build: () => emptyVisualDefinition("flat") },
-  { id: "blank-iso", label: "Blank (isometric)", description: "An empty 2.5D floor", build: () => emptyVisualDefinition("isometric") },
-  { id: "assembly-line", label: "Assembly line", description: "Conveyors, a press, a robot and a tank wired to the Line 1 tags", build: assemblyLine },
-];

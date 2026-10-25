@@ -1,5 +1,5 @@
 /** Saving visuals: validation, safe saving (versions), and not deleting one a page still shows. */
-import { VisualInputSchema, type Visual, type VisualInput, type VisualSummary } from '@config-platform/schema';
+import { VisualInputSchema, symbolRefs, type Visual, type VisualInput, type VisualSummary } from '@config-platform/schema';
 import { LiveSettingsError } from '../live/live-errors.js';
 import { visualRepository } from './visual-repository.js';
 
@@ -27,6 +27,7 @@ export const visualService = {
     if (!Number.isInteger(expectedVersion)) throw new LiveSettingsError('expectedVersion is required');
     const input = parse(body);
     const before = await this.get(tenantId, id);
+    if (symbolRefs(input.definition.nodes).includes(id)) throw new LiveSettingsError("A symbol can't contain itself");
     const after = await visualRepository.update(tenantId, id, input, expectedVersion);
     if (!after) throw new LiveSettingsError('Someone else saved this visual since you opened it. Reload it to see their changes.', 409);
     return { before, after };
@@ -35,6 +36,10 @@ export const visualService = {
   async remove(tenantId: string, id: string): Promise<Visual> {
     const before = await this.get(tenantId, id);
     const pages = await visualRepository.pagesUsing(tenantId, id);
+    const visuals = before.kind === 'symbol' ? await visualRepository.visualsUsing(tenantId, id) : [];
+    if (visuals.length) {
+      throw new LiveSettingsError(`This symbol is placed in ${visuals.map((v) => `"${v}"`).join(', ')}. Remove it from there first.`, 409);
+    }
     if (pages.length) {
       throw new LiveSettingsError(`This visual is shown on ${pages.length === 1 ? 'the page' : 'pages'} ${pages.map((p) => `"${p}"`).join(', ')}. Remove it from there first.`, 409);
     }

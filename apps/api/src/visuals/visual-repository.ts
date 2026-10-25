@@ -1,12 +1,13 @@
 /** Saved visuals (public.visual_def): name, the drawing itself (definition), version for safe saving. */
 import crypto from 'node:crypto';
 import type { PoolClient } from 'pg';
-import { VisualDefinitionSchema, migrateVisualDefinition, type Visual, type VisualInput, type VisualSummary } from '@config-platform/schema';
+import { VisualDefinitionSchema, migrateVisualDefinition, type Visual, type VisualInput, type VisualKind, type VisualSummary } from '@config-platform/schema';
 import { pool } from '../db/pool.js';
 
 interface Row {
   id: string;
   name: string;
+  kind: VisualKind;
   definition: unknown;
   version: number;
   created_at: Date;
@@ -24,6 +25,7 @@ const toVisual = (r: Row): Visual => {
   return {
     id: r.id,
     name: r.name,
+    kind: r.kind,
     definition,
     elementCount: definition.nodes?.length ?? 0,
     version: r.version,
@@ -34,12 +36,12 @@ const toVisual = (r: Row): Visual => {
 
 export const visualRepository = {
   async list(tenantId: string): Promise<VisualSummary[]> {
-    const res = await pool.query<{ id: string; name: string; element_count: number; version: number; updated_at: Date }>(
-      `SELECT id, name, COALESCE(jsonb_array_length(COALESCE(definition->'nodes', definition->'elements')), 0) AS element_count, version, updated_at
+    const res = await pool.query<{ id: string; name: string; kind: VisualKind; element_count: number; version: number; updated_at: Date }>(
+      `SELECT id, name, kind, COALESCE(jsonb_array_length(COALESCE(definition->'nodes', definition->'elements')), 0) AS element_count, version, updated_at
        FROM public.visual_def WHERE tenant_id = $1 ORDER BY name, id`,
       [tenantId],
     );
-    return res.rows.map((r) => ({ id: r.id, name: r.name, elementCount: r.element_count, version: r.version, updatedAt: r.updated_at.toISOString() }));
+    return res.rows.map((r) => ({ id: r.id, name: r.name, kind: r.kind, elementCount: r.element_count, version: r.version, updatedAt: r.updated_at.toISOString() }));
   },
 
   async ids(tenantId: string, client?: PoolClient): Promise<Set<string>> {
@@ -49,7 +51,7 @@ export const visualRepository = {
 
   async get(tenantId: string, id: string): Promise<Visual | null> {
     const res = await pool.query<Row>(
-      'SELECT id, name, definition, version, created_at, updated_at FROM public.visual_def WHERE tenant_id = $1 AND id = $2',
+      'SELECT id, name, kind, definition, version, created_at, updated_at FROM public.visual_def WHERE tenant_id = $1 AND id = $2',
       [tenantId, id],
     );
     return res.rows[0] ? toVisual(res.rows[0]) : null;
@@ -58,8 +60,8 @@ export const visualRepository = {
   async create(tenantId: string, userId: string, input: VisualInput): Promise<Visual> {
     const id = `vis_${crypto.randomBytes(6).toString('hex')}`;
     await pool.query(
-      'INSERT INTO public.visual_def (id, tenant_id, name, definition, created_by) VALUES ($1, $2, $3, $4, $5)',
-      [id, tenantId, input.name, JSON.stringify(input.definition), userId],
+      'INSERT INTO public.visual_def (id, tenant_id, name, kind, definition, created_by) VALUES ($1, $2, $3, $4, $5, $6)',
+      [id, tenantId, input.name, input.kind, JSON.stringify(input.definition), userId],
     );
     return (await this.get(tenantId, id))!;
   },
@@ -85,6 +87,17 @@ export const visualRepository = {
       `SELECT name FROM public.page_def
        WHERE tenant_id = $1 AND (jsonb_path_exists(draft, '$.** ? (@.visualId == $id)', jsonb_build_object('id', $2::text))
                               OR jsonb_path_exists(published, '$.** ? (@.visualId == $id)', jsonb_build_object('id', $2::text)))
+       ORDER BY name`,
+      [tenantId, id],
+    );
+    return res.rows.map((r) => r.name);
+  },
+
+  /** Names of other visuals that place this symbol */
+  async visualsUsing(tenantId: string, id: string): Promise<string[]> {
+    const res = await pool.query<{ name: string }>(
+      `SELECT name FROM public.visual_def
+       WHERE tenant_id = $1 AND id <> $2 AND jsonb_path_exists(definition, '$.** ? (@.kind == "symbol" && @.ref == $id)', jsonb_build_object('id', $2::text))
        ORDER BY name`,
       [tenantId, id],
     );

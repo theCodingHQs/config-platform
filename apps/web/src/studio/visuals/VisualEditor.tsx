@@ -2,15 +2,22 @@
  * Editing one visual: tools on the far left, layers and ready-made parts next to them, the drawing
  * in the middle, settings for what's selected on the right.
  */
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ChevronRight, Maximize, Redo2, Save, Undo2, ZoomIn, ZoomOut } from "lucide-react";
+import { ArrowLeft, ChevronRight, FileUp, Maximize, Redo2, Save, Undo2, ZoomIn, ZoomOut } from "lucide-react";
 import type { Visual, VisualNode } from "@config-platform/schema";
 import { useLiveScope } from "../../live/use-live";
 import { shapeOf, type ShapeDef } from "../../visuals/shapes";
 import { defaultProps } from "../../visuals/resolve-props";
 import { VISUALS_KEY, visualKey, visualsApi } from "../../visuals/visuals-api";
+import { useSymbols } from "../../visuals/use-symbols";
+import { SymbolsPalette } from "./SymbolsPalette";
+import { inputDefaults } from "./InputsEditor";
+import { symbolFromNodes } from "./make-symbol";
+import { nodeBox, parentSpace, unionBox } from "./canvas-geometry";
+import { useSvgImport } from "./use-svg-import";
+import { alignMoves, type AlignMode } from "./align";
 import { useVisualEditor } from "./editor-state";
 import { EditorCanvas } from "./EditorCanvas";
 import { ShapePalette } from "./ShapePalette";
@@ -42,7 +49,15 @@ export function VisualEditor({ visual }: { visual: Visual }) {
   const fitZoom = useFitZoom(areaRef, state.definition.width, state.definition.height);
   const zoom = chosenZoom ?? fitZoom;
   const [message, setMessage] = useState<{ tone: "error" | "success"; text: string } | null>(null);
-  const live = useLiveScope(state.definition);
+  const isSymbol = visual.kind === "symbol";
+  const symbols = useSymbols(state.definition);
+  const watched = useMemo(() => [state.definition, ...symbols.values()], [state.definition, symbols]);
+  const live = useLiveScope(watched);
+  // Editing a symbol: its shapes see the inputs' starting values
+  const scope = useMemo(() => (isSymbol ? { ...live, inputs: inputDefaults(state.definition.inputs) } : live), [isSymbol, live, state.definition.inputs]);
+  const suggestions = useMemo(() => (state.definition.inputs ?? []).map((i) => `inputs.${i.name}`), [state.definition.inputs]);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const nodes = state.definition.nodes;
 
   const save = useMutation({
@@ -57,6 +72,9 @@ export function VisualEditor({ visual }: { visual: Visual }) {
     onError: (err: Error) => setMessage({ tone: "error", text: err.message }),
   });
 
+  const report = useCallback((tone: "error" | "success", text: string) => setMessage({ tone, text }), []);
+  const importSvg = useSvgImport(state.definition, dispatch, report);
+
   const addPart = useCallback(
     (shape: ShapeDef, at?: { x: number; y: number }) => {
       const pos = at ?? { x: Math.round(state.definition.width / 2), y: Math.round(state.definition.height / 2) };
@@ -65,6 +83,59 @@ export function VisualEditor({ visual }: { visual: Visual }) {
     },
     [dispatch, nodes, state.definition.width, state.definition.height],
   );
+
+  const addSymbol = useCallback(
+    (id: string, at?: { x: number; y: number }) => {
+      const pos = at ?? { x: Math.round(state.definition.width / 2), y: Math.round(state.definition.height / 2) };
+      dispatch({ type: "add", nodes: [{ id: nextId(allIds(nodes), "symbol"), kind: "symbol", ref: id, attrs: { x: pos.x, y: pos.y } }] });
+    },
+    [dispatch, nodes, state.definition.width, state.definition.height],
+  );
+
+  const makeSymbol = useMutation({
+    mutationFn: async (name: string) => {
+      const svg = svgRef.current;
+      const box = svg && unionBox(selected.map((n) => nodeBox(svg, n.id)));
+      if (!svg || !box) throw new Error("Select what to turn into a symbol first");
+      const toParent = parentSpace(svg, selected[0].id).point;
+      const a = toParent({ x: box.x, y: box.y });
+      const b = toParent({ x: box.x + box.width, y: box.y + box.height });
+      const local = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) };
+      const made = symbolFromNodes(selected, local, state.definition);
+      const saved = await visualsApi.create({ name, kind: "symbol", definition: made.definition });
+      return { saved, at: made.at };
+    },
+    onSuccess: ({ saved, at }) => {
+      queryClient.setQueryData(visualKey(saved.id), saved);
+      queryClient.invalidateQueries({ queryKey: VISUALS_KEY, exact: true });
+      const group = `symbol-${saved.id}`;
+      const parentId = parentIdOf(nodes, selected[0].id);
+      const index = childrenOf(nodes, parentId).findIndex((n) => n.id === selected[0].id);
+      dispatch({ type: "remove", ids: selected.map((n) => n.id), group });
+      dispatch({ type: "add", nodes: [{ id: nextId(allIds(nodes), "symbol"), kind: "symbol", ref: saved.id, name: saved.name, attrs: at }], parentId, index, group });
+      setMessage({ tone: "success", text: `Made the symbol "${saved.name}". Open it to add inputs.` });
+    },
+    onError: (err: Error) => setMessage({ tone: "error", text: err.message }),
+  });
+  const align = (mode: AlignMode) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const items = selected.filter((n) => !n.locked).flatMap((n) => {
+      const box = nodeBox(svg, n.id);
+      return box ? [{ id: n.id, box }] : [];
+    });
+    const changes = [...alignMoves(items, mode)].map(([id, d]) => {
+      const n = selected.find((x) => x.id === id)!;
+      const v = parentSpace(svg, id).vector({ x: d.dx, y: d.dy });
+      const r = (x: number) => Math.round(x * 100) / 100;
+      return { id, patch: { attrs: { x: r(num(n.attrs.x) + v.x), y: r(num(n.attrs.y) + v.y) } } };
+    });
+    if (changes.length) dispatch({ type: "update", changes });
+  };
+  const askSymbolName = () => {
+    const name = window.prompt("Name the new symbol", selected.length === 1 ? nodeLabel(selected[0]) : "");
+    if (name?.trim()) makeSymbol.mutate(name.trim());
+  };
 
   const step = state.definition.grid && state.definition.mode === "flat" ? state.definition.gridSize : 10;
   const duplicate = useCallback(() => {
@@ -96,7 +167,10 @@ export function VisualEditor({ visual }: { visual: Visual }) {
     },
     paste: async () => {
       const pasted = await readNodes();
-      if (pasted) dispatch({ type: "add", nodes: offset(withNewIds(pasted, allIds(nodes)), step) });
+      if (pasted) return dispatch({ type: "add", nodes: offset(withNewIds(pasted, allIds(nodes)), step) });
+      // SVG copied from a file or a browser's inspector comes in as shapes
+      const text = await navigator.clipboard.readText().catch(() => "");
+      if (/<svg[s>]/i.test(text)) importSvg(text, "Pasted SVG");
     },
     selectAll: () => dispatch({ type: "select", ids: childrenOf(nodes, state.openGroup).map((n) => n.id) }),
     group: () => selected.length && dispatch({ type: "group", ids: selected.map((n) => n.id) }),
@@ -155,6 +229,22 @@ export function VisualEditor({ visual }: { visual: Visual }) {
           </nav>
         )}
         <div style={{ flex: 1 }} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".svg,image/svg+xml"
+          hidden
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (!file) return;
+            if (file.size > 5_000_000) return report("error", "That file is too big (over 5 MB)");
+            importSvg(await file.text(), file.name.replace(/.svg$/i, ""));
+          }}
+        />
+        <button type="button" className="btn btn-ghost" style={iconBtn} title="Bring in an SVG file (or paste SVG with Ctrl+V)" onClick={() => fileRef.current?.click()}>
+          <FileUp size="1em" /> Import SVG
+        </button>
         <button type="button" className="btn btn-ghost" style={iconBtn} title="Undo (Ctrl+Z)" aria-label="Undo" disabled={!state.past.length} onClick={() => dispatch({ type: "undo" })}>
           <Undo2 size="1em" />
         </button>
@@ -189,6 +279,11 @@ export function VisualEditor({ visual }: { visual: Visual }) {
             {tab("parts", "Parts")}
           </div>
           <div style={{ overflowY: "auto", flex: 1, paddingRight: "var(--space-1)" }}>
+            {panel === "parts" && (
+              <div style={{ marginBottom: "var(--space-3)" }}>
+                <SymbolsPalette exclude={visual.id} onAdd={(id) => addSymbol(id)} />
+              </div>
+            )}
             {panel === "layers" ? (
               <LayersPanel
                 nodes={nodes}
@@ -210,13 +305,16 @@ export function VisualEditor({ visual }: { visual: Visual }) {
             <EditorCanvas
               state={state}
               dispatch={dispatch}
-              scope={live}
+              scope={scope}
+              symbols={symbols}
+              svgRef={svgRef}
               zoom={zoom}
               tool={tool}
               onToolDone={() => setTool("select")}
               onEditText={editText}
-              onDropPart={(type, x, y) => {
-                const shape = shapeOf(type);
+              onDrop={(what, ref, x, y) => {
+                if (what === "symbol") return addSymbol(ref, { x, y });
+                const shape = shapeOf(ref);
                 if (shape) addPart(shape, { x, y });
               }}
             />
@@ -226,7 +324,12 @@ export function VisualEditor({ visual }: { visual: Visual }) {
           <Inspector
             definition={state.definition}
             selected={selected}
-            scope={live}
+            scope={scope}
+            symbols={symbols}
+            isSymbol={isSymbol}
+            suggestions={suggestions}
+            onMakeSymbol={askSymbolName}
+            onAlign={align}
             onPatch={update}
             onCanvas={(patch, group) => dispatch({ type: "canvas", patch, group })}
             onDuplicate={duplicate}

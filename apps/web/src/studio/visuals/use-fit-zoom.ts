@@ -10,7 +10,8 @@ export function useFitZoom(ref: RefObject<HTMLElement | null>, width: number, he
       const style = getComputedStyle(el);
       const w = el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
       const h = el.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
-      if (w > 0 && h > 0) setZoom(Math.max(0.1, Math.min(w / width, h / height)));
+      // Small drawings (symbols) stop at 4× so shapes stay a sensible size to work on
+      if (w > 0 && h > 0) setZoom(Math.max(0.1, Math.min(4, w / width, h / height)));
     };
     measure();
     const observer = new ResizeObserver(measure);

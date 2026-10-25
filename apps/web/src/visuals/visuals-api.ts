@@ -13,7 +13,7 @@ export const visualsApi = {
   list: async () => handleResponse<VisualSummary[]>(await apiFetch(BASE)),
   get: async (id: string) => handleResponse<Visual>(await apiFetch(`${BASE}/${id}`)),
   create: async (input: VisualInput) => handleResponse<Visual>(await apiFetch(BASE, { method: "POST", ...json(input) })),
-  update: async (id: string, input: VisualInput & { expectedVersion: number }) =>
+  update: async (id: string, input: Omit<VisualInput, "kind"> & { expectedVersion: number }) =>
     handleResponse<Visual>(await apiFetch(`${BASE}/${id}`, { method: "PUT", ...json(input) })),
   remove: async (id: string) => {
     const res = await apiFetch(`${BASE}/${id}`, { method: "DELETE" });

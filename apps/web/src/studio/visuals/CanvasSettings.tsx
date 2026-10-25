@@ -4,18 +4,27 @@ import type { VisualDefinition } from "@config-platform/schema";
 import { Field, FieldRow } from "../live/Field";
 import { ColorInput } from "./ColorInput";
 import { PaintsEditor } from "./PaintsEditor";
+import { InputsEditor } from "./InputsEditor";
 
 interface Props {
   definition: VisualDefinition;
+  /** Editing a symbol: show its inputs */
+  isSymbol?: boolean;
   onCanvas: (patch: Partial<Omit<VisualDefinition, "nodes">>, group?: string) => void;
 }
 
 const num = (v: string, fallback: number, min: number, max: number) => (v === "" || Number.isNaN(Number(v)) ? fallback : Math.min(max, Math.max(min, Math.round(Number(v)))));
 
-export function CanvasSettings({ definition, onCanvas }: Props) {
+export function CanvasSettings({ definition, isSymbol, onCanvas }: Props) {
   const iso = definition.mode === "isometric";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
+      {isSymbol && (
+        <section style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+          <h2 style={{ margin: 0, fontSize: "var(--font-size-sm)" }}>Symbol inputs</h2>
+          <InputsEditor inputs={definition.inputs ?? []} onChange={(inputs, group) => onCanvas({ inputs }, group)} />
+        </section>
+      )}
       <h2 style={{ margin: 0, fontSize: "var(--font-size-sm)" }}>Canvas</h2>
       <p style={{ margin: 0, fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
         Draw with the tools on the left or add ready-made parts, then select something to set it up. The lightning button on any setting takes it from live data; rules change several settings at once when a condition holds.

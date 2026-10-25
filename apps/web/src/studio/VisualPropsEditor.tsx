@@ -18,7 +18,7 @@ export function VisualPropsEditor({ props, onChange }: { props: VisualProps; onC
         <select id="prop-visual-id" className="form-select" value={props.visualId ?? ""} onChange={(e) => onChange({ ...props, visualId: e.target.value || undefined })}>
           <option value="">Choose a visual</option>
           {missing && <option value={props.visualId}>Missing visual ({props.visualId})</option>}
-          {visuals.map((v) => (
+          {visuals.filter((v) => v.kind !== "symbol").map((v) => (
             <option key={v.id} value={v.id}>
               {v.name}
             </option>

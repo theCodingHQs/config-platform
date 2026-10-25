@@ -607,6 +607,20 @@ export const catalogMigrations: CatalogMigration[] = [
       `);
     },
   },
+  {
+    version: 25,
+    name: '025_visual_symbols',
+    up: async (client: PoolClient) => {
+      // Symbols: drawings with inputs, placed (many times) inside other drawings
+      await client.query(`
+        ALTER TABLE public.visual_def ADD COLUMN IF NOT EXISTS kind VARCHAR(16) NOT NULL DEFAULT 'drawing';
+        DO $$ BEGIN
+          ALTER TABLE public.visual_def ADD CONSTRAINT visual_def_kind_check CHECK (kind IN ('drawing', 'symbol'));
+        EXCEPTION WHEN duplicate_object THEN NULL;
+        END $$;
+      `);
+    },
+  },
 ];
 
 /**

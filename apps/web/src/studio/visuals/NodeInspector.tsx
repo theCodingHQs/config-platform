@@ -1,6 +1,7 @@
 /** The inspector for one selected node: its name, every attribute (each can follow live data), rules and animations */
 import React from "react";
-import { Copy, Eye, EyeOff, Lock, Trash2, Unlock } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Component, Copy, ExternalLink, Eye, EyeOff, Lock, Trash2, Unlock } from "lucide-react";
 import type { VisualDefinition, VisualNode } from "@config-platform/schema";
 import { shapeOf, type PropSpec } from "../../visuals/shapes";
 import type { ResolvedNode } from "../../visuals/resolve-props";
@@ -39,11 +40,12 @@ interface Props {
   onPatch: (patch: NodePatch, group?: string) => void;
   onDuplicate: () => void;
   onRemove: () => void;
+  onMakeSymbol: () => void;
 }
 
 const iconBtn = { padding: "var(--space-1)" } as const;
 
-export function NodeInspector({ node, definition, specs, resolved, tagListId, onPatch, onDuplicate, onRemove }: Props) {
+export function NodeInspector({ node, definition, specs, resolved, tagListId, onPatch, onDuplicate, onRemove, onMakeSymbol }: Props) {
   const paints = (definition.paints ?? []).map((p) => p.id);
   const iso = definition.mode === "isometric";
   const shown = specs.filter((s) => !s.isoOnly || iso);
@@ -82,6 +84,9 @@ export function NodeInspector({ node, definition, specs, resolved, tagListId, on
         <button type="button" className="btn btn-ghost" style={iconBtn} title={node.locked ? "Unlock" : "Lock in place"} aria-label={node.locked ? "Unlock" : "Lock"} aria-pressed={Boolean(node.locked)} onClick={() => onPatch({ locked: !node.locked })}>
           {node.locked ? <Lock size="1em" /> : <Unlock size="1em" />}
         </button>
+        <button type="button" className="btn btn-ghost" style={iconBtn} title="Make a symbol from it, to reuse it" aria-label="Make a symbol" onClick={onMakeSymbol}>
+          <Component size="1em" />
+        </button>
         <button type="button" className="btn btn-ghost" style={iconBtn} title="Duplicate (Ctrl+D)" aria-label="Duplicate" onClick={onDuplicate}>
           <Copy size="1em" />
         </button>
@@ -90,6 +95,14 @@ export function NodeInspector({ node, definition, specs, resolved, tagListId, on
         </button>
       </div>
       {part && <p style={{ margin: 0, fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>{part.description}</p>}
+      {node.kind === "symbol" && node.ref && (
+        <p style={{ margin: 0, fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
+          A copy of a symbol: set or bind its inputs below.{" "}
+          <Link to={`/studio/visuals/${node.ref}`} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1)" }}>
+            Edit the symbol <ExternalLink size="1em" />
+          </Link>
+        </p>
+      )}
 
       <Field label="Name" htmlFor="vis-node-name" hint="To find it in the layers list">
         <input id="vis-node-name" className="form-input" value={node.name ?? ""} placeholder={part?.label ?? KIND_LABELS[node.kind]} onChange={(e) => onPatch({ name: e.target.value || undefined }, group("name"))} />

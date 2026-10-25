@@ -137,11 +137,30 @@ describe('format', () => {
     expect(d.nodes[0]).toMatchObject({ kind: 'preset', ref: 'zone', attrs: { x: 400, y: 100, length: 5 } });
   });
 
-  it('templates are valid drawings with known parts', () => {
+  it('templates and their symbols are valid drawings with known parts', () => {
     for (const t of VISUAL_TEMPLATES) {
-      const d = VisualDefinitionSchema.parse(t.build());
+      const ids = Object.fromEntries((t.symbols ?? []).map((s) => [s.key, `sym-${s.key}`]));
+      const d = VisualDefinitionSchema.parse(t.build(ids));
       expect(d.nodes.every((n) => n.kind !== 'preset' || shapeOf(n.ref!))).toBe(true);
+      for (const s of t.symbols ?? []) VisualDefinitionSchema.parse(s.build());
     }
+  });
+
+  it('the heat treatment line moves its wagon and lights its stations from the ht tags', () => {
+    const t = VISUAL_TEMPLATES.find((x) => x.id === 'heat-treatment')!;
+    const [station, wagon] = t.symbols!.map((s) => s.build());
+    const d = t.build({ station: 'st', wagon: 'wg' });
+    const symbols = new Map([['st', station], ['wg', wagon]]);
+    const scope = { live: { ht: { wagon: { position: 30700, busy: 'yes', moving: 'no', lift: 50 }, phf: { status: 'alarm', heat: 90 } } } };
+    const { container, getByText, getAllByText } = render(<VisualScene definition={d} scope={scope} symbols={symbols} />);
+    expect(container.querySelector('[data-node-id="wagon"]')!.getAttribute('transform')).toBe('translate(1266.3 184)');
+    expect(getByText('BUSY')).toBeTruthy();
+    expect(getByText('Wagon at 30700 of 30700 mm')).toBeTruthy();
+    expect(getAllByText('Waiting')).toHaveLength(3);
+    // PHF is in alarm: its status lamp blinks; the wagon is at the unloading end, so only that station shows it
+    expect(container.querySelector('[data-node-id="station-phf"] [data-node-id="status"] .vis-fx-blink')).toBeTruthy();
+    const here = [...container.querySelectorAll('[data-node-id="wagon-here"] polygon')].map((p) => p.getAttribute('fill'));
+    expect(here.filter((f) => f === 'var(--vis-blue)')).toHaveLength(1);
   });
 });
 
@@ -253,5 +272,91 @@ describe('range helper', () => {
     expect(b).toBe('scale(live.cart.position, 0, 30700, 20, 1380)');
     expect(parseScale(b)).toEqual({ expr: 'live.cart.position', range: ['0', '30700', '20', '1380'] });
     expect(parseScale('live.x').expr).toBe('live.x');
+  });
+});
+
+describe('symbols', () => {
+  it('each placed copy draws the symbol with its own inputs', async () => {
+    const { symbolRefs } = await import('@config-platform/schema');
+    const lamp: VisualDefinition = {
+      ...emptyVisualDefinition(),
+      inputs: [{ name: 'status', type: 'text', default: 'off' }],
+      nodes: [{ id: 'l', kind: 'ellipse', attrs: { rx: 5, ry: 5, fill: 'grey' }, rules: [{ when: 'inputs.status == "alarm"', set: { fill: 'red' } }] }],
+    };
+    const d = def([
+      { id: 'a', kind: 'symbol', ref: 'sym', attrs: { x: 10 } },
+      { id: 'b', kind: 'symbol', ref: 'sym', attrs: { x: 50 }, bindings: { status: 'live.line1.state' } },
+      { id: 'c', kind: 'symbol', ref: 'missing', attrs: {} },
+    ]);
+    expect(symbolRefs(d.nodes)).toEqual(['sym', 'missing']);
+    const { container } = render(<VisualScene definition={d} scope={live({ state: 'alarm' })} symbols={new Map([['sym', lamp]])} />);
+    const fills = [...container.querySelectorAll('ellipse')].map((e) => e.getAttribute('fill'));
+    expect(fills).toEqual(['grey', 'red']);
+    // A symbol that isn't there (yet) shows a placeholder, not an error
+    expect(container.querySelector('[data-node-id="c"] rect[stroke-dasharray]')).toBeTruthy();
+  });
+
+  it('making a symbol moves the shapes onto its own canvas and keeps the gradients they use', async () => {
+    const { symbolFromNodes } = await import('../src/studio/visuals/make-symbol');
+    const from = def([], { paints: [{ id: 'body', type: 'linear', stops: [{ offset: 0, color: 'white' }] }, { id: 'unused', type: 'radial', stops: [{ offset: 0, color: 'red' }] }] });
+    const made = symbolFromNodes([rect({ attrs: { x: 110, y: 220, width: 50, height: 30, fill: 'url(#body)' } })], { x: 110, y: 220, width: 50, height: 30 }, from);
+    expect(made.at).toEqual({ x: 106, y: 216 });
+    expect(made.definition).toMatchObject({ width: 58, height: 38, inputs: [], paints: [{ id: 'body' }] });
+    expect(made.definition.nodes[0].attrs).toMatchObject({ x: 4, y: 4 });
+  });
+});
+
+describe('lining up', () => {
+  it('aligns edges and spaces shapes evenly', async () => {
+    const { alignMoves } = await import('../src/studio/visuals/align');
+    const items = [
+      { id: 'a', box: { x: 0, y: 0, width: 10, height: 10 } },
+      { id: 'b', box: { x: 50, y: 5, width: 20, height: 10 } },
+      { id: 'c', box: { x: 100, y: 20, width: 10, height: 10 } },
+    ];
+    expect([...alignMoves(items, 'top')]).toEqual([['b', { dx: 0, dy: -5 }], ['c', { dx: 0, dy: -20 }]]);
+    expect(alignMoves(items, 'right').get('a')).toEqual({ dx: 100, dy: 0 });
+    // 110 wide, 40 of shapes: gaps of 35, so b starts at 45
+    expect([...alignMoves(items, 'spread-x')]).toEqual([['b', { dx: -5, dy: 0 }]]);
+  });
+});
+
+describe('SVG import', () => {
+  it('brings in shapes, gradients, nested icons, transforms and titles; skips what it cannot show', async () => {
+    const { importSvg } = await import('../src/studio/visuals/svg-import');
+    const svg = `<svg viewBox="0 0 1400 420"><defs><linearGradient id="gBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".6" stop-color="#eef2f7"/></linearGradient><pattern id="gHaz"/></defs>
+      <g><title>PHF station</title><rect fill="url(#gBody)" stroke="#9aa8b8" stroke-width="1.3" x="20" y="56" width="112" height="170" rx="4"/>
+        <text x="76" y="26" text-anchor="middle" font-size="12" font-weight="700" style="font-family: ui-monospace, Menlo">PHF</text>
+        <g transform="translate(41, 231.5)"><svg width="12" height="12" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="#c3ccd6"/></svg></g>
+        <rect x="-6" y="163" width="12" height="217" style="transform-box: fill-box; transform-origin: center bottom; transform: scaleY(0.5)"/>
+        <rect x="0" y="0" width="5" height="5" fill="url(#gHaz)"/><use href="#x"/><script>alert(1)</script></g></svg>`;
+    const r = importSvg(svg, new Set());
+    expect(r).toMatchObject({ width: 1400, height: 420, skipped: { use: 1 } });
+    expect(r.paints).toEqual([{ id: 'gBody', type: 'linear', x1: 0, y1: 0, x2: 0, y2: 1, stops: [{ offset: 0, color: '#ffffff' }, { offset: 0.6, color: '#eef2f7' }] }]);
+    const [g] = r.nodes;
+    expect(g).toMatchObject({ kind: 'group', name: 'PHF station' });
+    const [body, label, icon, column, hatched] = g.children!;
+    expect(body.attrs).toMatchObject({ x: 20, y: 56, width: 112, height: 170, rx: 4, fill: 'url(#gBody)', strokeWidth: 1.3 });
+    expect(label.attrs).toMatchObject({ text: 'PHF', fontSize: 12, fontWeight: '700', fontFamily: 'monospace', textAnchor: 'middle' });
+    // The icon's 16-unit viewBox is scaled into 12 × 12
+    expect(icon.children![0]).toMatchObject({ kind: 'group', attrs: { scaleX: 0.75, scaleY: 0.75, pivot: 'anchor' } });
+    // Shrunk to half height around its bottom edge: it now starts half way down
+    expect(column.attrs).toMatchObject({ x: -6, y: 271.5, scaleY: 0.5 });
+    // A pattern fill can't be shown, so it's left unset rather than broken
+    expect(hatched.attrs.fill).toBeUndefined();
+  });
+
+  it('refuses text that is not SVG', async () => {
+    const { importSvg } = await import('../src/studio/visuals/svg-import');
+    expect(() => importSvg('<html><body/></html>', new Set())).toThrow(/isn't an SVG/);
+  });
+
+  it('keeps both gradients when an imported one has a name already used', async () => {
+    const { mergePaints } = await import('../src/studio/visuals/use-svg-import');
+    const mine = { id: 'body', type: 'linear' as const, stops: [{ offset: 0, color: 'red' }] };
+    const theirs = { id: 'body', type: 'linear' as const, stops: [{ offset: 0, color: 'blue' }] };
+    const { paints, renames } = mergePaints([mine], [theirs, mine]);
+    expect(paints.map((p) => p.id)).toEqual(['body', 'body-2']);
+    expect(renames.get('body')).toBe('body-2');
   });
 });

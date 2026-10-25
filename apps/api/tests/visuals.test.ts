@@ -58,6 +58,22 @@ describe('Visuals API', () => {
     expect((await call(builder, 'DELETE', `/visuals/${res.json().id}`)).statusCode).toBe(204);
   });
 
+  it('symbols are placed in drawings and cannot be deleted while placed or contain themselves', async () => {
+    const sym = await call(builder, 'POST', '/visuals', { name: 'Station', kind: 'symbol', definition: { width: 120, height: 200, inputs: [{ name: 'status', type: 'text', default: 'idle' }], nodes: [lamp] } });
+    expect(sym.json()).toMatchObject({ kind: 'symbol', definition: { inputs: [{ name: 'status', type: 'text' }] } });
+    const symId = sym.json().id;
+    const self = await call(builder, 'PUT', `/visuals/${symId}`, { name: 'Station', definition: { nodes: [{ id: 's', kind: 'symbol', ref: symId, attrs: {} }] }, expectedVersion: 1 });
+    expect(self.json().message).toMatch(/can't contain itself/);
+    const line = await call(builder, 'POST', '/visuals', { name: 'HT line', definition: { nodes: [{ id: 'g', kind: 'group', attrs: {}, children: [{ id: 's1', kind: 'symbol', ref: symId, attrs: { x: 10, status: 'running' } }] }] } });
+    expect(line.json().kind).toBe('drawing');
+    const blocked = await call(builder, 'DELETE', `/visuals/${symId}`);
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json().message).toMatch(/placed in "HT line"/);
+    expect((await call(builder, 'GET', '/visuals')).json().find((v: { id: string }) => v.id === symId).kind).toBe('symbol');
+    expect((await call(builder, 'DELETE', `/visuals/${line.json().id}`)).statusCode).toBe(204);
+    expect((await call(builder, 'DELETE', `/visuals/${symId}`)).statusCode).toBe(204);
+  });
+
   it('rejects bad drawings with a readable message', async () => {
     const dup = await call(builder, 'POST', '/visuals', { name: 'Dup', definition: { nodes: [conveyor, { id: 'g', kind: 'group', attrs: {}, children: [conveyor] }] } });
     expect(dup.statusCode).toBe(422);

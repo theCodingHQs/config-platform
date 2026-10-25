@@ -5,6 +5,7 @@ import { usePageRuntime } from "../context/page-runtime-context";
 import { useLiveScope } from "../live/use-live";
 import { VisualScene } from "../visuals/VisualScene";
 import { visualKey, visualsApi } from "../visuals/visuals-api";
+import { useSymbols } from "../visuals/use-symbols";
 import { BrokenBinding } from "../renderer/broken-binding";
 
 const css = (v: number | string | undefined) => (typeof v === "number" ? `${v}px` : v);
@@ -18,7 +19,10 @@ export const VisualComponent: React.FC<VisualProps> = ({ visualId, height, title
     enabled: Boolean(visualId),
     retry: (count, err: any) => err?.statusCode !== 404 && count < 2,
   });
-  const live = useLiveScope(visual?.definition);
+  const symbols = useSymbols(visual?.definition);
+  // Tags used inside placed symbols count too
+  const watched = useMemo(() => (visual ? [visual.definition, ...symbols.values()] : undefined), [visual, symbols]);
+  const live = useLiveScope(watched);
   const scope = useMemo(() => ({ ...(runtime?.scope ?? {}), ...live }), [runtime?.scope, live]);
 
   const box: React.CSSProperties = {
@@ -57,7 +61,7 @@ export const VisualComponent: React.FC<VisualProps> = ({ visualId, height, title
         }}
       >
         {visual ? (
-          <VisualScene definition={visual.definition} scope={scope} ariaLabel={visual.name} />
+          <VisualScene definition={visual.definition} scope={scope} symbols={symbols} ariaLabel={visual.name} />
         ) : (
           <div style={{ display: "grid", placeItems: "center", height: "100%", color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
             {isLoading ? "Loading…" : "This visual couldn't be loaded"}

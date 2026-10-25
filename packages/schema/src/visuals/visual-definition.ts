@@ -122,8 +122,14 @@ export function migrateVisualDefinition(raw: unknown): unknown {
   };
 }
 
+/** A drawing (shown on pages) or a symbol (placed inside drawings, with inputs) */
+export const VISUAL_KINDS = ['drawing', 'symbol'] as const;
+export type VisualKind = (typeof VISUAL_KINDS)[number];
+
 export const VisualInputSchema = z.object({
   name: z.string().trim().min(1, 'Give the visual a name').max(120),
+  /** Set when it's created; a drawing stays a drawing */
+  kind: z.enum(VISUAL_KINDS).default('drawing'),
   definition: VisualDefinitionSchema,
 });
 export type VisualInput = z.infer<typeof VisualInputSchema>;
@@ -131,6 +137,7 @@ export type VisualInput = z.infer<typeof VisualInputSchema>;
 export interface VisualSummary {
   id: string;
   name: string;
+  kind: VisualKind;
   /** Shapes at the top level of the drawing */
   elementCount: number;
   version: number;
@@ -140,6 +147,13 @@ export interface VisualSummary {
 export interface Visual extends VisualSummary {
   definition: VisualDefinition;
   createdAt: string;
+}
+
+/** Ids of the symbols a drawing places (directly, not inside those symbols) */
+export function symbolRefs(nodes: readonly VisualNode[]): string[] {
+  const refs = new Set<string>();
+  for (const n of walkVisualNodes(nodes)) if (n.kind === 'symbol' && n.ref) refs.add(n.ref);
+  return [...refs];
 }
 
 export function emptyVisualDefinition(mode: VisualMode = 'flat'): VisualDefinition {

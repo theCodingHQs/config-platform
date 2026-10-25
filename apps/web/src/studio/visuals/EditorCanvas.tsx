@@ -6,6 +6,7 @@ import React, { useLayoutEffect, useRef, useState } from "react";
 import type { ExpressionScope, VisualDefinition } from "@config-platform/schema";
 import { VisualScene } from "../../visuals/VisualScene";
 import { SHAPE_DRAG_TYPE } from "./ShapePalette";
+import { SYMBOL_DRAG_TYPE } from "./SymbolsPalette";
 import type { EditorAction, EditorState } from "./editor-state";
 import type { CanvasCtx } from "./canvas-context";
 import { nodeBox, snapPoint, toDrawing } from "./canvas-geometry";
@@ -25,7 +26,10 @@ interface Props {
   tool: ToolId;
   onToolDone: () => void;
   onEditText: (id: string) => void;
-  onDropPart: (type: string, x: number, y: number) => void;
+  /** A ready-made part ("part") or one of the workspace's symbols dropped on the canvas */
+  onDrop: (what: "part" | "symbol", ref: string, x: number, y: number) => void;
+  /** Gives the editor the drawn canvas, for measuring shapes */
+  svgRef?: React.MutableRefObject<SVGSVGElement | null>;
 }
 
 type Measured = Array<{ id: string; box: Box; locked: boolean }>;
@@ -33,7 +37,7 @@ type Measured = Array<{ id: string; box: Box; locked: boolean }>;
 const same = (a: Measured, b: Measured) =>
   a.length === b.length && a.every((m, i) => m.id === b[i].id && m.locked === b[i].locked && (["x", "y", "width", "height"] as const).every((k) => Math.abs(m.box[k] - b[i].box[k]) < 0.01));
 
-export function EditorCanvas({ state, dispatch, scope, symbols, zoom, tool, onToolDone, onEditText, onDropPart }: Props) {
+export function EditorCanvas({ state, dispatch, scope, symbols, zoom, tool, onToolDone, onEditText, onDrop, svgRef: outerRef }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const { definition } = state;
   const ctxRef = useRef<CanvasCtx>(null as unknown as CanvasCtx);
@@ -54,6 +58,7 @@ export function EditorCanvas({ state, dispatch, scope, symbols, zoom, tool, onTo
   useLayoutEffect(() => {
     const svg = svgRef.current;
     ctxRef.current.svg = svg;
+    if (outerRef) outerRef.current = svg;
     const next: Measured = [];
     for (const id of state.selection) {
       const box = svg && nodeBox(svg, id);
@@ -70,18 +75,19 @@ export function EditorCanvas({ state, dispatch, scope, symbols, zoom, tool, onTo
       onPointerUp={gestures.onPointerUp}
       onDoubleClick={gestures.onDoubleClick}
       onDragOver={(e) => {
-        if (e.dataTransfer.types.includes(SHAPE_DRAG_TYPE)) {
+        if (e.dataTransfer.types.includes(SHAPE_DRAG_TYPE) || e.dataTransfer.types.includes(SYMBOL_DRAG_TYPE)) {
           e.preventDefault();
           e.dataTransfer.dropEffect = "copy";
         }
       }}
       onDrop={(e) => {
-        const type = e.dataTransfer.getData(SHAPE_DRAG_TYPE);
-        if (!type || !svgRef.current) return;
+        const part = e.dataTransfer.getData(SHAPE_DRAG_TYPE);
+        const symbol = e.dataTransfer.getData(SYMBOL_DRAG_TYPE);
+        if ((!part && !symbol) || !svgRef.current) return;
         e.preventDefault();
         const g = ctxRef.current.grid;
-        const at = snapPoint(toDrawing(svgRef.current, e.clientX, e.clientY), { ...g, on: g.on && !e.altKey });
-        onDropPart(type, at.x, at.y);
+        const at = snapPoint(toDrawing(svgRef.current, e.clientX, e.clientY), { ...g, on: g.on && !e.altKey, isometric: g.isometric && Boolean(part) });
+        onDrop(part ? "part" : "symbol", part || symbol, at.x, at.y);
       }}
       data-testid="visual-canvas"
     >

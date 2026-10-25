@@ -22,8 +22,10 @@ describe('Catalog Migration 008: User Theme Preference', () => {
   });
 
   it('preserves all historical migrations without modification', () => {
+    // Versions run 1, 2, 3… with none removed or reordered (new ones are only added at the end)
     const versions = catalogMigrations.map((m) => m.version);
-    expect(versions).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+    expect(versions).toEqual(versions.map((_, i) => i + 1));
+    expect(versions.length).toBeGreaterThanOrEqual(25);
   });
 
   it('includes migration 014_page_nav_folder_icon in catalogMigrations', () => {
