@@ -51,16 +51,33 @@
 }
 .vis-swing { animation: vis-swing var(--vis-dur, 3s) ease-in-out infinite; }
 
+/* Animations any node can run (effects and rules); --vis-speed: 1 = normal, 2 = twice as fast */
+@keyframes vis-shake {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-1.5px, 0.5px); }
+  75% { transform: translate(1.5px, -0.5px); }
+}
+.vis-fx-blink { animation: vis-blink calc(0.9s / var(--vis-speed, 1)) steps(1, end) infinite; }
+.vis-fx-pulse { animation: vis-pulse calc(1.6s / var(--vis-speed, 1)) ease-in-out infinite; }
+.vis-fx-spin { transform-box: fill-box; transform-origin: center; animation: vis-spin calc(2s / var(--vis-speed, 1)) linear infinite; }
+.vis-fx-flow { animation: vis-flow calc(0.8s / var(--vis-speed, 1)) linear infinite; }
+.vis-fx-shake { animation: vis-shake calc(0.35s / var(--vis-speed, 1)) linear infinite; }
+
 .vis-paused, .vis-paused * { animation-play-state: paused !important; }
 .vis-level { transition: transform 0.6s ease; }
 
 @media (prefers-reduced-motion: reduce) {
   .vis-slide, .vis-ride, .vis-spin, .vis-flow, .vis-swing { animation-duration: 0s; animation-iteration-count: 0; }
-  .vis-blink, .vis-pulse { animation: none; }
+  .vis-blink, .vis-pulse, .vis-fx-blink, .vis-fx-pulse, .vis-fx-spin, .vis-fx-flow, .vis-fx-shake { animation: none; }
 }
 
 /* Editor */
-.vis-selection { fill: none; stroke: var(--vis-select); stroke-width: 1.5; stroke-dasharray: 5 3; pointer-events: none; }
+.vis-selection { fill: none; stroke: var(--vis-select); stroke-width: 1.5; stroke-dasharray: 5 3; pointer-events: none; vector-effect: non-scaling-stroke; }
 .vis-hit { cursor: grab; }
 .vis-hit:active { cursor: grabbing; }
 .vis-grid-line { stroke: var(--vis-floor-line); stroke-width: 1; }
+.vis-grid-fine { stroke-width: 0.5; opacity: 0.6; }
+.vis-handle { fill: var(--vis-light); stroke: var(--vis-select); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
+.vis-marquee { fill: color-mix(in srgb, var(--vis-select) 10%, transparent); stroke: var(--vis-select); stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.vis-draft { fill: none; stroke: var(--vis-select); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.vis-hover { fill: none; stroke: var(--vis-select); stroke-width: 1; opacity: 0.6; vector-effect: non-scaling-stroke; pointer-events: none; }

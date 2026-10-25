@@ -1,40 +1,32 @@
 /**
- * Draws a visual: the floor grid, then each element in depth order (further back first). Used by
- * pages (read only) and by the editor, which adds selection and dragging through `renderOverlay`
- * and `elementProps`.
+ * Draws a visual: its background (and the floor grid in isometric drawings), its gradients, then
+ * every node in order (later nodes draw on top). Used by pages (read only) and by the editor, which
+ * adds its grid and selection through `renderOverlay`.
  */
 import React, { useId, useMemo } from "react";
-import { ISO, isoPoint, screenToIso, type ExpressionScope, type VisualDefinition, type VisualElement } from "@config-platform/schema";
-import { shapeOf } from "./shapes";
-import { isoFrame } from "./shapes/iso-draw";
-import { resolveElement, type ResolvedElement } from "./resolve-props";
+import { ISO, isoPoint, type ExpressionScope, type VisualDefinition, type VisualNode } from "@config-platform/schema";
+import { NodeView, RenderEnvContext, type RenderEnv } from "./NodeView";
+import { PaintDefs } from "./paints";
+import { safeColor } from "./coerce";
 import "./visuals.css";
 
 export interface VisualSceneProps {
   definition: VisualDefinition;
   /** null: show the set values only (bindings not worked out) */
   scope: ExpressionScope | null;
+  symbols?: ReadonlyMap<string, VisualDefinition>;
   className?: string;
   style?: React.CSSProperties;
   svgRef?: React.Ref<SVGSVGElement>;
-  /** Extra attributes for each element's group (the editor's pointer handlers) */
-  elementProps?: (el: VisualElement) => React.SVGProps<SVGGElement>;
+  nodeProps?: (node: VisualNode) => React.SVGProps<SVGGElement> | undefined;
+  /** Show the square grid of flat drawings (the editor) */
+  showGrid?: boolean;
+  showHidden?: boolean;
   /** Drawn above everything, in drawing coordinates */
-  renderOverlay?: (resolved: Map<string, ResolvedElement>) => React.ReactNode;
+  renderOverlay?: () => React.ReactNode;
+  /** Drawn under the nodes, above the background */
+  renderUnderlay?: () => React.ReactNode;
   ariaLabel?: string;
-}
-
-/** Order elements are drawn in: by layer, then from the back of the floor to the front */
-export function drawOrder(elements: VisualElement[]): VisualElement[] {
-  const depth = (el: VisualElement) => {
-    const shape = shapeOf(el.type);
-    const { u, v } = screenToIso(el.x, el.y);
-    const fp = shape ? shape.footprint(Object.fromEntries(shape.props.map((p) => [p.name, el.props[p.name] ?? p.default])) as any) : { a: 1, b: 1 };
-    const [du, dv] = el.flip ? [fp.b, fp.a] : [fp.a, fp.b];
-    return u + v + ((du + dv) / 2) * el.scale;
-  };
-  const layerOf = (el: VisualElement) => el.layer ?? shapeOf(el.type)?.layer ?? 0;
-  return [...elements].sort((x, y) => layerOf(x) - layerOf(y) || depth(x) - depth(y));
 }
 
 function FloorGrid({ width, height }: { width: number; height: number }) {
@@ -51,17 +43,29 @@ function FloorGrid({ width, height }: { width: number; height: number }) {
   return <g>{lines}</g>;
 }
 
-export function VisualScene({ definition, scope, className, style, svgRef, elementProps, renderOverlay, ariaLabel }: VisualSceneProps) {
-  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
-  const ordered = useMemo(() => drawOrder(definition.elements), [definition.elements]);
-  const resolved = useMemo(() => {
-    const map = new Map<string, ResolvedElement>();
-    for (const el of definition.elements) {
-      const shape = shapeOf(el.type);
-      if (shape) map.set(el.id, resolveElement(shape, el, scope));
-    }
-    return map;
-  }, [definition.elements, scope]);
+function SquareGrid({ width, height, size, prefix }: { width: number; height: number; size: number; prefix: string }) {
+  // Faint lines every step, stronger every 5
+  const id = `${prefix}--grid`;
+  return (
+    <>
+      <defs>
+        <pattern id={`${id}-s`} width={size} height={size} patternUnits="userSpaceOnUse">
+          <path d={`M${size} 0H0V${size}`} fill="none" className="vis-grid-line vis-grid-fine" />
+        </pattern>
+        <pattern id={id} width={size * 5} height={size * 5} patternUnits="userSpaceOnUse">
+          <rect width={size * 5} height={size * 5} fill={`url(#${id}-s)`} />
+          <path d={`M${size * 5} 0H0V${size * 5}`} fill="none" className="vis-grid-line" />
+        </pattern>
+      </defs>
+      <rect width={width} height={height} fill={`url(#${id})`} pointerEvents="none" />
+    </>
+  );
+}
+
+export function VisualScene({ definition, scope, symbols, className, style, svgRef, nodeProps, showGrid, showHidden, renderOverlay, renderUnderlay, ariaLabel }: VisualSceneProps) {
+  const prefix = `v${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const isometric = definition.mode === "isometric";
+  const env = useMemo<RenderEnv>(() => ({ scope, prefix, isometric, symbols, nodeProps, showHidden, depth: 0 }), [scope, prefix, isometric, symbols, nodeProps, showHidden]);
 
   return (
     <svg
@@ -73,24 +77,21 @@ export function VisualScene({ definition, scope, className, style, svgRef, eleme
       aria-label={ariaLabel}
       style={style}
     >
-      <rect x={0} y={0} width={definition.width} height={definition.height} style={{ fill: "var(--vis-floor)" }} />
-      {definition.grid === "isometric" && (
-        <svg x={0} y={0} width={definition.width} height={definition.height} overflow="hidden">
+      <PaintDefs paints={definition.paints} prefix={prefix} />
+      <rect x={0} y={0} width={definition.width} height={definition.height} style={{ fill: (definition.background && safeColor(definition.background)) || "var(--vis-floor)" }} data-background="" />
+      {isometric && definition.grid && (
+        <svg x={0} y={0} width={definition.width} height={definition.height} overflow="hidden" pointerEvents="none">
           <FloorGrid width={definition.width} height={definition.height} />
         </svg>
       )}
-      {ordered.map((el) => {
-        const shape = shapeOf(el.type);
-        const r = resolved.get(el.id);
-        if (!shape || !r) return null;
-        const turned = el.flip && !shape.noTurn;
-        return (
-          <g key={el.id} data-element-id={el.id} transform={`translate(${el.x},${el.y}) scale(${el.scale})`} {...elementProps?.(el)}>
-            <shape.Render p={r.props} g={isoFrame(turned)} uid={`${uid}-${el.id.replace(/[^a-zA-Z0-9_-]/g, "")}`} />
-          </g>
-        );
-      })}
-      {renderOverlay?.(resolved)}
+      {!isometric && showGrid && definition.grid && <SquareGrid width={definition.width} height={definition.height} size={definition.gridSize} prefix={prefix} />}
+      {renderUnderlay?.()}
+      <RenderEnvContext.Provider value={env}>
+        {definition.nodes.map((node) => (
+          <NodeView key={node.id} node={node} />
+        ))}
+      </RenderEnvContext.Provider>
+      {renderOverlay?.()}
     </svg>
   );
 }

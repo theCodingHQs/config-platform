@@ -8,11 +8,6 @@ function parse(body: unknown): VisualInput {
   if (!parsed.success) {
     throw new LiveSettingsError(parsed.error.issues.map((i) => `${i.path.join('.') || 'visual'}: ${i.message}`).join('; '));
   }
-  const ids = new Set<string>();
-  for (const el of parsed.data.definition.elements) {
-    if (ids.has(el.id)) throw new LiveSettingsError(`Two elements share the id "${el.id}"`);
-    ids.add(el.id);
-  }
   return parsed.data;
 }
 

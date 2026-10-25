@@ -23,6 +23,10 @@ interface PropBase {
   hint?: string;
   /** Can be set from live data (default true) */
   bindable?: boolean;
+  /** Inspector section it's shown in */
+  group?: string;
+  /** Only meaningful in isometric drawings */
+  isoOnly?: boolean;
 }
 
 export type PropSpec =
@@ -30,7 +34,11 @@ export type PropSpec =
   | (PropBase & { kind: "boolean"; default: boolean })
   | (PropBase & { kind: "text"; default: string })
   | (PropBase & { kind: "swatch"; default: Swatch })
-  | (PropBase & { kind: "select"; default: string; options: ReadonlyArray<{ value: string; label: string }> });
+  | (PropBase & { kind: "select"; default: string; options: ReadonlyArray<{ value: string; label: string }> })
+  /** Any colour: a theme colour var(--vis-…), #hex, rgb(), or a gradient url(#id); "" = not set */
+  | (PropBase & { kind: "color"; default: string })
+  /** Longer text in a monospace box: path data, point lists */
+  | (PropBase & { kind: "code"; default: string });
 
 export type ResolvedProps = Record<string, string | number | boolean>;
 

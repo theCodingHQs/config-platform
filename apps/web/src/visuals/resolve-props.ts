@@ -1,66 +1,100 @@
 /**
- * An element's property values right now: its shape's defaults, then the values set in the editor,
- * then its bindings worked out against live data. A binding that fails or gives the wrong kind of
- * value keeps the set value, and the editor shows why.
+ * A node's attributes right now: the defaults, then the values set in the editor, then the rules
+ * whose condition holds (in order), then the bindings, all worked out against live data. A binding
+ * or rule that fails, or gives the wrong kind of value, is skipped and the editor shows why.
  */
-import { evaluateRawExpression, type ExpressionScope, type VisualElement } from "@config-platform/schema";
-import { SWATCHES, type PropSpec, type ResolvedProps, type ShapeDef } from "./shapes";
+import { evaluateRawExpression, type ExpressionScope, type VisualEffectType, type VisualNode } from "@config-platform/schema";
+import type { PropSpec, ResolvedProps, ShapeDef } from "./shapes";
+import { coerce } from "./coerce";
+import { VISUAL_FUNCTIONS } from "./visual-functions";
 
-export interface ResolvedElement {
-  props: ResolvedProps;
-  /** Property name → why its binding didn't apply */
+export interface ActiveEffect {
+  type: VisualEffectType;
+  speed: number;
+}
+
+export interface ResolvedNode {
+  attrs: ResolvedProps;
+  /** Attribute name, "rule:<n>" or "effect:<n>" → why it didn't apply */
   problems: Record<string, string>;
+  /** Whether each rule applies right now */
+  rulesOn: boolean[];
+  effects: ActiveEffect[];
 }
 
-function coerce(spec: PropSpec, value: unknown): { ok: true; value: string | number | boolean } | { ok: false; reason: string } {
-  if (value === undefined || value === null) return { ok: false, reason: "has no value yet" };
-  switch (spec.kind) {
-    case "number": {
-      const n = typeof value === "number" ? value : typeof value === "boolean" ? Number(value) : Number(String(value).trim());
-      if (!Number.isFinite(n) || (typeof value === "string" && !value.trim())) return { ok: false, reason: `"${String(value)}" isn't a number` };
-      const clamped = Math.min(spec.max ?? Infinity, Math.max(spec.min ?? -Infinity, n));
-      return { ok: true, value: clamped };
-    }
-    case "boolean":
-      if (typeof value === "string") return { ok: true, value: !["", "0", "false", "off", "no"].includes(value.trim().toLowerCase()) };
-      return { ok: true, value: Boolean(value) };
-    case "text":
-      return { ok: true, value: typeof value === "object" ? JSON.stringify(value) : String(value) };
-    case "swatch": {
-      const name = String(value).trim().toLowerCase();
-      return (SWATCHES as readonly string[]).includes(name) ? { ok: true, value: name } : { ok: false, reason: `"${String(value)}" isn't one of the colours (${SWATCHES.join(", ")})` };
-    }
-    case "select": {
-      const v = String(value).trim();
-      const match = spec.options.find((o) => o.value.toLowerCase() === v.toLowerCase());
-      return match ? { ok: true, value: match.value } : { ok: false, reason: `"${v}" isn't one of ${spec.options.map((o) => o.value).join(", ")}` };
-    }
-  }
+export const evaluate = (expr: string, scope: ExpressionScope) => evaluateRawExpression(expr, scope, VISUAL_FUNCTIONS);
+
+const truthy = (v: unknown) => (typeof v === "string" ? !["", "0", "false", "off", "no"].includes(v.trim().toLowerCase()) : Boolean(v));
+
+/** Whether a condition holds; null when it can't be worked out (with the reason) */
+function condition(expr: string, scope: ExpressionScope): { on: boolean; error?: string } {
+  const { value, error } = evaluate(expr, scope);
+  if (error) return { on: false, error };
+  return { on: truthy(value) };
 }
 
-export function resolveElement(shape: ShapeDef, el: Pick<VisualElement, "props" | "bindings">, scope: ExpressionScope | null): ResolvedElement {
-  const props: ResolvedProps = {};
-  const problems: Record<string, string> = {};
-  for (const spec of shape.props) {
-    const set = el.props?.[spec.name];
-    const fixed = set === undefined || set === null ? undefined : coerce(spec, set);
-    props[spec.name] = fixed?.ok ? fixed.value : spec.default;
+type NodeLike = Pick<VisualNode, "attrs" | "bindings" | "rules" | "effects">;
 
-    const expr = el.bindings?.[spec.name]?.trim();
-    if (!expr || !scope || spec.bindable === false) continue;
-    const { value, error } = evaluateRawExpression(expr, scope);
+function applyRules(node: NodeLike, byName: Map<string, PropSpec>, scope: ExpressionScope | null, out: ResolvedNode): void {
+  out.rulesOn = (node.rules ?? []).map((rule, i) => {
+    if (!scope || !rule.when.trim()) return false;
+    const { on, error } = condition(rule.when, scope);
+    if (error) out.problems[`rule:${i}`] = error;
+    if (!on) return false;
+    for (const [name, value] of Object.entries(rule.set)) {
+      const spec = byName.get(name);
+      const c = spec && coerce(spec, value);
+      if (c?.ok) out.attrs[name] = c.value;
+      else if (c) out.problems[`rule:${i}`] = `${spec.label} ${c.reason}`;
+    }
+    if (rule.effect) out.effects.push({ type: rule.effect, speed: 1 });
+    return true;
+  });
+}
+
+function applyBindings(node: NodeLike, byName: Map<string, PropSpec>, scope: ExpressionScope, out: ResolvedNode): void {
+  for (const [name, raw] of Object.entries(node.bindings ?? {})) {
+    const spec = byName.get(name);
+    const expr = raw.trim();
+    if (!spec || !expr || spec.bindable === false) continue;
+    const { value, error } = evaluate(expr, scope);
     if (error) {
-      problems[spec.name] = error;
+      out.problems[name] = error;
       continue;
     }
     const bound = coerce(spec, value);
-    if (bound.ok) props[spec.name] = bound.value;
-    else problems[spec.name] = `The binding ${bound.reason}`;
+    if (bound.ok) out.attrs[name] = bound.value;
+    else out.problems[name] = `The binding ${bound.reason}`;
   }
-  return { props, problems };
 }
 
-/** A new element's property values: every shape default, so the saved drawing doesn't change if defaults do */
+function applyEffects(node: NodeLike, scope: ExpressionScope | null, out: ResolvedNode): void {
+  (node.effects ?? []).forEach((effect, i) => {
+    const when = effect.when?.trim();
+    if (!when) return out.effects.push({ type: effect.type, speed: effect.speed ?? 1 });
+    if (!scope) return;
+    const { on, error } = condition(when, scope);
+    if (error) out.problems[`effect:${i}`] = error;
+    if (on) out.effects.push({ type: effect.type, speed: effect.speed ?? 1 });
+  });
+}
+
+/** `scope` null: the set values only (thumbnails, and the editor without live data) */
+export function resolveNode(node: NodeLike, specs: readonly PropSpec[], scope: ExpressionScope | null): ResolvedNode {
+  const out: ResolvedNode = { attrs: {}, problems: {}, rulesOn: [], effects: [] };
+  const byName = new Map(specs.map((s) => [s.name, s]));
+  for (const spec of specs) {
+    const set = node.attrs?.[spec.name];
+    const fixed = set === undefined || set === null ? undefined : coerce(spec, set);
+    out.attrs[spec.name] = fixed?.ok ? fixed.value : spec.default;
+  }
+  applyRules(node, byName, scope, out);
+  if (scope) applyBindings(node, byName, scope, out);
+  applyEffects(node, scope, out);
+  return out;
+}
+
+/** A new part's property values: every default, so the saved drawing doesn't change if defaults do */
 export function defaultProps(shape: ShapeDef): Record<string, string | number | boolean> {
   return Object.fromEntries(shape.props.map((p) => [p.name, p.default]));
 }

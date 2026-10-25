@@ -6,6 +6,7 @@ import React, { useId } from "react";
 import { Zap } from "lucide-react";
 import { SWATCHES, type PropSpec } from "../../visuals/shapes";
 import { Field } from "../live/Field";
+import { ColorInput } from "./ColorInput";
 
 interface Props {
   spec: PropSpec;
@@ -15,12 +16,28 @@ interface Props {
   current: unknown;
   problem?: string;
   tagListId: string;
+  /** The drawing's gradients, offered for colours */
+  paints?: readonly string[];
   onValue: (value: string | number | boolean) => void;
   onBinding: (expr: string | undefined) => void;
 }
 
-function ValueInput({ spec, value, id, onValue }: { spec: PropSpec; value: unknown; id: string; onValue: Props["onValue"] }) {
+export function ValueInput({ spec, value, id, paints, onValue }: { spec: PropSpec; value: unknown; id: string; paints: readonly string[]; onValue: Props["onValue"] }) {
   switch (spec.kind) {
+    case "color":
+      return <ColorInput id={id} value={String(value ?? spec.default)} paints={paints} onChange={onValue} />;
+    case "code":
+      return (
+        <textarea
+          id={id}
+          className="form-input"
+          rows={3}
+          spellCheck={false}
+          value={String(value ?? spec.default)}
+          onChange={(e) => onValue(e.target.value)}
+          style={{ fontFamily: "var(--font-mono)", fontSize: "var(--font-size-xs)", resize: "vertical" }}
+        />
+      );
     case "number":
       return (
         <input
@@ -88,8 +105,10 @@ function ValueInput({ spec, value, id, onValue }: { spec: PropSpec; value: unkno
 
 const show = (v: unknown) => (typeof v === "string" ? `"${v}"` : String(v));
 
-export function PropField({ spec, value, binding, current, problem, tagListId, onValue, onBinding }: Props) {
-  const id = useId();
+export function PropField({ spec, value, binding, current, problem, tagListId, paints = [], onValue, onBinding }: Props) {
+  const reactId = useId();
+  // Stable ids for fields other parts of the editor focus (double-clicking text focuses "Text")
+  const id = spec.name === "text" ? "vis-attr-text" : reactId;
   const bound = binding !== undefined;
   const canBind = spec.bindable !== false;
   // "e.g. …" hints are binding examples (the binding's placeholder); others describe the property
@@ -98,7 +117,7 @@ export function PropField({ spec, value, binding, current, problem, tagListId, o
     <Field label={spec.label} htmlFor={id} hint={!bound && !example ? spec.hint : undefined}>
       <div style={{ display: "flex", gap: "var(--space-1)", alignItems: "flex-start" }}>
         <div style={{ flex: 1, minWidth: 0, opacity: bound ? 0.55 : 1 }}>
-          <ValueInput spec={spec} value={value} id={id} onValue={onValue} />
+          <ValueInput spec={spec} value={value} id={id} paints={paints} onValue={onValue} />
         </div>
         {canBind && (
           <button
@@ -120,7 +139,7 @@ export function PropField({ spec, value, binding, current, problem, tagListId, o
             className="form-input"
             list={tagListId}
             aria-label={`${spec.label} binding`}
-            placeholder={example ?? "live.line1.speed"}
+            placeholder={example ?? (spec.kind === "number" ? "e.g. scale(live.cart.position, 0, 30700, 20, 1380)" : "live.line1.speed")}
             value={binding}
             onChange={(e) => onBinding(e.target.value)}
             style={{ fontFamily: "var(--font-mono)", fontSize: "var(--font-size-xs)" }}

@@ -16,7 +16,8 @@ describe('Visuals API', () => {
   let builder: TestSession;
   let viewer: TestSession;
 
-  const conveyor = { id: 'c1', type: 'conveyor', x: 100, y: 200, props: { length: 4 }, bindings: { running: 'live.line1.status == "running"' } };
+  const conveyor = { id: 'c1', kind: 'preset', ref: 'conveyor', attrs: { x: 100, y: 200, length: 4 }, bindings: { running: 'live.line1.status == "running"' } };
+  const lamp = { id: 'lamp', kind: 'ellipse', attrs: { x: 40, y: 40, rx: 6, ry: 6, fill: 'grey' }, rules: [{ when: 'live.phf.ready', set: { fill: 'green' } }] };
 
   beforeAll(async () => {
     await initializeMetadataCatalog(pool);
@@ -41,16 +42,24 @@ describe('Visuals API', () => {
   let id: string;
 
   it('builders create visuals; defaults fill in', async () => {
-    const res = await call(builder, 'POST', '/visuals', { name: 'Line 1', definition: { elements: [conveyor] } });
+    const res = await call(builder, 'POST', '/visuals', { name: 'Line 1', definition: { nodes: [conveyor, { id: 'g', kind: 'group', attrs: {}, children: [lamp] }] } });
     expect(res.statusCode).toBe(201);
     const saved = res.json();
     id = saved.id;
-    expect(saved).toMatchObject({ name: 'Line 1', version: 1, elementCount: 1, definition: { width: 1200, grid: 'isometric' } });
-    expect(saved.definition.elements[0]).toMatchObject({ scale: 1, flip: false, bindings: conveyor.bindings });
+    expect(saved).toMatchObject({ name: 'Line 1', version: 1, elementCount: 2, definition: { version: 2, width: 1200, mode: 'flat', grid: true } });
+    expect(saved.definition.nodes[1].children[0]).toMatchObject(lamp);
+  });
+
+  it('drawings in the first format are converted', async () => {
+    const old = { width: 900, grid: 'isometric', elements: [{ id: 'c1', type: 'conveyor', x: 100, y: 200, scale: 2, flip: true, props: { length: 4 }, bindings: conveyor.bindings }] };
+    const res = await call(builder, 'POST', '/visuals', { name: 'Old', definition: old });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().definition).toMatchObject({ version: 2, width: 900, mode: 'isometric', nodes: [{ id: 'c1', kind: 'preset', ref: 'conveyor', attrs: { x: 100, y: 200, length: 4, scaleX: 2, scaleY: 2, turned: true }, bindings: conveyor.bindings }] });
+    expect((await call(builder, 'DELETE', `/visuals/${res.json().id}`)).statusCode).toBe(204);
   });
 
   it('rejects bad drawings with a readable message', async () => {
-    const dup = await call(builder, 'POST', '/visuals', { name: 'Dup', definition: { elements: [conveyor, conveyor] } });
+    const dup = await call(builder, 'POST', '/visuals', { name: 'Dup', definition: { nodes: [conveyor, { id: 'g', kind: 'group', attrs: {}, children: [conveyor] }] } });
     expect(dup.statusCode).toBe(422);
     expect(dup.json().message).toMatch(/share the id/);
     const noName = await call(builder, 'POST', '/visuals', { name: ' ', definition: {} });
@@ -62,11 +71,11 @@ describe('Visuals API', () => {
     expect((await call(viewer, 'GET', '/visuals')).statusCode).toBe(403);
     expect((await call(viewer, 'PUT', `/visuals/${id}`, { name: 'x', definition: {}, expectedVersion: 1 })).statusCode).toBe(403);
     const list = (await call(builder, 'GET', '/visuals')).json();
-    expect(list).toEqual([expect.objectContaining({ id, name: 'Line 1', elementCount: 1 })]);
+    expect(list).toEqual([expect.objectContaining({ id, name: 'Line 1', elementCount: 2 })]);
   });
 
   it('saves with the version it was opened at, refusing a stale save', async () => {
-    const ok = await call(builder, 'PUT', `/visuals/${id}`, { name: 'Line 1 overview', definition: { elements: [] }, expectedVersion: 1 });
+    const ok = await call(builder, 'PUT', `/visuals/${id}`, { name: 'Line 1 overview', definition: { nodes: [] }, expectedVersion: 1 });
     expect(ok.statusCode).toBe(200);
     expect(ok.json()).toMatchObject({ version: 2, elementCount: 0 });
     const stale = await call(builder, 'PUT', `/visuals/${id}`, { name: 'Old', definition: {}, expectedVersion: 1 });

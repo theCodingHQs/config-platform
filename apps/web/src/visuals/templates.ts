@@ -2,7 +2,7 @@
  * Starting points for a new visual. Positions are given on the floor grid (u, v in tiles) and
  * turned into canvas positions here, so templates stay easy to read and change.
  */
-import { isoPoint, type VisualDefinition, type VisualElement } from "@config-platform/schema";
+import { emptyVisualDefinition, isoPoint, type VisualDefinition, type VisualNode } from "@config-platform/schema";
 import { shapeOf } from "./shapes";
 import { defaultProps } from "./resolve-props";
 
@@ -15,20 +15,27 @@ export interface VisualTemplate {
 
 const ORIGIN = { x: 450, y: 165 };
 
-type Placed = Omit<VisualElement, "x" | "y" | "scale" | "flip" | "props" | "bindings"> &
-  Partial<Pick<VisualElement, "flip" | "props" | "bindings">> & { at: [number, number] };
+interface Placed {
+  id: string;
+  type: string;
+  name: string;
+  at: [number, number];
+  flip?: boolean;
+  props?: Record<string, string | number | boolean>;
+  bindings?: Record<string, string>;
+}
 
-function place({ at: [u, v], ...el }: Placed): VisualElement {
+/** A ready-made part on the floor at tile (u, v) */
+function place({ at: [u, v], id, type, name, flip, props, bindings }: Placed): VisualNode {
   const p = isoPoint(u, v);
-  const shape = shapeOf(el.type);
+  const shape = shapeOf(type);
   return {
-    scale: 1,
-    flip: false,
-    bindings: {},
-    ...el,
-    props: { ...(shape ? defaultProps(shape) : {}), ...el.props },
-    x: ORIGIN.x + p.x,
-    y: ORIGIN.y + p.y,
+    id,
+    kind: "preset",
+    ref: type,
+    name,
+    attrs: { ...(shape ? defaultProps(shape) : {}), ...props, ...(flip ? { turned: true } : {}), x: ORIGIN.x + p.x, y: ORIGIN.y + p.y },
+    ...(bindings ? { bindings } : {}),
   };
 }
 
@@ -50,10 +57,13 @@ function assemblyLine(): VisualDefinition {
     { id: "count", type: "value", name: "Output panel", at: [2.5, 11.5], props: { title: "Output today", decimals: 0 }, bindings: { value: "live.line1.count" } },
     { id: "status", type: "label", name: "Status label", at: [14, -1.5], props: { text: "Line 1" }, bindings: { text: 'concat("Line 1: ", live.line1.status)' } },
   ];
-  return { width: 1200, height: 700, grid: "isometric", elements: elements.map(place) };
+  // Later nodes draw on top: the floor zone first, then from the back of the floor to the front
+  const depth = (e: Placed) => (e.type === "zone" ? -Infinity : e.at[0] + e.at[1]);
+  return { ...emptyVisualDefinition("isometric"), nodes: [...elements].sort((a, b) => depth(a) - depth(b)).map(place) };
 }
 
 export const VISUAL_TEMPLATES: readonly VisualTemplate[] = [
-  { id: "blank", label: "Blank", description: "An empty floor", build: () => ({ width: 1200, height: 700, grid: "isometric", elements: [] }) },
+  { id: "blank", label: "Blank (flat)", description: "An empty 2D canvas", build: () => emptyVisualDefinition("flat") },
+  { id: "blank-iso", label: "Blank (isometric)", description: "An empty 2.5D floor", build: () => emptyVisualDefinition("isometric") },
   { id: "assembly-line", label: "Assembly line", description: "Conveyors, a press, a robot and a tank wired to the Line 1 tags", build: assemblyLine },
 ];

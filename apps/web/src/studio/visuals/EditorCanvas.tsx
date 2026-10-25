@@ -1,86 +1,74 @@
 /**
- * The drawing being edited: click to select, drag to move (snapping to the floor grid; hold Alt to
- * place freely), drop shapes from the palette. Shapes move with live data while you edit.
+ * The drawing being edited. The active tool decides what the pointer does (see the gesture hooks);
+ * parts can be dropped from the palette. Shapes move with live data while you edit.
  */
 import React, { useLayoutEffect, useRef, useState } from "react";
-import { snapToIsoGrid, type ExpressionScope, type VisualDefinition, type VisualElement } from "@config-platform/schema";
+import type { ExpressionScope, VisualDefinition } from "@config-platform/schema";
 import { VisualScene } from "../../visuals/VisualScene";
 import { SHAPE_DRAG_TYPE } from "./ShapePalette";
+import type { EditorAction, EditorState } from "./editor-state";
+import type { CanvasCtx } from "./canvas-context";
+import { nodeBox, snapPoint, toDrawing } from "./canvas-geometry";
+import { findNode } from "./node-tree";
+import type { Box } from "./resize";
+import { useSelectGestures } from "./use-select-gestures";
+import { useDrawGestures } from "./use-draw-gestures";
+import { SelectionOverlay } from "./SelectionOverlay";
+import type { ToolId } from "./tools";
 
 interface Props {
-  definition: VisualDefinition;
+  state: EditorState;
+  dispatch: React.Dispatch<EditorAction>;
   scope: ExpressionScope | null;
-  selectedId: string | null;
+  symbols?: ReadonlyMap<string, VisualDefinition>;
   zoom: number;
-  onSelect: (id: string | null) => void;
-  onMove: (id: string, x: number, y: number, group: string) => void;
-  onDropShape: (type: string, x: number, y: number) => void;
+  tool: ToolId;
+  onToolDone: () => void;
+  onEditText: (id: string) => void;
+  onDropPart: (type: string, x: number, y: number) => void;
 }
 
-interface Drag {
-  id: string;
-  pointerId: number;
-  start: { x: number; y: number };
-  from: { x: number; y: number };
-  group: string;
-  moved: boolean;
-}
+type Measured = Array<{ id: string; box: Box; locked: boolean }>;
 
-/** A pointer position in drawing coordinates */
-function toDrawing(svg: SVGSVGElement, clientX: number, clientY: number) {
-  const m = svg.getScreenCTM();
-  if (!m) return { x: clientX, y: clientY };
-  const p = new DOMPoint(clientX, clientY).matrixTransform(m.inverse());
-  return { x: p.x, y: p.y };
-}
+const same = (a: Measured, b: Measured) =>
+  a.length === b.length && a.every((m, i) => m.id === b[i].id && m.locked === b[i].locked && (["x", "y", "width", "height"] as const).every((k) => Math.abs(m.box[k] - b[i].box[k]) < 0.01));
 
-export const placeAt = (x: number, y: number, free: boolean) => (free ? { x: Math.round(x), y: Math.round(y) } : snapToIsoGrid(x, y));
-
-export function EditorCanvas({ definition, scope, selectedId, zoom, onSelect, onMove, onDropShape }: Props) {
+export function EditorCanvas({ state, dispatch, scope, symbols, zoom, tool, onToolDone, onEditText, onDropPart }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const drag = useRef<Drag | null>(null);
-  const [outline, setOutline] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
-  const selected = definition.elements.find((el) => el.id === selectedId);
+  const { definition } = state;
+  const ctxRef = useRef<CanvasCtx>(null as unknown as CanvasCtx);
+  ctxRef.current = {
+    svg: svgRef.current,
+    state,
+    dispatch,
+    grid: { on: definition.grid, size: definition.gridSize, isometric: definition.mode === "isometric" },
+    unit: 1 / zoom,
+  };
 
-  // The selection outline follows the selected shape's drawn size (which bindings can change)
+  const select = useSelectGestures(ctxRef, onEditText);
+  const draw = useDrawGestures(ctxRef, tool, onToolDone);
+  const gestures = tool === "select" ? select : draw;
+
+  // The selection outlines follow what's drawn (bindings and animations can change it)
+  const [measured, setMeasured] = useState<Measured>([]);
   useLayoutEffect(() => {
     const svg = svgRef.current;
-    const node = selected && svg?.querySelector<SVGGElement>(`[data-element-id="${CSS.escape(selected.id)}"]`);
-    if (!node || !selected) return setOutline(null);
-    const b = node.getBBox();
-    const next = { x: selected.x + b.x * selected.scale - 4, y: selected.y + b.y * selected.scale - 4, width: b.width * selected.scale + 8, height: b.height * selected.scale + 8 };
-    setOutline((cur) => (cur && cur.x === next.x && cur.y === next.y && cur.width === next.width && cur.height === next.height ? cur : next));
-  });
-
-  const elementProps = (el: VisualElement): React.SVGProps<SVGGElement> => ({
-    className: el.locked ? undefined : "vis-hit",
-    onPointerDown: (e) => {
-      if (e.button !== 0) return;
-      e.stopPropagation();
-      onSelect(el.id);
-      if (el.locked || !svgRef.current) return;
-      (e.currentTarget as Element).setPointerCapture(e.pointerId);
-      drag.current = { id: el.id, pointerId: e.pointerId, start: toDrawing(svgRef.current, e.clientX, e.clientY), from: { x: el.x, y: el.y }, group: `drag-${el.id}-${Date.now()}`, moved: false };
-    },
-    onPointerMove: (e) => {
-      const d = drag.current;
-      if (!d || d.pointerId !== e.pointerId || !svgRef.current) return;
-      const p = toDrawing(svgRef.current, e.clientX, e.clientY);
-      const dx = p.x - d.start.x;
-      const dy = p.y - d.start.y;
-      if (!d.moved && Math.hypot(dx, dy) < 3) return;
-      d.moved = true;
-      const next = placeAt(d.from.x + dx, d.from.y + dy, e.altKey);
-      onMove(d.id, next.x, next.y, d.group);
-    },
-    onPointerUp: (e) => {
-      if (drag.current?.pointerId === e.pointerId) drag.current = null;
-    },
+    ctxRef.current.svg = svg;
+    const next: Measured = [];
+    for (const id of state.selection) {
+      const box = svg && nodeBox(svg, id);
+      if (box) next.push({ id, box, locked: Boolean(findNode(definition.nodes, id)?.locked) });
+    }
+    setMeasured((cur) => (same(cur, next) ? cur : next));
   });
 
   return (
     <div
-      style={{ width: `${definition.width * zoom}px`, height: `${definition.height * zoom}px`, flex: "none", boxShadow: "var(--shadow-sm)" }}
+      style={{ width: `${definition.width * zoom}px`, height: `${definition.height * zoom}px`, flex: "none", boxShadow: "var(--shadow-sm)", cursor: tool === "select" ? "default" : "crosshair", touchAction: "none" }}
+      onPointerDown={gestures.onPointerDown}
+      onPointerMove={gestures.onPointerMove}
+      onPointerUp={gestures.onPointerUp}
+      onDoubleClick={gestures.onDoubleClick}
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes(SHAPE_DRAG_TYPE)) {
           e.preventDefault();
@@ -91,27 +79,25 @@ export function EditorCanvas({ definition, scope, selectedId, zoom, onSelect, on
         const type = e.dataTransfer.getData(SHAPE_DRAG_TYPE);
         if (!type || !svgRef.current) return;
         e.preventDefault();
-        const p = toDrawing(svgRef.current, e.clientX, e.clientY);
-        const at = placeAt(p.x, p.y, e.altKey);
-        onDropShape(type, at.x, at.y);
+        const g = ctxRef.current.grid;
+        const at = snapPoint(toDrawing(svgRef.current, e.clientX, e.clientY), { ...g, on: g.on && !e.altKey });
+        onDropPart(type, at.x, at.y);
       }}
-      onPointerDown={() => onSelect(null)}
       data-testid="visual-canvas"
     >
       <VisualScene
         definition={definition}
         scope={scope}
+        symbols={symbols}
         svgRef={svgRef}
-        elementProps={elementProps}
+        showGrid
         ariaLabel="Drawing"
-        renderOverlay={() =>
-          outline && selected ? (
-            <g pointerEvents="none">
-              <rect className="vis-selection" {...outline} rx={4} />
-              <circle cx={selected.x} cy={selected.y} r={3.5} style={{ fill: "var(--vis-select)" }} />
-            </g>
-          ) : null
-        }
+        renderOverlay={() => (
+          <>
+            {tool === "select" && <SelectionOverlay boxes={measured} unit={1 / zoom} onResize={select.startResize} onRotate={select.startRotate} />}
+            {gestures.overlay}
+          </>
+        )}
       />
     </div>
   );

@@ -1,32 +1,41 @@
 /** Saved visuals (public.visual_def): name, the drawing itself (definition), version for safe saving. */
 import crypto from 'node:crypto';
 import type { PoolClient } from 'pg';
-import type { Visual, VisualInput, VisualSummary } from '@config-platform/schema';
+import { VisualDefinitionSchema, migrateVisualDefinition, type Visual, type VisualInput, type VisualSummary } from '@config-platform/schema';
 import { pool } from '../db/pool.js';
 
 interface Row {
   id: string;
   name: string;
-  definition: Visual['definition'];
+  definition: unknown;
   version: number;
   created_at: Date;
   updated_at: Date;
 }
 
-const toVisual = (r: Row): Visual => ({
-  id: r.id,
-  name: r.name,
-  definition: r.definition,
-  elementCount: r.definition.elements?.length ?? 0,
-  version: r.version,
-  createdAt: r.created_at.toISOString(),
-  updatedAt: r.updated_at.toISOString(),
-});
+/** Drawings saved in an older format are converted as they're read */
+function readDefinition(raw: unknown): Visual['definition'] {
+  const parsed = VisualDefinitionSchema.safeParse(raw);
+  return parsed.success ? parsed.data : (migrateVisualDefinition(raw) as Visual['definition']);
+}
+
+const toVisual = (r: Row): Visual => {
+  const definition = readDefinition(r.definition);
+  return {
+    id: r.id,
+    name: r.name,
+    definition,
+    elementCount: definition.nodes?.length ?? 0,
+    version: r.version,
+    createdAt: r.created_at.toISOString(),
+    updatedAt: r.updated_at.toISOString(),
+  };
+};
 
 export const visualRepository = {
   async list(tenantId: string): Promise<VisualSummary[]> {
     const res = await pool.query<{ id: string; name: string; element_count: number; version: number; updated_at: Date }>(
-      `SELECT id, name, COALESCE(jsonb_array_length(definition->'elements'), 0) AS element_count, version, updated_at
+      `SELECT id, name, COALESCE(jsonb_array_length(COALESCE(definition->'nodes', definition->'elements')), 0) AS element_count, version, updated_at
        FROM public.visual_def WHERE tenant_id = $1 ORDER BY name, id`,
       [tenantId],
     );
