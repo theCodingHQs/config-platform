@@ -28,10 +28,13 @@ export const tank: ShapeDef = {
     const { ry } = cylinderRadii(r);
     return (
       <g>
-        <IsoCylinder g={g} a={r} b={r} r={r} h={H} fill="var(--vis-glass)" className="vis-tank-shell" />
+        {/* Back of the tank, the contents, then a see-through front with steel bands */}
+        <IsoCylinder g={g} a={r} b={r} r={r} h={H} fill="var(--vis-glass)" />
         {level > 0 && <IsoCylinder g={g} a={r} b={r} z={0.05} r={r * 0.94} h={liquidH} fill={low ? "var(--vis-alarm)" : swatchVar(String(p.liquid))} />}
-        {/* Steel bands at the bottom and the top rim */}
-        <IsoCylinder g={g} a={r} b={r} r={r * 1.01} h={0.12} fill="var(--vis-steel)" />
+        <g opacity={0.3}>
+          <IsoCylinder g={g} a={r} b={r} r={r} h={H} fill="var(--vis-glass)" top={false} />
+        </g>
+        <IsoCylinder g={g} a={r} b={r} r={r * 1.01} h={0.12} fill="var(--vis-steel)" top={false} />
         <ellipse cx={top.x} cy={top.y} rx={cylinderRadii(r).rx} ry={ry} style={{ fill: "none", stroke: "var(--vis-steel)", strokeWidth: 2 }} />
         {p.showLevel && (
           <text className="vis-text-strong" x={base.x} y={(base.y + top.y) / 2 + ry / 2} textAnchor="middle" dominantBaseline="central" fontSize={13}>

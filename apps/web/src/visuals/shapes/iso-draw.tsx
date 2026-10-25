@@ -88,7 +88,28 @@ export function IsoBox({
 }
 
 /** An upright cylinder (tank, post, motor) centred at (a, b) with radius r in tiles */
-export function IsoCylinder({ g, a, b, z = 0, r, h, fill, className }: { g: IsoFrame; a: number; b: number; z?: number; r: number; h: number; fill: string; className?: string }) {
+export function IsoCylinder({
+  g,
+  a,
+  b,
+  z = 0,
+  r,
+  h,
+  fill,
+  className,
+  top = true,
+}: {
+  g: IsoFrame;
+  a: number;
+  b: number;
+  z?: number;
+  r: number;
+  h: number;
+  fill: string;
+  className?: string;
+  /** Draw the top face; off for bands and rings around something else */
+  top?: boolean;
+}) {
   const c0 = g.pt(a, b, z);
   const c1 = g.pt(a, b, z + h);
   const rx = r * Math.SQRT2 * 32;
@@ -97,7 +118,7 @@ export function IsoCylinder({ g, a, b, z = 0, r, h, fill, className }: { g: IsoF
   return (
     <g className={className} style={{ ["--c" as string]: fill }}>
       <path className="vis-cyl-side" d={body} />
-      <ellipse className="vis-face-top" cx={r2(c1.x)} cy={r2(c1.y)} rx={r2(rx)} ry={r2(ry)} />
+      {top && <ellipse className="vis-face-top" cx={r2(c1.x)} cy={r2(c1.y)} rx={r2(rx)} ry={r2(ry)} />}
     </g>
   );
 }
