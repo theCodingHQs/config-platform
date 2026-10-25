@@ -3,6 +3,7 @@ import React from "react";
 import type { VisualDefinition } from "@config-platform/schema";
 import { Field, FieldRow } from "../live/Field";
 import { ColorInput } from "./ColorInput";
+import { PaintsEditor } from "./PaintsEditor";
 
 interface Props {
   definition: VisualDefinition;
@@ -45,6 +46,12 @@ export function CanvasSettings({ definition, onCanvas }: Props) {
       <Field label="Background" htmlFor="vis-bg" hint="Empty: the theme's canvas colour">
         <ColorInput id="vis-bg" value={definition.background ?? ""} paints={[]} onChange={(v) => onCanvas({ background: v || undefined }, "canvas-bg")} />
       </Field>
+      <details open={Boolean(definition.paints?.length)}>
+        <summary style={{ cursor: "pointer", fontSize: "var(--font-size-sm)", fontWeight: 600 }}>Gradients</summary>
+        <div style={{ paddingTop: "var(--space-2)" }}>
+          <PaintsEditor paints={definition.paints ?? []} onChange={(paints, group) => onCanvas({ paints: paints.length ? paints : undefined }, group && `paint-${group}`)} />
+        </div>
+      </details>
     </div>
   );
 }

@@ -2,7 +2,7 @@
  * Draws one node and (for groups) its children: works out its attributes against live data, then
  * places it, runs its animations and draws its shape, part or symbol.
  */
-import React, { createContext, useContext, useMemo } from "react";
+import React, { createContext, useContext, useMemo, useRef } from "react";
 import type { ExpressionScope, VisualDefinition, VisualNode } from "@config-platform/schema";
 import { shapeOf } from "./shapes";
 import { isoFrame } from "./shapes/iso-draw";
@@ -12,6 +12,7 @@ import { placeTransform, pivotTransform } from "./node-transform";
 import { lookAttrs, Primitive } from "./primitives";
 import { PaintDefs, shadowFilterId } from "./paints";
 import { useSmooth } from "./use-smooth";
+import { usePathPoint } from "./use-path-point";
 
 export interface RenderEnv {
   /** null: set values only, no live data */
@@ -27,6 +28,8 @@ export interface RenderEnv {
   showHidden?: boolean;
   /** Symbols inside symbols, to stop a symbol that contains itself */
   depth: number;
+  /** Node names → ids, for settings that point at another node by name (the path to follow) */
+  names?: ReadonlyMap<string, string>;
 }
 
 export const RenderEnvContext = createContext<RenderEnv>({ scope: null, prefix: "v", isometric: false, depth: 0 });
@@ -78,6 +81,9 @@ export const NodeView = React.memo(function NodeView({ node }: { node: VisualNod
   const specs = useMemo(() => specsFor(node, symbolInputs), [node, symbolInputs]);
   const resolved = useMemo(() => resolveNode(node, specs, env.scope), [node, specs, env.scope]);
   const a = useSmooth(resolved.attrs, node.smooth);
+  const outer = useRef<SVGGElement>(null);
+  const follow = typeof a.followPath === "string" && a.followPath ? (env.names?.get(a.followPath) ?? a.followPath) : undefined;
+  const along = usePathPoint(outer, follow, Number(a.progress) || 0);
   if (a.visible === false || (node.hidden && !env.showHidden)) return null;
 
   const pivot = pivotTransform(a);
@@ -102,8 +108,9 @@ export const NodeView = React.memo(function NodeView({ node }: { node: VisualNod
   const opacity = typeof a.opacity === "number" && a.opacity !== 1 ? a.opacity : undefined;
   return (
     <g
+      ref={outer}
       data-node-id={node.id}
-      transform={placeTransform(a, env.isometric)}
+      transform={placeTransform(a, env.isometric, along)}
       opacity={opacity}
       filter={a.shadow ? `url(#${shadowFilterId(env.prefix)})` : undefined}
       className={resolved.effects.length && env.scope === null ? "vis-paused" : undefined}

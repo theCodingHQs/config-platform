@@ -27,10 +27,20 @@ const ORIGINS: Record<string, string> = {
 
 const num = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d);
 
-/** The outer group: position (and plane, in isometric drawings) */
-export function placeTransform(a: ResolvedProps, isometric: boolean): string {
+/** Where a node travelling along a path is, in its parent's coordinates */
+export interface PathPoint {
+  x: number;
+  y: number;
+  angle: number;
+}
+
+/** The outer group: position (plus where it is along a path, and its plane in isometric drawings) */
+export function placeTransform(a: ResolvedProps, isometric: boolean, along?: PathPoint | null): string {
   const plane = isometric ? PLANES[String(a.plane)] : undefined;
-  return `translate(${num(a.x, 0)} ${num(a.y, 0)})${plane ? ` ${plane}` : ""}`;
+  const x = num(a.x, 0) + (along?.x ?? 0);
+  const y = num(a.y, 0) + (along?.y ?? 0);
+  const turn = along && a.followTurn ? ` rotate(${Math.round(along.angle * 10) / 10})` : "";
+  return `translate(${x} ${y})${turn}${plane ? ` ${plane}` : ""}`;
 }
 
 /** The inner group: turning and scaling around the pivot. Empty when there's nothing to do. */

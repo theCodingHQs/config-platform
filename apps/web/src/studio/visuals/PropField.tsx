@@ -2,11 +2,12 @@
  * One shape property in the inspector: its set value, and optionally a binding (an expression over
  * live data) that sets it while the visual is shown. The live result is shown under the binding.
  */
-import React, { useId } from "react";
+import React, { useId, useState } from "react";
 import { Zap } from "lucide-react";
 import { SWATCHES, type PropSpec } from "../../visuals/shapes";
 import { Field } from "../live/Field";
 import { ColorInput } from "./ColorInput";
+import { RangeMapper } from "./RangeMapper";
 
 interface Props {
   spec: PropSpec;
@@ -113,6 +114,7 @@ export function PropField({ spec, value, binding, current, problem, tagListId, p
   const canBind = spec.bindable !== false;
   // "e.g. …" hints are binding examples (the binding's placeholder); others describe the property
   const example = spec.hint?.startsWith("e.g. ") ? spec.hint.slice(5) : undefined;
+  const [mapping, setMapping] = useState(false);
   return (
     <Field label={spec.label} htmlFor={id} hint={!bound && !example ? spec.hint : undefined}>
       <div style={{ display: "flex", gap: "var(--space-1)", alignItems: "flex-start" }}>
@@ -147,6 +149,22 @@ export function PropField({ spec, value, binding, current, problem, tagListId, p
           <span style={{ fontSize: "var(--font-size-xs)", color: problem && binding?.trim() ? "var(--warning)" : "var(--text-muted)" }}>
             {!binding?.trim() ? "Type an expression, e.g. live.line1.speed" : problem ? `${problem}; using the set value` : `Now: ${show(current)}`}
           </span>
+          {spec.kind === "number" && (
+            <button type="button" className="btn btn-ghost" aria-expanded={mapping} style={{ alignSelf: "flex-start", padding: "0 var(--space-1)", fontSize: "var(--font-size-xs)" }} onClick={() => setMapping(!mapping)}>
+              {mapping ? "Close the range helper" : "Map a range…"}
+            </button>
+          )}
+          {mapping && (
+            <RangeMapper
+              binding={binding ?? ""}
+              tagListId={tagListId}
+              label={spec.label}
+              onUse={(b) => {
+                onBinding(b);
+                setMapping(false);
+              }}
+            />
+          )}
         </div>
       )}
     </Field>

@@ -245,3 +245,13 @@ describe('resizing and drawing', () => {
     expect(parseNodes(JSON.stringify({ 'config-platform/visual-nodes@1': [rect(), { bad: true }] }))).toEqual([rect()]);
   });
 });
+
+describe('range helper', () => {
+  it('writes and reads back scale() bindings', async () => {
+    const { parseScale, scaleBinding } = await import('../src/studio/visuals/RangeMapper');
+    const b = scaleBinding('live.cart.position', ['0', '30700', '20', '1380']);
+    expect(b).toBe('scale(live.cart.position, 0, 30700, 20, 1380)');
+    expect(parseScale(b)).toEqual({ expr: 'live.cart.position', range: ['0', '30700', '20', '1380'] });
+    expect(parseScale('live.x').expr).toBe('live.x');
+  });
+});

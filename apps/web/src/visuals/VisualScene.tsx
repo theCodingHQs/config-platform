@@ -4,7 +4,7 @@
  * adds its grid and selection through `renderOverlay`.
  */
 import React, { useId, useMemo } from "react";
-import { ISO, isoPoint, type ExpressionScope, type VisualDefinition, type VisualNode } from "@config-platform/schema";
+import { ISO, isoPoint, walkVisualNodes, type ExpressionScope, type VisualDefinition, type VisualNode } from "@config-platform/schema";
 import { NodeView, RenderEnvContext, type RenderEnv } from "./NodeView";
 import { PaintDefs } from "./paints";
 import { safeColor } from "./coerce";
@@ -65,7 +65,8 @@ function SquareGrid({ width, height, size, prefix }: { width: number; height: nu
 export function VisualScene({ definition, scope, symbols, className, style, svgRef, nodeProps, showGrid, showHidden, renderOverlay, renderUnderlay, ariaLabel }: VisualSceneProps) {
   const prefix = `v${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const isometric = definition.mode === "isometric";
-  const env = useMemo<RenderEnv>(() => ({ scope, prefix, isometric, symbols, nodeProps, showHidden, depth: 0 }), [scope, prefix, isometric, symbols, nodeProps, showHidden]);
+  const names = useMemo(() => new Map([...walkVisualNodes(definition.nodes)].filter((n) => n.name).map((n) => [n.name!, n.id])), [definition.nodes]);
+  const env = useMemo<RenderEnv>(() => ({ scope, prefix, isometric, symbols, nodeProps, showHidden, depth: 0, names }), [scope, prefix, isometric, symbols, nodeProps, showHidden, names]);
 
   return (
     <svg

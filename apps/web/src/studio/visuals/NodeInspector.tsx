@@ -28,7 +28,7 @@ export const KIND_LABELS: Record<VisualNode["kind"], string> = {
 export const nodeLabel = (n: VisualNode) => n.name || (n.kind === "preset" ? (shapeOf(n.ref ?? "")?.label ?? "Part") : KIND_LABELS[n.kind]);
 
 /** Sections in the order they're shown; the first two start open */
-const SECTION_ORDER = [GROUPS.part, GROUPS.inputs, GROUPS.text, GROUPS.shape, GROUPS.look, GROUPS.place];
+const SECTION_ORDER = [GROUPS.part, GROUPS.inputs, GROUPS.text, GROUPS.shape, GROUPS.look, GROUPS.place, GROUPS.motion];
 
 interface Props {
   node: VisualNode;

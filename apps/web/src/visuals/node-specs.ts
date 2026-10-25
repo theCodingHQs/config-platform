@@ -5,7 +5,7 @@
 import type { VisualInputDef, VisualNode, VisualNodeKind } from "@config-platform/schema";
 import { shapeOf, type PropSpec } from "./shapes";
 
-export const GROUPS = { place: "Position", look: "Fill and outline", shape: "Shape", text: "Text", part: "Properties", inputs: "Inputs" } as const;
+export const GROUPS = { place: "Position", motion: "Move along a path", look: "Fill and outline", shape: "Shape", text: "Text", part: "Properties", inputs: "Inputs" } as const;
 
 const n = (name: string, label: string, def: number, extra: Partial<Extract<PropSpec, { kind: "number" }>> = {}): PropSpec => ({ name, label, kind: "number", default: def, ...extra });
 const opts = (...values: string[]) => values.map((v) => ({ value: v, label: v[0].toUpperCase() + v.slice(1).replace(/-/g, " ") }));
@@ -41,6 +41,17 @@ export const PLACE_SPECS: PropSpec[] = [
     hint: "Turns a flat shape to lie on the isometric floor or a wall",
   },
   { name: "shadow", label: "Soft shadow", kind: "boolean", default: false, group: GROUPS.place },
+  {
+    name: "followPath",
+    label: "Path to follow",
+    kind: "text",
+    default: "",
+    group: GROUPS.motion,
+    bindable: false,
+    hint: "The name of a line, polyline, polygon or path in this drawing; X and Y then shift it from the path",
+  },
+  n("progress", "How far along", 0, { group: GROUPS.motion, min: 0, max: 100, step: 0.5, unit: "%", hint: "e.g. scale(live.cart.position, 0, 30700, 0, 100)" }),
+  { name: "followTurn", label: "Turn with the path", kind: "boolean", default: false, group: GROUPS.motion },
 ];
 
 const color = (name: string, label: string, def = ""): PropSpec => ({ name, label, kind: "color", default: def, group: GROUPS.look });
