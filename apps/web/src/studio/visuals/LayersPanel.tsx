@@ -1,4 +1,8 @@
-/** Every node in drawing order (top of the list draws on top), with groups opened out */
+/**
+ * Every node in drawing order (top of the list draws on top), with groups opened out. Rows look
+ * like the page builder's component tree: the selected row outlined in the accent colour, a
+ * dashed outline on hover, and a line down the left of each group's contents.
+ */
 import React, { useState } from "react";
 import { ChevronDown, ChevronRight, Eye, EyeOff, Lock } from "lucide-react";
 import type { VisualNode } from "@config-platform/schema";
@@ -12,25 +16,36 @@ interface Props {
   onToggleHidden: (node: VisualNode) => void;
 }
 
-function Row({ node, depth, parentId, props }: { node: VisualNode; depth: number; parentId: string | null; props: Props }) {
+/** A group's contents: one step in, with a line down the left (as in the page builder's tree) */
+const CHILDREN_STYLE: React.CSSProperties = {
+  listStyle: "none",
+  margin: "0 0 0 0.6rem",
+  padding: "0 0 0 var(--space-1)",
+  borderLeft: "var(--border-width-sm) solid var(--border)",
+};
+
+function Row({ node, parentId, props }: { node: VisualNode; parentId: string | null; props: Props }) {
   const [expanded, setExpanded] = useState(true);
+  const [hovered, setHovered] = useState(false);
   const selected = props.selection.includes(node.id);
   const kids = node.children ?? [];
   return (
-    <>
-      <li
-        role="treeitem"
-        aria-selected={selected}
-        aria-expanded={kids.length ? expanded : undefined}
+    <li role="treeitem" aria-selected={selected} aria-expanded={kids.length ? expanded : undefined}>
+      <div
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         style={{
           display: "flex",
           alignItems: "center",
           gap: "var(--space-1)",
-          paddingLeft: `calc(var(--space-3) * ${depth})`,
+          padding: "0.125rem 0.375rem",
+          marginBottom: "2px",
           borderRadius: "var(--radius-control)",
-          background: selected ? "var(--accent-subtle, var(--surface-2))" : undefined,
+          backgroundColor: selected ? "var(--accent-subtle)" : hovered ? "var(--surface-2)" : "transparent",
+          border: selected ? "1px solid var(--accent)" : hovered ? "1px dashed var(--accent)" : "1px solid transparent",
+          transition: "background-color 0.12s ease, border-color 0.12s ease",
           fontSize: "var(--font-size-xs)",
-          color: node.hidden ? "var(--text-muted)" : "var(--text)",
+          color: node.hidden ? "var(--text-muted)" : selected || hovered ? "var(--accent)" : "var(--text)",
         }}
       >
         <button type="button" className="btn btn-ghost" aria-label={expanded ? "Collapse" : "Expand"} style={{ padding: 0, visibility: kids.length ? "visible" : "hidden" }} onClick={() => setExpanded(!expanded)}>
@@ -51,9 +66,15 @@ function Row({ node, depth, parentId, props }: { node: VisualNode; depth: number
         <button type="button" className="btn btn-ghost" style={{ padding: 0 }} aria-label={node.hidden ? `Show ${nodeLabel(node)}` : `Hide ${nodeLabel(node)}`} title={node.hidden ? "Show" : "Hide while editing"} onClick={() => props.onToggleHidden(node)}>
           {node.hidden ? <EyeOff size="1em" /> : <Eye size="1em" />}
         </button>
-      </li>
-      {expanded && [...kids].reverse().map((k) => <Row key={k.id} node={k} depth={depth + 1} parentId={node.id} props={props} />)}
-    </>
+      </div>
+      {expanded && kids.length > 0 && (
+        <ul role="group" style={CHILDREN_STYLE}>
+          {[...kids].reverse().map((k) => (
+            <Row key={k.id} node={k} parentId={node.id} props={props} />
+          ))}
+        </ul>
+      )}
+    </li>
   );
 }
 
@@ -62,7 +83,7 @@ export function LayersPanel(props: Props) {
   return (
     <ul role="tree" aria-label="Layers" style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column" }}>
       {[...props.nodes].reverse().map((n) => (
-        <Row key={n.id} node={n} depth={0} parentId={null} props={props} />
+        <Row key={n.id} node={n} parentId={null} props={props} />
       ))}
     </ul>
   );
