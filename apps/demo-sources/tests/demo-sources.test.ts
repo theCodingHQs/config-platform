@@ -116,12 +116,12 @@ describe('demo visuals', () => {
   it('total the plant floor over every machine', () => {
     const live = { machines: { m01: { status: 'running', count: 10, speed: 2, power: 1.25 }, m02: { status: 'alarm', count: 5, speed: 0, power: 0.5 } } };
     const total = (id: string) => {
-      const node = drawings.plantFloor.nodes.find((n) => n.id === id)!;
+      const node = [...walkVisualNodes(drawings.plantFloor.nodes)].find((n) => n.id === `${id}-value`)!;
       return evaluateRawExpression(node.bindings!.text, { live }).value;
     };
-    assert.equal(total('total-running'), `1 of ${DEMO_MACHINES.length} running`);
-    assert.equal(total('total-parts'), '15 parts made');
-    assert.equal(total('total-rate'), '120 parts/h');
+    assert.equal(total('total-running'), `1 of ${DEMO_MACHINES.length}`);
+    assert.equal(total('total-parts'), '15');
+    assert.equal(total('total-rate'), '120 /h');
     assert.equal(total('total-power'), '1.8 kW');
   });
 });

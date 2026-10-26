@@ -52,9 +52,9 @@ again after changing them.
 
 ## The drawings
 
-Setup also saves three visuals in Studio → Visuals. **Machine** is a symbol (signal tower, a rotor
-that turns while running, status badge, speed and temperature bars, a belt that moves while
-running). **Plant floor** places eight copies of it, one per machine, each wired to its own
+Setup also saves three visuals in Studio → Visuals. **Machine** is a symbol: a card with a status
+pill, a ring showing output against target, speed, power, a temperature bar against the limit and
+parts made. **Plant floor** places eight copies of it, one per machine, each wired to its own
 `machines.<code>.*` tags. **Machine view** places one copy that follows the machine picked on the
 Machine Detail page and takes its target and temperature limit from the machine register. Change
 the symbol once and both drawings change.
