@@ -24,7 +24,7 @@ function storage(): VisualNode[] {
       pipe(`${base}-out`, `${cx},262 ${cx},${286}`, running(`${base}.pump`)),
       pipe(`${base}-dis`, `${cx},${314} ${cx},345`, flowing(`${base}.flow`)),
       tank(base, x, 120, 90, 140, base, tag, title),
-      pump(`p${base.slice(2)}`, cx, 300, P(`${base}.pump`), `P-${base.slice(2)}`, 'right'),
+      pump(`p${base.slice(2)}`, cx, 300, P(`${base}.pump`), `P-${base.slice(2)}`, 'right', 'down'),
       readout(`${base}-solids`, x + 8, 130 + 140 - 40, P(`${base}.solids`), '%', { w: 74, decimals: 2 }),
     ];
   });
@@ -81,7 +81,7 @@ function screens(): VisualNode[] {
     pipe('s2-rej', '1206,240 1218,240 1218,380 1180,380 1180,398', `${P('s2.reject')} > 0`, REJECT, 5),
     screenVessel('s1', 1080, 150, 's1', 'S-1'),
     screenVessel('s2', 1160, 150, 's2', 'S-2'),
-    readout('s1-in', 1030, 236, P('s1.inlet'), 'kPa', { w: 62, decimals: 0, label: 'SCREENS IN' }),
+    readout('s1-in', 1014, 236, P('s1.inlet'), 'kPa', { w: 62, decimals: 0, label: 'SCREENS IN' }),
     tank('tk60', 1120, 400, 80, 80, 'tk60', 'TK-60', 'Rejects', { liquid: REJECT, low: -1, high: 85, labelsBelow: true }),
     readout('rej-flow', 1210, 410, `${P('s1.reject')} + ${P('s2.reject')}`, 'L/min', { w: 74, decimals: 0, label: 'REJECTS' }),
   ];
@@ -95,13 +95,13 @@ function feed(): VisualNode[] {
       shape('rect', `${id}-tote-liquid`, { x: 4, y: 18, width: 50, height: 24, rx: 4, fill: ADDITIVE, opacity: 0.55 }),
       text(`${id}-tote-tag`, 29, -6, title, 9, { textAnchor: 'middle', fontWeight: '700', fill: 'var(--vis-grey)' }),
     ], { x: 1500, y: y - 23 }, { name: title }),
-    pump(id, 1470, y, P(`${base}.pump`), tag, 'below'),
+    pump(id, 1470, y, P(`${base}.pump`), tag, 'below', 'left'),
     readout(`${id}-rate`, 1380, y - 30, P(`${base}.rate`), 'L/h', { w: 64 }),
   ];
   return [
     tank('tk40', 1250, 120, 100, 140, 'tk40', 'TK-40', 'Feed tank'),
     pipe('tk40-out', '1300,262 1300,286', running('tk40.pump')),
-    pump('p40', 1300, 300, P('tk40.pump'), 'P-40', 'left'),
+    pump('p40', 1300, 300, P('tk40.pump'), 'P-40', 'left', 'down'),
     ...dosing('a1', 160, 'add1', 'A-1', 'Additive A'),
     ...dosing('a2', 230, 'add2', 'A-2', 'Additive B'),
     // Down and along to the line unit's inlet
@@ -175,7 +175,7 @@ function recovery(): VisualNode[] {
     pipe('drain', '300,700 182,700', `${P('unit.speed')} > 0`, WATER),
     tank('tk50', 60, 580, 120, 150, 'tk50', 'TK-50', 'Recovery tank', { liquid: WATER }),
     pipe('tk50-out', '182,600 240,600 240,434', running('tk50.pump'), WATER),
-    pump('p50', 240, 420, P('tk50.pump'), 'P-50', 'left'),
+    pump('p50', 240, 420, P('tk50.pump'), 'P-50', 'left', 'up'),
     pipe('return', '240,406 240,385 460,385 460,250 478,250', flowing('tk50.flow'), WATER),
     readout('tk50-flow', 262, 440, P('tk50.flow'), 'L/min', { w: 80, decimals: 0, label: 'RETURN' }),
   ];

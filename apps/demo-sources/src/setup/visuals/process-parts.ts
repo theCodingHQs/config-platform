@@ -73,8 +73,10 @@ export function tank(id: string, x: number, y: number, w: number, h: number, bas
   ], { x, y }, { name: `${tagName} ${title}` });
 }
 
-/** A pump: green while running, red and blinking when tripped, grey when stopped */
-export function pump(id: string, cx: number, cy: number, status: string, tagName: string, labelSide: 'left' | 'right' | 'below' = 'below'): VisualNode {
+const TURN = { right: 0, down: 90, left: 180, up: -90 } as const;
+
+/** A pump: green while running, red and blinking when tripped, grey when stopped; its arrow points the way it pumps */
+export function pump(id: string, cx: number, cy: number, status: string, tagName: string, labelSide: 'left' | 'right' | 'below' = 'below', pumps: keyof typeof TURN = 'right'): VisualNode {
   const label = labelSide === 'below' ? { x: 0, y: 30, textAnchor: 'middle' } : labelSide === 'left' ? { x: -20, y: 4, textAnchor: 'end' } : { x: 20, y: 4, textAnchor: 'start' };
   return group(id, [
     shape('ellipse', `${id}-body`, { x: 0, y: 0, rx: 14, ry: 14, fill: 'var(--vis-grey)', stroke: 'var(--vis-white)', strokeWidth: 2, shadow: true }, {
@@ -83,7 +85,7 @@ export function pump(id: string, cx: number, cy: number, status: string, tagName
         { when: isAlarm(status), set: { fill: 'var(--vis-alarm)' }, effect: 'blink' },
       ],
     }),
-    shape('polygon', `${id}-arrow`, { points: '-5,-7 8,0 -5,7', fill: 'var(--vis-white)' }),
+    shape('polygon', `${id}-arrow`, { points: '-5,-7 8,0 -5,7', fill: 'var(--vis-white)', rotate: TURN[pumps], pivot: 'anchor' }),
     text(`${id}-tag`, label.x, label.y, tagName, 9.5, { fontWeight: '700', fill: TAG_TEXT, textAnchor: label.textAnchor }),
   ], { x: cx, y: cy }, { name: `Pump ${tagName}` });
 }
