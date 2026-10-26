@@ -1,0 +1,29 @@
+{
+  "name": "@config-platform/demo-sources",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Stand-in machines for every kind of live connection (OPC UA, Modbus, MQTT, WebSocket, HTTP), and a setup that builds the machine monitoring demo in a workspace",
+  "type": "module",
+  "scripts": {
+    "setup": "tsx src/setup/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@config-platform/edge-agent": "workspace:*",
+    "aedes": "^1.2.0",
+    "modbus-serial": "^8.0.25",
+    "node-opcua-server": "^2.187.16",
+    "node-opcua-variant": "2.187.0",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@config-platform/live-connectors": "workspace:*",
+    "@config-platform/schema": "workspace:*",
+    "@types/node": "^22.20.5",
+    "@types/ws": "^8.18.2",
+    "tsx": "^4.23.15",
+    "typescript": "^5.7.3"
+  }
+}

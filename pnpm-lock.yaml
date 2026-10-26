@@ -103,6 +103,46 @@ importers:
         specifier: ^3.0.7
         version: 3.2.7(@types/node@22.20.5)(jsdom@26.1.0)(less@4.9.1)(tsx@4.23.15)
 
+  apps/demo-sources:
+    dependencies:
+      '@config-platform/edge-agent':
+        specifier: workspace:*
+        version: link:../edge-agent
+      aedes:
+        specifier: ^1.2.0
+        version: 1.2.0
+      modbus-serial:
+        specifier: ^8.0.25
+        version: 8.0.25
+      node-opcua-server:
+        specifier: ^2.187.16
+        version: 2.187.16
+      node-opcua-variant:
+        specifier: 2.187.0
+        version: 2.187.0
+      ws:
+        specifier: ^8.22.0
+        version: 8.22.0
+    devDependencies:
+      '@config-platform/live-connectors':
+        specifier: workspace:*
+        version: link:../../packages/live-connectors
+      '@config-platform/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
+      '@types/node':
+        specifier: ^22.20.5
+        version: 22.20.5
+      '@types/ws':
+        specifier: ^8.18.2
+        version: 8.18.2
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
   apps/edge-agent:
     dependencies:
       '@config-platform/live-connectors':
@@ -1699,6 +1739,9 @@ packages:
   '@types/readable-stream@4.0.25':
     resolution: {integrity: sha512-7GsxL8Wd5X3jh73/qgW7WCnbBvGSdD8U3E4Jiuus3/8I+PN20DtlkJtwFhr/sImXfDDQ2Z03i/9wNiIF3TVSsw==}
 
+  '@types/semver@7.8.0':
+    resolution: {integrity: sha512-1mAINjtQCXXeLkJ9ehXkwOcBpqtLxiVtKhpUf83DdRNdQKV0iXZpaHYqRr7nj+wvxuJzoAmAwXI+sCNMv1CzLQ==}
+
   '@types/ws@8.18.2':
     resolution: {integrity: sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w==}
 
@@ -1891,6 +1934,29 @@ packages:
 
   abstract-logging@2.0.1:
     resolution: {integrity: sha512-2BjRTZxTPvheOvGbBslFSYOUkr+SjPtOnrLP33f+VIWLzezQpZcqVg7ja3L4dBXmzzgwT+a029jRx5PCi3JuiA==}
+
+  aedes-packet@4.0.1:
+    resolution: {integrity: sha512-PLjKJElXEYB66RzHhJCw0SrRLfSmGRbbg2mtO5t/6FAbFp8vC0cG5ErhvPvfa9iKBrKZwoluWLgn8doBU8sRAw==}
+    engines: {node: '>=20'}
+
+  aedes-persistence@11.0.0:
+    resolution: {integrity: sha512-6ufVYbC9qrYC9te/jdVX1nXKSRJpUOi3XGLYWfmHo3ijrieZOX6k2/35LFZaX1E2VL2lV9xtq2NLNalPciuxeg==}
+    engines: {node: '>=20'}
+
+  aedes@1.2.0:
+    resolution: {integrity: sha512-fCgK7TzmP2zGYS2iI/RE1tjHAIIqq5MjeOx3bicd89aTWTac+wiaywwIWhQQK6CXS+ml7ssGz8NntKYL5jPaZA==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      aedes-persistence-level: ^9.1.2
+      aedes-persistence-mongodb: ^9.3.1
+      aedes-persistence-redis: ^11.2.1
+    peerDependenciesMeta:
+      aedes-persistence-level:
+        optional: true
+      aedes-persistence-mongodb:
+        optional: true
+      aedes-persistence-redis:
+        optional: true
 
   agent-base@7.1.4:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
@@ -2314,6 +2380,9 @@ packages:
     resolution: {integrity: sha512-0je+qPKHEMohvfRTCEo3CrPG6cAzAYgmzKyxRiYSSDkS6eGJdyVJm7WaYA5ECaAD9wLB2T4EEeymA5aFVcYXCA==}
     engines: {node: '>=6'}
 
+  dequeue@1.0.5:
+    resolution: {integrity: sha512-2FIVJZTaWhUj0Y2uKmDAasTP6ZwFWRjkRc01MYN5jFm96iIzkYyNzGADfJ13C5W7CTN7XO9mBYDcVB68eNybBA==}
+
   detect-node-es@1.1.0:
     resolution: {integrity: sha512-ypdmJU/TbBby2Dxibuv7ZLW3Bs1QEmM7nHjEANfohJLvE0XVujisn1qPJcZxg+qDucsr+bP6fLD1rPS3AhJ7EQ==}
 
@@ -2475,6 +2544,9 @@ packages:
 
   fastify@5.12.5:
     resolution: {integrity: sha512-OB2k1dlxs5/NAABqeKV2FUHkSD2BbENsCak8yULVcymn3fHIPDVa9TI3SDnJSWYSllZmSYuZXy2gTnsT+Sut1A==}
+
+  fastparallel@2.4.1:
+    resolution: {integrity: sha512-qUmhxPgNHmvRjZKBFUNI0oZuuH9OlSIOXmJ98lhKPxMZZ7zS/Fi0wRHOihDSz0R1YiIOjxzOY4bq65YTcdBi2Q==}
 
   fastq@1.20.3:
     resolution: {integrity: sha512-XKv5nnLs6nLF71NgiKJLIZFLkPyIEuOselLG7ujZnGrRfQK8HpvY+WqKhAJUAdLomwVHErVS4LfxFlPq0/FTAw==}
@@ -2893,6 +2965,12 @@ packages:
   lodash.merge@4.6.2:
     resolution: {integrity: sha512-0KpjqXRVvrYyCsX1swR/XTK0va6VQkQM6MNo7PqW77ByjAhoARA8EfrP1N4+KlKj8YS0ZUCtRT/YUuhyYDujIQ==}
 
+  lodash.partition@4.6.0:
+    resolution: {integrity: sha512-35L3dSF3Q6V1w5j6V3NhNlQjzsRDC/pYKCTdYTmwqSib+Q8ponkAmt/PwEOq3EmI38DSCl+SkIVwLd+uSlVdrg==}
+
+  lodash.sortby@4.7.0:
+    resolution: {integrity: sha512-HDWXG8isMntAyRF5vZ7xKuEvOhT4AhlRt/3czTSjvGUxjYCBVRQY48ViDHyfYz9VIoBkW4TMGQNapx+l3RUwdA==}
+
   lodash.union@4.6.0:
     resolution: {integrity: sha512-c4pB2CdGrGdjMKYLA+XiRDO7Y0PRQbm/Gzg8qMj+QH+pFVAoTp5sBpO0odL3FjoPCGjK96p6qsP+yQoiLoOBcw==}
 
@@ -2993,6 +3071,10 @@ packages:
   modbus-serial@8.0.25:
     resolution: {integrity: sha512-T6OHW80k7DtYZF96onavw84IXNu44EW+fybgVftWAGOraL8vTmMZod8w6thOrWj2I2qHC9Gsn2nitVTUDih+6A==}
 
+  mqemitter@7.1.0:
+    resolution: {integrity: sha512-GnBDNz3lxmllW201ne0mrmdy5tPOTnc79jjVcsfUa2LG2pUGeyGWVeiae6ZysfC/64XrYOqCKRAQYrB7pGyBVQ==}
+    engines: {node: '>=20'}
+
   mqtt-packet@9.0.2:
     resolution: {integrity: sha512-MvIY0B8/qjq7bKxdN1eD+nrljoeaai+qjLJgfRn3TiMuz0pamsIWY2bFODPZMSNmabsLANXsLl4EMoWvlaTZWA==}
 
@@ -3041,8 +3123,25 @@ packages:
     resolution: {integrity: sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ==}
     hasBin: true
 
+  node-opcua-address-space-base@2.187.14:
+    resolution: {integrity: sha512-MZCoB44ea8nx4kUHIOsPYCgEfUldMFvchArGp4Fnm1/1s3Ymd3Dh4qmGqudtlaDzsfW2WkOA3tkUBhWk3QQ2rg==}
+    engines: {node: '>=22.13.0'}
+
   node-opcua-address-space-base@2.187.9:
     resolution: {integrity: sha512-72rkRf/C9hzNGRFbfW44PO2gCDx0mQzwHe1WSaxFoYbVWESQytaQ5pXreqlYEpu/tTjqOQk6SRqrwS5t0RBgAg==}
+    engines: {node: '>=22.13.0'}
+
+  node-opcua-address-space-store@2.187.14:
+    resolution: {integrity: sha512-seG9B9BoG4APh2QScSb1tCD9ctMz4HRv9z2qHr0Tm5nBMRuTBLeaAvss4Im+ZOOujUD6eHMb0IJe3zH9CG1uFw==}
+    engines: {node: '>=22.13.0'}
+
+  node-opcua-address-space@2.187.16:
+    resolution: {integrity: sha512-qchXUW9C2IkuPi+7ujFcsFysTJTZPtCGO2HC5AZpdSUwlolea9OX4ddEXR6NreagMOQMfihvZbaFcaEd3nCfuQ==}
+    engines: {node: '>=22.13.0'}
+    hasBin: true
+
+  node-opcua-alarm-condition@2.187.16:
+    resolution: {integrity: sha512-MeMzFTNIQHAnjGNzuk6P60oNaTHeBr5CzZLsURF4MpGLhtzMWHNrR/tZU0cll3srWoLqWkK8eqNf1/8jHX0KlA==}
     engines: {node: '>=22.13.0'}
 
   node-opcua-alarm-condition@2.187.9:
@@ -3065,6 +3164,10 @@ packages:
     resolution: {integrity: sha512-1KKtaVnqzoP27/DL5WyrzYwq//mU0maflTL01q/QGVjSaM0wqe+KcU8DkmNpAQc7Od5gOiR4peIe5S2X1q4V3w==}
     engines: {node: '>=22.13.0'}
 
+  node-opcua-certificate-manager@2.187.16:
+    resolution: {integrity: sha512-Z4HS2G3kvXGe8ZXqDH4d1ddJUKc/Sa19rGUsx6ZYbDAH2Q9yrWxz3ImZkNyYz/4v2TgpmaAsR7vIYRVlVcrckw==}
+    engines: {node: '>=22.13.0'}
+
   node-opcua-certificate-manager@2.187.9:
     resolution: {integrity: sha512-5XXjFhSzpYD8tlkHrC758LoCGEALiOTLq89z3TMIBIEuz6eCCbN1gJmm6PYmclWziJvQ42673N2sD5WHLqsxkA==}
     engines: {node: '>=22.13.0'}
@@ -3073,12 +3176,20 @@ packages:
     resolution: {integrity: sha512-Y/+pVE1dIyw6GI0rjcGlAp0ygoM3STrocjdRXLnhgAfToO0Fq7g6+3az4pI/u2Nx4/dNymWdvb87oNCJ/FSr7w==}
     engines: {node: '>=22.13.0'}
 
+  node-opcua-client-dynamic-extension-object@2.187.16:
+    resolution: {integrity: sha512-FmJkHm3i8yqX1qXbM/GJk3W6wkF+aCx0iXtXCAsX9PGANvJ+m/qrJfI+5N5uJj6mY9QnBsPofNpvwwua7X8elA==}
+    engines: {node: '>=22.13.0'}
+
   node-opcua-client-dynamic-extension-object@2.187.9:
     resolution: {integrity: sha512-mI1/uPDqxgL0N3Z1sGBN882QSCJic2REWGJO4RR1IxcXBohTqTwcwxuy4Gp+8zeQe4JnwN9/nmJmBuSih9JMcw==}
     engines: {node: '>=22.13.0'}
 
   node-opcua-client@2.187.12:
     resolution: {integrity: sha512-y7xnXNxYqkGNgxqA/fDdg4OkjI02r3RcckMPqSY9+QaVQBnK0FKxFLBGdWbPLNXYsg2jFzNz/NYigMIuKIJb7A==}
+    engines: {node: '>=22.13.0'}
+
+  node-opcua-client@2.187.16:
+    resolution: {integrity: sha512-pL96zOuHLi50AGk28mLoCRVlkUMN2pZdy0SCI1lyiYTrLMuXNmaPvaVvsMTrQmUhbMCCBvu82zDSV0fDVbmppg==}
     engines: {node: '>=22.13.0'}
 
   node-opcua-common@2.187.9:
@@ -3096,6 +3207,10 @@ packages:
     peerDependenciesMeta:
       node-opcua-crypto-web:
         optional: true
+
+  node-opcua-data-access@2.187.9:
+    resolution: {integrity: sha512-IZorS1Ew3cah6ftXBvQZPK12k8iCbWySkhu0oJaKmqhuiZXprLndS+z6QuvRn7ylAVBIksfeAr9pgQpYyLDTgw==}
+    engines: {node: '>=22.13.0'}
 
   node-opcua-data-model@2.187.0:
     resolution: {integrity: sha512-xnTvGrcXwqUbbRBLynZ6r1mckM8ybn3XKeHtlxXafTuhQb07PnBu+YmdNc6sXL8/ENevA7S7Lmsl3S9C2Sx5uQ==}
@@ -3133,8 +3248,20 @@ packages:
     resolution: {integrity: sha512-zTLtwnmFTduEeIjaTc9xRNWEPODvDm8CGajQMMyFmpCABIrd8i8cps9YcIU5ZJLite5aS7WsW1K8y1VeQDg0kg==}
     engines: {node: '>=22.13.0'}
 
+  node-opcua-json@2.187.16:
+    resolution: {integrity: sha512-qR5HzzjoSqIFKwK4D3kv+db37t1CGyN/zejPrxSxNuNoul1TB8/LiPhBT7vMHfH0GwJU0nmXh3Xgpihan+SNiA==}
+    engines: {node: '>=22.13.0'}
+
   node-opcua-nodeid@2.187.0:
     resolution: {integrity: sha512-mRTQu2h6358yaDabQ/lwDSFCxoDyWVh3Ve8KfALJroTdjjut4VYSAGynlvrOWuGcbyGY3dI0oCeFTpfjndW6hw==}
+    engines: {node: '>=22.13.0'}
+
+  node-opcua-nodeset-ua@2.187.14:
+    resolution: {integrity: sha512-K0sQmjBHiknRrkVgkc7kdnUgb5IIXnyaYeVu3zlV6cOUhr0Z2ms95UcG/9a0qVBIwfN184ilNqJAeizwrKKbYg==}
+    engines: {node: '>=22.13.0'}
+
+  node-opcua-nodesets@2.187.4:
+    resolution: {integrity: sha512-1O0FKlTSmTLqi0r+VVEoDQyt5FZKgxqYlf5LB0dNcw26oSnPZkBPEjywW9/tzCrJZbeK1TEA8tawZ0KYbwrq4Q==}
     engines: {node: '>=22.13.0'}
 
   node-opcua-numeric-range@2.187.0:
@@ -3157,6 +3284,14 @@ packages:
     resolution: {integrity: sha512-4Wheaba8znVTHoPz1ZCXDvvZHO2XbxCT5E+vrW5mG6zt3zMztRYs//Y2huLK151JbQ0mkDPTaybTPv7npZ+AUw==}
     hasBin: true
 
+  node-opcua-pki@7.1.4:
+    resolution: {integrity: sha512-dkQNnfNAMN6CHP+YDw1iBU7WCGU2s1CYTdiWNCqQ0po4VR70GfuqgJa9a+MuvnR1CQXVudxoZzU8Sr+Iw1QX5Q==}
+    hasBin: true
+
+  node-opcua-pseudo-session@2.187.16:
+    resolution: {integrity: sha512-Y5jQzXPimA0+smDhVIzpI692C7wWMVT719rWDwAz7wfL+4pYyXPxe9mLxkWFxrgxpsPH8seUED3vI9EquL99yw==}
+    engines: {node: '>=22.13.0'}
+
   node-opcua-pseudo-session@2.187.9:
     resolution: {integrity: sha512-6pBDRLIKCydkBm1B6htIBs91Dl0d12Mdw8jEyNQdkkIKtFF1RnA44MwuszW97H1ZrsxDTq5ZZ0HlZisqj+D2ew==}
     engines: {node: '>=22.13.0'}
@@ -3165,8 +3300,16 @@ packages:
     resolution: {integrity: sha512-DvFFXTLC7sAPaNMr8p9c4IyQSLSd7n+kHEWqxdDWtOUtct/JYsmCPIw2/BJxF/OMuatfh8IfRoO4/6Gx5HVuOw==}
     engines: {node: '>=22.13.0'}
 
+  node-opcua-secure-channel@2.187.16:
+    resolution: {integrity: sha512-sfkAUJlTUXmTkOoJg0XgxK7LuEuV/VFrRyyP2oxwBPCzb1xNyOwwNvH2iaCCvbftUjnwIJnwaRZ2u5JrIxGrGg==}
+    engines: {node: '>=22.13.0'}
+
   node-opcua-secure-channel@2.187.9:
     resolution: {integrity: sha512-98j+ep1nF5l3K+v8K4r7ZpngVp768nelOTClFOlvg1OjNHiG/b3sDpCV6VeyQeff5vR3lAS53XgI5aEqQT2VBg==}
+    engines: {node: '>=22.13.0'}
+
+  node-opcua-server@2.187.16:
+    resolution: {integrity: sha512-/vdOkaKysHtBsFAHROTgKNLiuBaSCl5bY2l/CyMmramKl1jHsZnLO6Jow7mM+vgm0xynmVkTpc7ma00I2xx4Ig==}
     engines: {node: '>=22.13.0'}
 
   node-opcua-service-browse@2.187.9:
@@ -3185,12 +3328,20 @@ packages:
     resolution: {integrity: sha512-GzEG1wu86bv0tm8CBC7FcmKkgrPoOusMepqu9dfLtvIG5IUIRnggwAGD2vnpoZAy4LmXkFxFPLxsx0snGZIMYg==}
     engines: {node: '>=22.13.0'}
 
+  node-opcua-service-filter@2.187.14:
+    resolution: {integrity: sha512-IODz8QGhnDtamhT+R79sDGh2Ngy5wN2P2ZYeMGsPYi88eY8oT5vEjXzPmyT6VGh286Ci9eSTfuoe66MNcL0x+Q==}
+    engines: {node: '>=22.13.0'}
+
   node-opcua-service-filter@2.187.9:
     resolution: {integrity: sha512-Q6y2NgiTRK3SyYgScSX8fj9H5T0gDCIkMuGUsUb5xChhEimrS8kDzHmyX5Acl+80iquBdO4pZ8pvzFa2DkhU6w==}
     engines: {node: '>=22.13.0'}
 
   node-opcua-service-history@2.187.9:
     resolution: {integrity: sha512-NtppwKbRwH/T6q2X4EWwkKvsi/b8sDBK0JXhRRhP980tShvvjsPZZwuyk3QlUXWdkHf3cXK3dgFGe/nY09WIAQ==}
+    engines: {node: '>=22.13.0'}
+
+  node-opcua-service-node-management@2.187.9:
+    resolution: {integrity: sha512-ApsFuqnqowGnFswtPKI3VqNbDH6GDlAOg1kF5wlVNe5/AxJDB6xA/U7vpuNOTrZvm1MI1GJVJhsxjEuctN/3xw==}
     engines: {node: '>=22.13.0'}
 
   node-opcua-service-query@2.187.9:
@@ -3211,6 +3362,10 @@ packages:
 
   node-opcua-service-session@2.187.9:
     resolution: {integrity: sha512-sSI7U8PSEUvsBBEH7J0DvBi5muji7Y/GYxhWSUVN9hrI14cHNmOF90Sc0wvNPPdcBQQ2GnsmFRBWHdMdSyPgBw==}
+    engines: {node: '>=22.13.0'}
+
+  node-opcua-service-subscription@2.187.16:
+    resolution: {integrity: sha512-gM47IWfj6B5UkR2rJGfW2XMiTsrTkw44OZtHiV4SKdZ983P2zId2LfvFQ7qfea2cZH2BwWk6euYWq6i4ueUtjQ==}
     engines: {node: '>=22.13.0'}
 
   node-opcua-service-subscription@2.187.9:
@@ -3235,6 +3390,10 @@ packages:
 
   node-opcua-types@2.187.9:
     resolution: {integrity: sha512-Kf8uEa+9lkraLfgh3WznCKuPEGXcvdZa1GTlT+DHUmkSi72aWPpmg+X2CFjfsNHDXHkQZz7fCeeNz4ojEezUPg==}
+    engines: {node: '>=22.13.0'}
+
+  node-opcua-uanodeset-json@2.187.16:
+    resolution: {integrity: sha512-scZYO1TC2wYumeULEXUlOXzJz89oXigIyAD/P3MHGuNhkhhZfpC57GPTb2ywAtkJ5Jkw4pY2isoxz+iyfa06FA==}
     engines: {node: '>=22.13.0'}
 
   node-opcua-utils@2.187.0:
@@ -3444,6 +3603,10 @@ packages:
   pvutils@1.2.0:
     resolution: {integrity: sha512-BbubeCEyTuQjVMakvJQ/Sxbc93F2pwmbsxONT/ZRrwU7Ua38d8unYTwXpTVLAKJ4BDuH9IGztCjQcd/N/39Dvg==}
     engines: {node: '>=16.0.0'}
+
+  qlobber@8.0.1:
+    resolution: {integrity: sha512-O+Wd1chXj5YE1DwmD+ae0bXiSLehmnS3czlC1R9FL/Nt/3q8uMS1bIHmg2lJfCoiimCxClWM8AAuJrF0EvNiog==}
+    engines: {node: '>= 16'}
 
   quick-format-unescaped@4.0.4:
     resolution: {integrity: sha512-tYC1Q1hgyRuHgloV/YXs2w15unPVh8qfu/qCTfhTYamaw7fyhumKa2yGpdSo87vY32rIclj+4fWYQXUMs9EHvg==}
@@ -5510,6 +5673,8 @@ snapshots:
     dependencies:
       '@types/node': 22.20.5
 
+  '@types/semver@7.8.0': {}
+
   '@types/ws@8.18.2':
     dependencies:
       '@types/node': 22.20.5
@@ -5911,6 +6076,28 @@ snapshots:
       event-target-shim: 5.0.1
 
   abstract-logging@2.0.1: {}
+
+  aedes-packet@4.0.1:
+    dependencies:
+      mqtt-packet: 9.0.2
+    transitivePeerDependencies:
+      - supports-color
+
+  aedes-persistence@11.0.0:
+    dependencies:
+      aedes-packet: 4.0.1
+      qlobber: 8.0.1
+    transitivePeerDependencies:
+      - supports-color
+
+  aedes@1.2.0:
+    dependencies:
+      aedes-packet: 4.0.1
+      aedes-persistence: 11.0.0
+      mqemitter: 7.1.0
+      mqtt-packet: 9.0.2
+    transitivePeerDependencies:
+      - supports-color
 
   agent-base@7.1.4: {}
 
@@ -6350,6 +6537,8 @@ snapshots:
 
   dequal@2.0.3: {}
 
+  dequeue@1.0.5: {}
+
   detect-node-es@1.1.0: {}
 
   dns-equal@1.0.0: {}
@@ -6638,6 +6827,11 @@ snapshots:
       secure-json-parse: 4.1.0
       semver: 7.8.5
       toad-cache: 3.7.4
+
+  fastparallel@2.4.1:
+    dependencies:
+      reusify: 1.1.0
+      xtend: 4.0.2
 
   fastq@1.20.3:
     dependencies:
@@ -7069,6 +7263,10 @@ snapshots:
   lodash.merge@4.6.2:
     optional: true
 
+  lodash.partition@4.6.0: {}
+
+  lodash.sortby@4.7.0: {}
+
   lodash.union@4.6.0: {}
 
   lodash.uniq@4.5.0: {}
@@ -7149,6 +7347,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  mqemitter@7.1.0:
+    dependencies:
+      fastparallel: 2.4.1
+      qlobber: 8.0.1
+
   mqtt-packet@9.0.2:
     dependencies:
       bl: 6.1.6
@@ -7215,6 +7418,26 @@ snapshots:
 
   node-gyp-build@4.8.4: {}
 
+  node-opcua-address-space-base@2.187.14:
+    dependencies:
+      node-opcua-assert: 2.186.7
+      node-opcua-basic-types: 2.187.0
+      node-opcua-constants: 2.185.0
+      node-opcua-crypto: 6.2.3
+      node-opcua-data-model: 2.187.0
+      node-opcua-data-value: 2.187.9
+      node-opcua-date-time: 2.187.0
+      node-opcua-debug: 2.186.7
+      node-opcua-extension-object: 2.187.0
+      node-opcua-nodeid: 2.187.0
+      node-opcua-numeric-range: 2.187.0
+      node-opcua-schemas: 2.187.0
+      node-opcua-status-code: 2.187.0
+      node-opcua-types: 2.187.9
+      node-opcua-variant: 2.187.0
+    transitivePeerDependencies:
+      - node-opcua-crypto-web
+
   node-opcua-address-space-base@2.187.9:
     dependencies:
       node-opcua-assert: 2.186.7
@@ -7231,6 +7454,85 @@ snapshots:
       node-opcua-schemas: 2.187.0
       node-opcua-status-code: 2.187.0
       node-opcua-types: 2.187.9
+      node-opcua-variant: 2.187.0
+    transitivePeerDependencies:
+      - node-opcua-crypto-web
+
+  node-opcua-address-space-store@2.187.14:
+    dependencies:
+      node-opcua-address-space-base: 2.187.14
+      node-opcua-binary-stream: 2.187.0
+      node-opcua-constants: 2.185.0
+      node-opcua-data-model: 2.187.0
+      node-opcua-data-value: 2.187.9
+      node-opcua-date-time: 2.187.0
+      node-opcua-nodeid: 2.187.0
+      node-opcua-numeric-range: 2.187.0
+      node-opcua-status-code: 2.187.0
+      node-opcua-types: 2.187.9
+      node-opcua-variant: 2.187.0
+    transitivePeerDependencies:
+      - node-opcua-crypto-web
+
+  node-opcua-address-space@2.187.16:
+    dependencies:
+      '@types/semver': 7.8.0
+      chalk: 6.0.1
+      dequeue: 1.0.5
+      node-opcua-address-space-base: 2.187.14
+      node-opcua-address-space-store: 2.187.14
+      node-opcua-assert: 2.186.7
+      node-opcua-basic-types: 2.187.0
+      node-opcua-binary-stream: 2.187.0
+      node-opcua-client-dynamic-extension-object: 2.187.16
+      node-opcua-constants: 2.185.0
+      node-opcua-crypto: 6.2.3
+      node-opcua-data-access: 2.187.9
+      node-opcua-data-model: 2.187.0
+      node-opcua-data-value: 2.187.9
+      node-opcua-date-time: 2.187.0
+      node-opcua-debug: 2.186.7
+      node-opcua-enum: 2.187.0
+      node-opcua-extension-object: 2.187.0
+      node-opcua-factory: 2.187.0
+      node-opcua-nodeid: 2.187.0
+      node-opcua-nodeset-ua: 2.187.14
+      node-opcua-numeric-range: 2.187.0
+      node-opcua-object-registry: 2.186.7
+      node-opcua-pseudo-session: 2.187.16
+      node-opcua-service-browse: 2.187.9
+      node-opcua-service-call: 2.187.9
+      node-opcua-service-history: 2.187.9
+      node-opcua-service-translate-browse-path: 2.187.9
+      node-opcua-service-write: 2.187.9
+      node-opcua-status-code: 2.187.0
+      node-opcua-types: 2.187.9
+      node-opcua-utils: 2.187.0
+      node-opcua-variant: 2.187.0
+      node-opcua-xml2json: 2.187.0
+      semver: 7.8.5
+      thenify-ex: 4.4.0
+      xml-writer: 1.7.0
+    transitivePeerDependencies:
+      - node-opcua-crypto-web
+
+  node-opcua-alarm-condition@2.187.16:
+    dependencies:
+      chalk: 6.0.1
+      node-opcua-assert: 2.186.7
+      node-opcua-basic-types: 2.187.0
+      node-opcua-constants: 2.185.0
+      node-opcua-data-model: 2.187.0
+      node-opcua-debug: 2.186.7
+      node-opcua-nodeid: 2.187.0
+      node-opcua-pseudo-session: 2.187.16
+      node-opcua-service-filter: 2.187.14
+      node-opcua-service-read: 2.187.9
+      node-opcua-service-subscription: 2.187.16
+      node-opcua-service-translate-browse-path: 2.187.9
+      node-opcua-status-code: 2.187.0
+      node-opcua-types: 2.187.9
+      node-opcua-utils: 2.187.0
       node-opcua-variant: 2.187.0
     transitivePeerDependencies:
       - node-opcua-crypto-web
@@ -7277,6 +7579,22 @@ snapshots:
 
   node-opcua-buffer-utils@2.187.0: {}
 
+  node-opcua-certificate-manager@2.187.16:
+    dependencies:
+      env-paths: 4.0.0
+      node-opcua-assert: 2.186.7
+      node-opcua-common: 2.187.9
+      node-opcua-crypto: 6.2.3
+      node-opcua-debug: 2.186.7
+      node-opcua-object-registry: 2.186.7
+      node-opcua-pki: 7.1.4
+      node-opcua-status-code: 2.187.0
+      thenify-ex: 4.4.0
+    transitivePeerDependencies:
+      - '@75lb/nature'
+      - node-opcua-crypto-web
+      - proper-lockfile
+
   node-opcua-certificate-manager@2.187.9:
     dependencies:
       env-paths: 4.0.0
@@ -7301,6 +7619,29 @@ snapshots:
       node-opcua-buffer-utils: 2.187.0
       node-opcua-factory: 2.187.0
       node-opcua-packet-assembler: 2.187.0
+
+  node-opcua-client-dynamic-extension-object@2.187.16:
+    dependencies:
+      chalk: 6.0.1
+      node-opcua-assert: 2.186.7
+      node-opcua-binary-stream: 2.187.0
+      node-opcua-constants: 2.185.0
+      node-opcua-data-model: 2.187.0
+      node-opcua-data-value: 2.187.9
+      node-opcua-debug: 2.186.7
+      node-opcua-extension-object: 2.187.0
+      node-opcua-factory: 2.187.0
+      node-opcua-nodeid: 2.187.0
+      node-opcua-pseudo-session: 2.187.16
+      node-opcua-schemas: 2.187.0
+      node-opcua-service-browse: 2.187.9
+      node-opcua-service-translate-browse-path: 2.187.9
+      node-opcua-status-code: 2.187.0
+      node-opcua-types: 2.187.9
+      node-opcua-utils: 2.187.0
+      node-opcua-variant: 2.187.0
+    transitivePeerDependencies:
+      - node-opcua-crypto-web
 
   node-opcua-client-dynamic-extension-object@2.187.9:
     dependencies:
@@ -7376,6 +7717,57 @@ snapshots:
       - node-opcua-crypto-web
       - proper-lockfile
 
+  node-opcua-client@2.187.16:
+    dependencies:
+      '@ster5/global-mutex': 3.3.0
+      chalk: 6.0.1
+      node-opcua-alarm-condition: 2.187.16
+      node-opcua-assert: 2.186.7
+      node-opcua-basic-types: 2.187.0
+      node-opcua-buffer-utils: 2.187.0
+      node-opcua-certificate-manager: 2.187.16
+      node-opcua-client-dynamic-extension-object: 2.187.16
+      node-opcua-common: 2.187.9
+      node-opcua-constants: 2.185.0
+      node-opcua-crypto: 6.2.3
+      node-opcua-data-model: 2.187.0
+      node-opcua-data-value: 2.187.9
+      node-opcua-date-time: 2.187.0
+      node-opcua-debug: 2.186.7
+      node-opcua-extension-object: 2.187.0
+      node-opcua-hostname: 2.187.6
+      node-opcua-nodeid: 2.187.0
+      node-opcua-numeric-range: 2.187.0
+      node-opcua-object-registry: 2.186.7
+      node-opcua-pki: 7.1.4
+      node-opcua-pseudo-session: 2.187.16
+      node-opcua-schemas: 2.187.0
+      node-opcua-secure-channel: 2.187.16
+      node-opcua-service-browse: 2.187.9
+      node-opcua-service-call: 2.187.9
+      node-opcua-service-discovery: 2.187.9
+      node-opcua-service-endpoints: 2.187.9
+      node-opcua-service-filter: 2.187.14
+      node-opcua-service-history: 2.187.9
+      node-opcua-service-query: 2.187.9
+      node-opcua-service-read: 2.187.9
+      node-opcua-service-register-node: 2.187.9
+      node-opcua-service-secure-channel: 2.187.9
+      node-opcua-service-session: 2.187.9
+      node-opcua-service-subscription: 2.187.16
+      node-opcua-service-translate-browse-path: 2.187.9
+      node-opcua-service-write: 2.187.9
+      node-opcua-status-code: 2.187.0
+      node-opcua-transport: 2.187.8
+      node-opcua-types: 2.187.9
+      node-opcua-utils: 2.187.0
+      node-opcua-variant: 2.187.0
+      thenify-ex: 4.4.0
+    transitivePeerDependencies:
+      - '@75lb/nature'
+      - node-opcua-crypto-web
+      - proper-lockfile
+
   node-opcua-common@2.187.9:
     dependencies:
       node-opcua-assert: 2.186.7
@@ -7400,6 +7792,11 @@ snapshots:
       '@peculiar/x509': 2.2.0
       reflect-metadata: 0.2.2
       sshpk: 1.18.0
+
+  node-opcua-data-access@2.187.9:
+    dependencies:
+      node-opcua-data-model: 2.187.0
+      node-opcua-types: 2.187.9
 
   node-opcua-data-model@2.187.0:
     dependencies:
@@ -7466,11 +7863,42 @@ snapshots:
 
   node-opcua-hostname@2.187.6: {}
 
+  node-opcua-json@2.187.16:
+    dependencies:
+      node-opcua-basic-types: 2.187.0
+      node-opcua-data-model: 2.187.0
+      node-opcua-data-value: 2.187.9
+      node-opcua-date-time: 2.187.0
+      node-opcua-debug: 2.186.7
+      node-opcua-extension-object: 2.187.0
+      node-opcua-factory: 2.187.0
+      node-opcua-nodeid: 2.187.0
+      node-opcua-numeric-range: 2.187.0
+      node-opcua-status-code: 2.187.0
+      node-opcua-types: 2.187.9
+      node-opcua-variant: 2.187.0
+
   node-opcua-nodeid@2.187.0:
     dependencies:
       node-opcua-assert: 2.186.7
       node-opcua-constants: 2.185.0
       node-opcua-guid: 2.184.0
+
+  node-opcua-nodeset-ua@2.187.14:
+    dependencies:
+      node-opcua-address-space-base: 2.187.14
+      node-opcua-basic-types: 2.187.0
+      node-opcua-data-access: 2.187.9
+      node-opcua-data-model: 2.187.0
+      node-opcua-data-value: 2.187.9
+      node-opcua-extension-object: 2.187.0
+      node-opcua-nodeid: 2.187.0
+      node-opcua-status-code: 2.187.0
+      node-opcua-variant: 2.187.0
+    transitivePeerDependencies:
+      - node-opcua-crypto-web
+
+  node-opcua-nodesets@2.187.4: {}
 
   node-opcua-numeric-range@2.187.0:
     dependencies:
@@ -7514,6 +7942,44 @@ snapshots:
       - node-opcua-crypto-web
       - proper-lockfile
 
+  node-opcua-pki@7.1.4:
+    dependencies:
+      '@ster5/global-mutex': 3.3.0
+      byline: 5.0.0
+      chalk: 6.0.1
+      chokidar: 4.0.3
+      command-line-args: 6.0.2
+      command-line-usage: 7.0.4
+      node-opcua-crypto: 6.2.3
+      yauzl: 3.4.0
+    transitivePeerDependencies:
+      - '@75lb/nature'
+      - node-opcua-crypto-web
+      - proper-lockfile
+
+  node-opcua-pseudo-session@2.187.16:
+    dependencies:
+      node-opcua-assert: 2.186.7
+      node-opcua-basic-types: 2.187.0
+      node-opcua-constants: 2.185.0
+      node-opcua-crypto: 6.2.3
+      node-opcua-data-model: 2.187.0
+      node-opcua-data-value: 2.187.9
+      node-opcua-debug: 2.186.7
+      node-opcua-nodeid: 2.187.0
+      node-opcua-service-browse: 2.187.9
+      node-opcua-service-call: 2.187.9
+      node-opcua-service-read: 2.187.9
+      node-opcua-service-subscription: 2.187.16
+      node-opcua-service-translate-browse-path: 2.187.9
+      node-opcua-service-write: 2.187.9
+      node-opcua-status-code: 2.187.0
+      node-opcua-types: 2.187.9
+      node-opcua-utils: 2.187.0
+      node-opcua-variant: 2.187.0
+    transitivePeerDependencies:
+      - node-opcua-crypto-web
+
   node-opcua-pseudo-session@2.187.9:
     dependencies:
       node-opcua-assert: 2.186.7
@@ -7549,6 +8015,31 @@ snapshots:
       node-opcua-variant: 2.187.0
       node-opcua-xml2json: 2.187.0
 
+  node-opcua-secure-channel@2.187.16:
+    dependencies:
+      backoff: 2.5.0
+      chalk: 6.0.1
+      node-opcua-assert: 2.186.7
+      node-opcua-basic-types: 2.187.0
+      node-opcua-binary-stream: 2.187.0
+      node-opcua-chunkmanager: 2.187.8
+      node-opcua-common: 2.187.9
+      node-opcua-crypto: 6.2.3
+      node-opcua-debug: 2.186.7
+      node-opcua-factory: 2.187.0
+      node-opcua-nodeid: 2.187.0
+      node-opcua-object-registry: 2.186.7
+      node-opcua-packet-analyzer: 2.187.0
+      node-opcua-packet-assembler: 2.187.0
+      node-opcua-service-endpoints: 2.187.9
+      node-opcua-service-secure-channel: 2.187.9
+      node-opcua-status-code: 2.187.0
+      node-opcua-transport: 2.187.8
+      node-opcua-types: 2.187.9
+      node-opcua-utils: 2.187.0
+    transitivePeerDependencies:
+      - node-opcua-crypto-web
+
   node-opcua-secure-channel@2.187.9:
     dependencies:
       backoff: 2.5.0
@@ -7573,6 +8064,64 @@ snapshots:
       node-opcua-utils: 2.187.0
     transitivePeerDependencies:
       - node-opcua-crypto-web
+
+  node-opcua-server@2.187.16:
+    dependencies:
+      '@ster5/global-mutex': 3.3.0
+      chalk: 6.0.1
+      dequeue: 1.0.5
+      lodash.partition: 4.6.0
+      lodash.sortby: 4.7.0
+      node-opcua-address-space: 2.187.16
+      node-opcua-address-space-base: 2.187.14
+      node-opcua-address-space-store: 2.187.14
+      node-opcua-assert: 2.186.7
+      node-opcua-basic-types: 2.187.0
+      node-opcua-binary-stream: 2.187.0
+      node-opcua-certificate-manager: 2.187.16
+      node-opcua-client: 2.187.16
+      node-opcua-common: 2.187.9
+      node-opcua-constants: 2.185.0
+      node-opcua-crypto: 6.2.3
+      node-opcua-data-model: 2.187.0
+      node-opcua-data-value: 2.187.9
+      node-opcua-date-time: 2.187.0
+      node-opcua-debug: 2.186.7
+      node-opcua-extension-object: 2.187.0
+      node-opcua-factory: 2.187.0
+      node-opcua-hostname: 2.187.6
+      node-opcua-nodeid: 2.187.0
+      node-opcua-nodesets: 2.187.4
+      node-opcua-numeric-range: 2.187.0
+      node-opcua-object-registry: 2.186.7
+      node-opcua-pki: 7.1.4
+      node-opcua-secure-channel: 2.187.16
+      node-opcua-service-browse: 2.187.9
+      node-opcua-service-call: 2.187.9
+      node-opcua-service-discovery: 2.187.9
+      node-opcua-service-endpoints: 2.187.9
+      node-opcua-service-filter: 2.187.14
+      node-opcua-service-history: 2.187.9
+      node-opcua-service-node-management: 2.187.9
+      node-opcua-service-query: 2.187.9
+      node-opcua-service-read: 2.187.9
+      node-opcua-service-register-node: 2.187.9
+      node-opcua-service-secure-channel: 2.187.9
+      node-opcua-service-session: 2.187.9
+      node-opcua-service-subscription: 2.187.16
+      node-opcua-service-translate-browse-path: 2.187.9
+      node-opcua-service-write: 2.187.9
+      node-opcua-status-code: 2.187.0
+      node-opcua-transport: 2.187.8
+      node-opcua-types: 2.187.9
+      node-opcua-uanodeset-json: 2.187.16
+      node-opcua-utils: 2.187.0
+      node-opcua-variant: 2.187.0
+      thenify-ex: 4.4.0
+    transitivePeerDependencies:
+      - '@75lb/nature'
+      - node-opcua-crypto-web
+      - proper-lockfile
 
   node-opcua-service-browse@2.187.9:
     dependencies:
@@ -7599,6 +8148,24 @@ snapshots:
     dependencies:
       node-opcua-types: 2.187.9
 
+  node-opcua-service-filter@2.187.14:
+    dependencies:
+      node-opcua-address-space-base: 2.187.14
+      node-opcua-assert: 2.186.7
+      node-opcua-basic-types: 2.187.0
+      node-opcua-constants: 2.185.0
+      node-opcua-data-model: 2.187.0
+      node-opcua-data-value: 2.187.9
+      node-opcua-debug: 2.186.7
+      node-opcua-extension-object: 2.187.0
+      node-opcua-nodeid: 2.187.0
+      node-opcua-service-translate-browse-path: 2.187.9
+      node-opcua-status-code: 2.187.0
+      node-opcua-types: 2.187.9
+      node-opcua-variant: 2.187.0
+    transitivePeerDependencies:
+      - node-opcua-crypto-web
+
   node-opcua-service-filter@2.187.9:
     dependencies:
       node-opcua-address-space-base: 2.187.9
@@ -7621,6 +8188,10 @@ snapshots:
     dependencies:
       node-opcua-assert: 2.186.7
       node-opcua-data-value: 2.187.9
+      node-opcua-types: 2.187.9
+
+  node-opcua-service-node-management@2.187.9:
+    dependencies:
       node-opcua-types: 2.187.9
 
   node-opcua-service-query@2.187.9:
@@ -7651,6 +8222,12 @@ snapshots:
     dependencies:
       node-opcua-factory: 2.187.0
       node-opcua-types: 2.187.9
+
+  node-opcua-service-subscription@2.187.16:
+    dependencies:
+      node-opcua-assert: 2.186.7
+      node-opcua-types: 2.187.9
+      node-opcua-variant: 2.187.0
 
   node-opcua-service-subscription@2.187.9:
     dependencies:
@@ -7703,6 +8280,21 @@ snapshots:
       node-opcua-numeric-range: 2.187.0
       node-opcua-status-code: 2.187.0
       node-opcua-variant: 2.187.0
+
+  node-opcua-uanodeset-json@2.187.16:
+    dependencies:
+      node-opcua-address-space: 2.187.16
+      node-opcua-basic-types: 2.187.0
+      node-opcua-data-model: 2.187.0
+      node-opcua-date-time: 2.187.0
+      node-opcua-extension-object: 2.187.0
+      node-opcua-factory: 2.187.0
+      node-opcua-json: 2.187.16
+      node-opcua-nodeid: 2.187.0
+      node-opcua-utils: 2.187.0
+      node-opcua-variant: 2.187.0
+    transitivePeerDependencies:
+      - node-opcua-crypto-web
 
   node-opcua-utils@2.187.0:
     dependencies:
@@ -7921,6 +8513,8 @@ snapshots:
       tslib: 2.8.1
 
   pvutils@1.2.0: {}
+
+  qlobber@8.0.1: {}
 
   quick-format-unescaped@4.0.4: {}
 
