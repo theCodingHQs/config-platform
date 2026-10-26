@@ -175,6 +175,11 @@ export const DetailsComponent: React.FC<DetailsProps> = ({
                   />
                 ) : fieldDef?.type === "date" ? (
                   formatDateFieldValue(val, fieldDef.config, datePrefs)
+                ) : fieldDef?.type === "select" ? (
+                  // The option's label, as tables show it ("OPC UA", not "opcua")
+                  (fieldDef.config?.options as Array<{ label: string; value: string }> | undefined)?.find((o) => o.value === val)?.label ?? String(val)
+                ) : fieldDef?.type === "boolean" ? (
+                  val ? "Yes" : "No"
                 ) : (
                   String(val)
                 )}

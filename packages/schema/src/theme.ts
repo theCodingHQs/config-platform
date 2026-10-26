@@ -1199,5 +1199,85 @@ export function generateTokensCss(options?: {
     --success-bg: var(--success-subtle);
   }
 }
+
+${VISUAL_TOKENS_CSS}
 `;
 }
+
+/**
+ * Colours of Studio → Visuals: the swatches a shape's colour is picked from and the scene's own
+ * colours, for light and dark. They don't follow a workspace's theme preset; generateTokensCss
+ * appends them as they are.
+ */
+const VISUAL_TOKENS_CSS = `/* =========================================================================
+   Visuals (Studio → Visuals): the swatches a shape's colour is chosen from, and the scene's
+   own colours. Box sides are these colours darkened (see visuals/visuals.css).
+   ========================================================================= */
+:root,
+[data-theme="light"] {
+  --vis-steel: #a1aab8;
+  --vis-blue: #3b82f6;
+  --vis-green: #22a35a;
+  --vis-yellow: #eab308;
+  --vis-orange: #f97316;
+  --vis-red: #dc2626;
+  --vis-purple: #8b5cf6;
+  --vis-grey: #8a8f98;
+  --vis-dark: #3f4652;
+  --vis-white: #f1f3f6;
+
+  --vis-shade: #0b1020;
+  --vis-light: #ffffff;
+  --vis-floor: #e9ecf1;
+  --vis-floor-line: #d3d8e0;
+  --vis-zone: #dbe7fb;
+  --vis-belt: #2f343c;
+  --vis-belt-mark: #6b7280;
+  --vis-item: #c08a4e;
+  --vis-liquid: #38bdf8;
+  --vis-glass: #cfe3f5;
+  --vis-on: #22c55e;
+  --vis-idle: #eab308;
+  --vis-off: #9ca3af;
+  --vis-alarm: #ef4444;
+  --vis-label: #18181b;
+  --vis-label-bg: #ffffff;
+  --vis-select: #2563eb;
+}
+
+[data-theme="dark"] {
+  --vis-steel: #7b8494;
+  --vis-white: #c9ced6;
+  --vis-dark: #2b313b;
+  --vis-shade: #000000;
+  --vis-floor: #1c2028;
+  --vis-floor-line: #2a303a;
+  --vis-zone: #1d2a40;
+  --vis-belt: #14171c;
+  --vis-belt-mark: #4b5563;
+  --vis-glass: #2a3f55;
+  --vis-off: #6b7280;
+  --vis-label: #f4f4f5;
+  --vis-label-bg: #18181b;
+  --vis-select: #60a5fa;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-theme="dark"]),
+  [data-theme="system"] {
+    --vis-steel: #7b8494;
+    --vis-white: #c9ced6;
+    --vis-dark: #2b313b;
+    --vis-shade: #000000;
+    --vis-floor: #1c2028;
+    --vis-floor-line: #2a303a;
+    --vis-zone: #1d2a40;
+    --vis-belt: #14171c;
+    --vis-belt-mark: #4b5563;
+    --vis-glass: #2a3f55;
+    --vis-off: #6b7280;
+    --vis-label: #f4f4f5;
+    --vis-label-bg: #18181b;
+    --vis-select: #60a5fa;
+  }
+}`;
