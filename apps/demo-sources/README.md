@@ -31,7 +31,9 @@ pnpm demo:sources
 ```
 
 Setup is safe to run again. It keeps existing entities, fields and records. It refreshes the
-demo's connections, rules and pages, matched by name and route.
+demo's connections, rules and pages, matched by name and route. Visuals that already exist are
+kept as they are, since they may have been changed in the editor; to replace some with the
+demo's own, name them: `--refresh-visuals "Process overview,Order desk"` (or `all`).
 
 The HTTP push token and the edge agent token are shown only once by the app. Setup saves them in
 `.demo-state.json`, which is git-ignored, and `start` reads them from there.
@@ -49,6 +51,9 @@ again after changing them.
   with a live drawing of the picked machine.
 - **Connections Showcase**: what each kind is for, how it's wired, the tag rule it needs, and its
   connection state.
+- **Process Overview**: a whole process area as a control-room screen (see below).
+- **Sales → Order Desk**: a live sales dashboard drawn as one visual, above the Customer Order
+  records that live rules log from it.
 
 ## The drawings
 
@@ -62,3 +67,19 @@ down once per part, the robot sparks, spray flows, parts ride the conveyor.
 `machines.<code>.*` tags, with plant totals underneath. **Machine view** places one copy that
 follows the machine picked on the Machine Detail page and takes its type, target and temperature
 limit from the machine register. Change the symbol once and both drawings change.
+
+**Process overview** is a process area on one screen: three storage tanks, a blend tank with
+an agitator, three conditioners, a day tank, two screens with a reject tank, a feed tank with
+two additive pumps, and a line unit with six vacuum zones, four drying cylinders and a roll.
+Drain water goes to a recovery tank and back. Levels rise and fall, liquid flows along the
+pipes that are carrying it, and pumps and conditioners show their state. Every few minutes TK-12
+runs low (its pump trips) and C-3 trips on overload, so alarms can be seen. Its values come from
+the `site/process/state` MQTT feed, as `process.*` tags on the "Process area · MQTT" connection.
+
+**Order desk** is a sales dashboard drawn as shapes: headline tiles, donut charts, bar lists, a
+twelve-month revenue line, the five newest orders and a revenue heat map by customer tier. Its
+figures come from a simulated order system on MQTT (`site/orders/#`) as `orders.*` tags. The
+order history from January 2025 is the same on every run, and new orders arrive every few seconds
+and move on through pending, processing, shipped and fulfilled. Two live rules log each new order
+as a **Customer Order** record and keep its status up to date, so the register under the
+dashboard fills in while you watch.

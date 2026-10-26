@@ -1,6 +1,7 @@
 /**
- * Starts every stand-in source for the machine monitoring demo, plus the edge agent and the HTTP
- * pusher when `setup` has saved their tokens. Ctrl+C stops everything.
+ * Starts every stand-in source for the machine monitoring demo, the process area and order desk
+ * feeds (on the MQTT broker), and the edge agent and the HTTP pusher when `setup` has saved their
+ * tokens. Ctrl+C stops everything.
  *
  *   pnpm --filter @config-platform/demo-sources start
  */
@@ -14,6 +15,7 @@ import { startModbusDevice } from './sources/modbus-device.js';
 import { startRestApi } from './sources/rest-api.js';
 import { startHttpPusher } from './sources/http-pusher.js';
 import { startEdgeAgent } from './agent/run-edge-agent.js';
+import { orderDeskFeed, processFeed } from './sources/site-feeds.js';
 
 const codesFor = (...sources: string[]) => DEMO_MACHINES.filter((m) => sources.includes(m.source)).map((m) => m.code);
 
@@ -28,8 +30,10 @@ async function main() {
   started('OPC UA server', `opc.tcp://localhost:${PORTS.opcua}/demo`);
   stops.push(startModbusDevice(plant, PORTS.modbus, MODBUS_BASE));
   started('Modbus TCP device', `localhost:${PORTS.modbus} (unit 1)`);
-  stops.push(await startMqttBroker(plant, { port: PORTS.mqtt, username: MQTT_USER, password: MQTT_PASSWORD, machines: Object.fromEntries(DEMO_MACHINES.filter((m) => m.source === 'mqtt').map((m) => [m.code, topicLine(m)])) }));
+  stops.push(await startMqttBroker(plant, { port: PORTS.mqtt, username: MQTT_USER, password: MQTT_PASSWORD, machines: Object.fromEntries(DEMO_MACHINES.filter((m) => m.source === 'mqtt').map((m) => [m.code, topicLine(m)])), feeds: [processFeed, orderDeskFeed] }));
   started('MQTT broker', `mqtt://localhost:${PORTS.mqtt}`);
+  started('Process area feed', 'MQTT site/process/state');
+  started('Order desk feed', 'MQTT site/orders/#');
   stops.push(startWebSocketGateway(plant, PORTS.websocket, GATEWAY_TOKEN));
   started('WebSocket gateway', `ws://localhost:${PORTS.websocket}`);
   stops.push(startRestApi(plant, PORTS.http, REST_API_KEY));

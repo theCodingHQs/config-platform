@@ -9,6 +9,14 @@ import { connectionPlans } from '../src/setup/connections.js';
 import { rulePlans } from '../src/setup/rules.js';
 import { machineSymbol } from '../src/setup/visuals/machine-symbol.js';
 import { machineView, plantFloor } from '../src/setup/visuals/plant-floor.js';
+import { ProcessArea } from '../src/process/process-area.js';
+import { OrderBook, orderHistory } from '../src/orders/order-book.js';
+import { orderSummary } from '../src/orders/order-summary.js';
+import { orderMessage } from '../src/sources/site-feeds.js';
+import { ordersConnection, processConnection } from '../src/setup/site-connections.js';
+import { orderRulePlans } from '../src/setup/order-rules.js';
+import { processOverview } from '../src/setup/visuals/process-overview.js';
+import { orderDesk } from '../src/setup/visuals/order-desk.js';
 
 /** Same sequence on every run */
 function seeded(seed = 1) {
@@ -123,5 +131,98 @@ describe('demo visuals', () => {
     assert.equal(total('Parts made'), '15');
     assert.equal(total('Output rate'), '120 /h');
     assert.equal(total('Power draw'), '1.8 kW');
+  });
+});
+
+describe('process area and order desk', () => {
+  const area = new ProcessArea(seeded(3));
+  const book = new OrderBook(Date.UTC(2026, 9, 26, 12), seeded(4));
+  const live = {
+    process: area.tick(1),
+    orders: { ...orderSummary(book.orders, Date.UTC(2026, 9, 26, 12)), new: orderMessage(book.orders.at(-1)!), update: { key: 'k', order_no: 'n', status: 'shipped' } },
+  };
+  const tagNames = new Set([...processConnection().tags, ...ordersConnection().tags].map((t) => t.tag));
+  const drawings = { processOverview: processOverview(), orderDesk: orderDesk() };
+  // The app's extra functions for visuals (apps/web visual-functions.ts), enough to run the expressions
+  const functions = {
+    scale: (v: number, a: number, b: number, c: number, d: number) => c + Math.min(1, Math.max(0, (v - a) / (b - a))) * (d - c),
+    clamp: (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v)),
+    pick: (v: unknown, ...pairs: unknown[]) => {
+      for (let i = 0; i + 1 < pairs.length; i += 2) if (pairs[i] === v) return pairs[i + 1];
+      return pairs.length % 2 ? pairs.at(-1) : null;
+    },
+  };
+
+  it('have valid connections, with every value of the feeds as a tag', () => {
+    for (const input of [processConnection(), ordersConnection()]) {
+      const parsed = LiveConnectionInputSchema.safeParse(input);
+      assert.ok(parsed.success, `${input.name}: ${parsed.success ? '' : parsed.error.issues.map((i) => `${i.path.join('.')} ${i.message}`).join('; ')}`);
+    }
+    assert.ok(tagNames.has('process.c3.status') && tagNames.has('orders.tier.key.m12') && tagNames.has('orders.recent.r5.amount'));
+  });
+
+  it('have valid drawings that only read tags the connections make, and whose expressions all run', () => {
+    for (const [name, def] of Object.entries(drawings)) {
+      const parsed = VisualDefinitionSchema.safeParse(def);
+      assert.ok(parsed.success, `${name}: ${parsed.success ? '' : parsed.error.issues.slice(0, 3).map((i) => `${i.path.join('.')} ${i.message}`).join('; ')}`);
+      for (const used of JSON.stringify(def).match(/live\.(process|orders)\.[A-Za-z0-9_.]+/g) ?? []) assert.ok(tagNames.has(used.slice(5)), `${name} reads ${used}, which no connection makes`);
+      for (const node of walkVisualNodes(def.nodes)) {
+        const expressions = [...Object.values(node.bindings ?? {}), ...(node.rules ?? []).map((r) => r.when), ...(node.effects ?? []).flatMap((e) => (e.when ? [e.when] : []))];
+        for (const expr of expressions) {
+          const { value, error } = evaluateRawExpression(expr, { live }, functions);
+          assert.equal(error, null, `${name} ${node.id}: ${expr}`);
+          assert.ok(value !== undefined, `${name} ${node.id}: ${expr} gave nothing`);
+        }
+      }
+    }
+  });
+
+  it('works out the order desk figures from the order book', () => {
+    const s = live.orders;
+    assert.ok(s.ytd.orders > 300, `${s.ytd.orders} orders this year`);
+    assert.equal(Object.values(s.status).reduce((n, x) => n + x.count, 0), s.ytd.orders);
+    assert.equal(s.month.m12.label, 'Oct');
+    assert.equal(s.peak.revenue, Math.max(...Object.values(s.month).map((m) => m.revenue)));
+  });
+
+  it('has the same history on every run, and new orders come in and move on', () => {
+    assert.deepEqual(orderHistory(Date.UTC(2026, 3, 1, 9)), orderHistory(Date.UTC(2026, 3, 1, 17)));
+    const live2 = new OrderBook(Date.UTC(2026, 9, 26, 12), seeded(5), 0.5);
+    let made = 0;
+    let moved = 0;
+    for (let i = 0; i < 120; i++) {
+      const { newOrder, change } = live2.tick(Date.UTC(2026, 9, 26, 12) + i * 1000);
+      if (newOrder) made++;
+      if (change) moved++;
+    }
+    assert.ok(made > 30 && moved > 10, `${made} new, ${moved} moved on`);
+  });
+
+  it('logs new orders and their status changes as records', () => {
+    const rules = orderRulePlans({ id: 't_order', name: 'customer_order', version: 1, fields: [] });
+    const create = rules[0].action;
+    assert.equal(create.type, 'createRecord');
+    for (const f of create.fields) {
+      const { value, error } = evaluateRawExpression(f.value, { value: live.orders.new.order_no, live });
+      assert.equal(error, null, f.field);
+      assert.equal(value, (live.orders.new as Record<string, unknown>)[f.field], f.field);
+    }
+    for (const rule of rules) {
+      assert.ok(tagNames.has(rule.trigger.tag), rule.trigger.tag);
+      // A condition only fires when it turns true; these must run on every new value
+      assert.equal('when' in rule.trigger, false, `${rule.name} has a condition`);
+    }
+  });
+
+  it('trips C-3 and runs TK-12 low now and then, so alarms can be seen', () => {
+    const a = new ProcessArea(seeded(6));
+    const seen = new Set<string>();
+    for (let i = 0; i < 600; i++) {
+      const s = a.tick(1);
+      if (s.c3.status === 'alarm') seen.add('c3');
+      if (s.tk12.pump === 'alarm') seen.add('tk12');
+      assert.ok(s.tk11.level >= 0 && s.tk11.level <= 100);
+    }
+    assert.deepEqual([...seen].sort(), ['c3', 'tk12']);
   });
 });
