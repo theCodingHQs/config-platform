@@ -4,9 +4,10 @@
  * dashed outline on hover, and a line down the left of each group's contents.
  * Drag a row by its handle to move it: drop on the upper or lower edge of another row to put it
  * just in front of or behind that layer, or on the middle of a group to put it in that group.
- * Dragging a selected row moves everything selected.
+ * Dragging a selected row moves everything selected. Selecting a shape on the canvas opens the
+ * groups it's in and scrolls its row smoothly into view.
  */
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { closestCenter, DndContext, DragOverlay, PointerSensor, pointerWithin, type CollisionDetection, useDraggable, useDroppable, useSensor, useSensors, type DragMoveEvent } from "@dnd-kit/core";
 import { ChevronDown, ChevronRight, Eye, EyeOff, GripVertical, Lock } from "lucide-react";
 import type { VisualNode } from "@config-platform/schema";
@@ -48,6 +49,9 @@ function DropLine({ place }: { place: "above" | "below" }) {
   );
 }
 
+/** Whether any of `ids` is somewhere inside this node */
+const holdsAny = (node: VisualNode, ids: readonly string[]): boolean => (node.children ?? []).some((c) => ids.includes(c.id) || holdsAny(c, ids));
+
 const usesLiveData = (node: VisualNode) => Boolean((node.bindings && Object.keys(node.bindings).length) || node.rules?.length);
 
 function Row({ node, parentId, props, drag }: { node: VisualNode; parentId: string | null; props: Props; drag: Drag | null }) {
@@ -57,6 +61,11 @@ function Row({ node, parentId, props, drag }: { node: VisualNode; parentId: stri
   const droppable = useDroppable({ id: node.id });
   const selected = props.selection.includes(node.id);
   const kids = node.children ?? [];
+  // A shape picked on the canvas inside a closed group opens it, so its row can be shown
+  const holdsSelected = holdsAny(node, props.selection);
+  useEffect(() => {
+    if (holdsSelected) setExpanded(true);
+  }, [holdsSelected]);
   const dropHere = drag?.drop?.targetId === node.id ? drag.drop.place : null;
   const moving = Boolean(drag?.ids.includes(node.id));
   const highlighted = !drag && hovered;
@@ -139,6 +148,17 @@ function placeOn(target: VisualNode, pointerY: number, rect: { top: number; heig
 
 export function LayersPanel(props: Props) {
   const [drag, setDragState] = useState<Drag | null>(null);
+  const treeRef = useRef<HTMLUListElement>(null);
+  // The selected row scrolls smoothly into view (after any group it's in has opened)
+  const first = props.selection[0];
+  useEffect(() => {
+    if (!first) return;
+    const frame = requestAnimationFrame(() => {
+      const row = treeRef.current?.querySelector<HTMLElement>(`[data-layer-row="${CSS.escape(first)}"]`);
+      row?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [first]);
   // Drag events can come before React has re-rendered, so they read the latest drag from here
   const dragRef = useRef<Drag | null>(null);
   const setDrag = (next: Drag | null) => {
@@ -177,7 +197,7 @@ export function LayersPanel(props: Props) {
       }}
       onDragCancel={() => setDrag(null)}
     >
-      <ul role="tree" aria-label="Layers" style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column" }}>
+      <ul ref={treeRef} role="tree" aria-label="Layers" style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column" }}>
         {[...props.nodes].reverse().map((n) => (
           <Row key={n.id} node={n} parentId={null} props={props} drag={drag} />
         ))}
