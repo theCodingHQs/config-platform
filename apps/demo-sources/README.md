@@ -57,7 +57,7 @@ again after changing them.
 
 ## The drawings
 
-Setup also saves three visuals in Studio → Visuals. **Machine** is a symbol: the machine itself,
+Setup also saves five visuals in Studio → Visuals. **Machine** is a symbol: the machine itself,
 drawn for its type (CNC, lathe, press, molding, welding, painting, assembly), a stack light lit in
 its status colour, and an operator display with its name, status, speed, temperature and parts
 made. What moves follows live data: spindles and chucks turn while running, the press ram comes
