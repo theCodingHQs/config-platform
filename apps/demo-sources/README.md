@@ -45,6 +45,16 @@ again after changing them.
 - **Machine Monitoring → Plant Overview**: live machine cards, plant totals from live values,
   register counts that update on every open screen when a machine is added or changed, and
   downtime logged by live rules.
-- **Machine Detail**: one machine's configuration (a record) compared with what it is doing now.
+- **Machine Detail**: one machine's configuration (a record) compared with what it is doing now,
+  with a live drawing of the picked machine.
 - **Connections Showcase**: what each kind is for, how it's wired, the tag rule it needs, and its
   connection state.
+
+## The drawings
+
+Setup also saves three visuals in Studio → Visuals. **Machine** is a symbol (signal tower, a rotor
+that turns while running, status badge, speed and temperature bars, a belt that moves while
+running). **Plant floor** places eight copies of it, one per machine, each wired to its own
+`machines.<code>.*` tags. **Machine view** places one copy that follows the machine picked on the
+Machine Detail page and takes its target and temperature limit from the machine register. Change
+the symbol once and both drawings change.

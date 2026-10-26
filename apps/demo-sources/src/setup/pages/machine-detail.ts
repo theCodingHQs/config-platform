@@ -78,6 +78,9 @@ export function machineDetailPage(ctx: PageContext): PageSpec {
         ]),
 
         grid('md_lower', 2, [
+          card('md_view', 'Live view', [
+            { id: 'md_visual', type: 'visual', props: { visualId: ctx.visuals.machineView, height: 380 } },
+          ], { headerIcon: 'Map', subtitle: 'The same Machine symbol as on the plant floor, following the machine picked above' }),
           card('md_config', 'Configuration', [
             {
               id: 'md_details',
@@ -85,6 +88,9 @@ export function machineDetailPage(ctx: PageContext): PageSpec {
               props: { source: 'ds_machine', columns: 2, fields: ['code', 'machine_type', 'line', 'work_center', 'data_source', 'hourly_target', 'shift_hours', 'shifts_per_day', 'daily_target', 'max_temperature', 'manufacturer', 'model', 'installed_on', 'status_since'].map((n) => ({ fieldId: M(n) })) },
             },
           ], { headerIcon: 'Settings' }),
+        ]),
+
+        grid('md_history_row', 1, [
           card('md_history', 'Downtime history', [
             {
               id: 'md_down_table',

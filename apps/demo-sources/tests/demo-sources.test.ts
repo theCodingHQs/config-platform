@@ -1,12 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { LiveConnectionInputSchema, evaluateRawExpression } from '@config-platform/schema';
+import { LiveConnectionInputSchema, VisualDefinitionSchema, evaluateRawExpression, walkVisualNodes } from '@config-platform/schema';
 import { decodeRegisters } from '@config-platform/live-connectors';
 import { DEMO_MACHINES } from '../src/catalog.js';
 import { SimMachine } from '../src/plant/sim-machine.js';
 import { encodeReading, REGISTER_MAP } from '../src/sources/modbus-registers.js';
 import { connectionPlans } from '../src/setup/connections.js';
 import { rulePlans } from '../src/setup/rules.js';
+import { machineSymbol } from '../src/setup/visuals/machine-symbol.js';
+import { machineView, plantFloor } from '../src/setup/visuals/plant-floor.js';
 
 /** Same sequence on every run */
 function seeded(seed = 1) {
@@ -87,5 +89,39 @@ describe('demo rules', () => {
     assert.equal(when(`${name} starts`, 'stopped', 'alarm'), false, 'already down');
     assert.equal(when(`${name} ends`, 'running', 'alarm'), true);
     assert.equal(when(`${name} ends`, 'running', 'idle'), false, 'was not down');
+  });
+});
+
+describe('demo visuals', () => {
+  const symbolDef = machineSymbol();
+  const inputs = new Set(symbolDef.inputs!.map((i) => i.name));
+  const drawings = { plantFloor: plantFloor(DEMO_MACHINES, 'vis_machine'), machineView: machineView(DEMO_MACHINES, 'vis_machine') };
+
+  it('are valid visuals', () => {
+    for (const [name, def] of Object.entries({ symbol: symbolDef, ...drawings })) {
+      const parsed = VisualDefinitionSchema.safeParse(def);
+      assert.ok(parsed.success, `${name}: ${parsed.success ? '' : parsed.error.issues.map((i) => i.message).join('; ')}`);
+    }
+  });
+
+  it('place one Machine copy per machine, giving only inputs the symbol has', () => {
+    const copies = [...walkVisualNodes(drawings.plantFloor.nodes)].filter((n) => n.kind === 'symbol');
+    assert.deepEqual(copies.map((c) => c.id), DEMO_MACHINES.map((m) => m.code));
+    for (const c of [...copies, ...walkVisualNodes(drawings.machineView.nodes)].filter((n) => n.kind === 'symbol')) {
+      const given = [...Object.keys(c.bindings ?? {}), ...Object.keys(c.attrs).filter((k) => !['x', 'y'].includes(k))];
+      for (const k of given) assert.ok(inputs.has(k), `${c.id} sets ${k}, which the symbol has no input for`);
+    }
+  });
+
+  it('total the plant floor over every machine', () => {
+    const live = { machines: { m01: { status: 'running', count: 10, speed: 2, power: 1.25 }, m02: { status: 'alarm', count: 5, speed: 0, power: 0.5 } } };
+    const total = (id: string) => {
+      const node = drawings.plantFloor.nodes.find((n) => n.id === id)!;
+      return evaluateRawExpression(node.bindings!.text, { live }).value;
+    };
+    assert.equal(total('total-running'), `1 of ${DEMO_MACHINES.length} running`);
+    assert.equal(total('total-parts'), '15 parts made');
+    assert.equal(total('total-rate'), '120 parts/h');
+    assert.equal(total('total-power'), '1.8 kW');
   });
 });

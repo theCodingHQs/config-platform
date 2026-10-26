@@ -4,6 +4,7 @@
  *     machines added or filled in; a Machine Downtime entity
  *   - a live connection per machine, one of each kind, and an edge agent for one of them
  *   - live rules: status → machine register, downtime start/end
+ *   - a Machine symbol and two drawings of it (Plant floor, Machine view) in Studio → Visuals
  *   - pages Plant Overview, Machine Detail, Connections Showcase in a "Machine Monitoring" folder
  * Safe to run again: what exists is kept (connections, rules and the demo pages are refreshed).
  *
@@ -16,6 +17,7 @@ import { connectionPlans } from './connections.js';
 import { ensureMachineEntities, ensureMachineRecords } from './machine-entity.js';
 import { monitoringPages, publishPages } from './pages/publish.js';
 import { rulePlans } from './rules.js';
+import { publishVisuals } from './visuals/publish.js';
 
 const AGENT_NAME = 'Demo edge agent';
 
@@ -90,7 +92,8 @@ async function main() {
   }
   log(`= ${DEMO_MACHINES.length * 3} live rules`);
 
-  await publishPages(api, monitoringPages({ machine, downtime, machines: DEMO_MACHINES, connectionIds }), log);
+  const visuals = await publishVisuals(api, DEMO_MACHINES, log);
+  await publishPages(api, monitoringPages({ machine, downtime, machines: DEMO_MACHINES, connectionIds, visuals }), log);
 
   console.log('\nDone. Now start the stand-in machines:  pnpm --filter @config-platform/demo-sources start');
 }

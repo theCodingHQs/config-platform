@@ -74,6 +74,10 @@ export function plantOverviewPage(ctx: PageContext): PageSpec {
           card('lk_running', 'Running now', [text('lk_running_v', `{{ (${countWhere(codes, 'status', 'running')}) + ' of ${codes.length}' }}`, 'h2')], { headerIcon: 'Activity' }),
         ]),
 
+        card('floor', 'Plant floor', [
+          { id: 'floor_visual', type: 'visual', props: { visualId: ctx.visuals.plantFloor } },
+        ], { headerIcon: 'Map', subtitle: 'A drawing from Studio → Visuals: eight copies of one Machine symbol, each wired to its own machine' }),
+
         grid('machine_cards', 4, cards, { minColWidth: 240 }),
 
         grid('charts', 2, [
