@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { LiveConnectionInputSchema } from '@config-platform/schema';
-import { decodeRegisters, registerCount, plainOpcUaValue } from '@config-platform/live-connectors';
+import net from 'node:net';
+import { CONNECTORS, decodeRegisters, registerCount, plainOpcUaValue } from '@config-platform/live-connectors';
 import { createHttpPushAdapter, deliverPush, newPushToken } from '../src/live/adapters/http-push-adapter.js';
 import { encryptSettings, decryptSettings, redactSettings } from '../src/live/connection-secrets.js';
 
@@ -21,6 +22,38 @@ describe('Modbus registers', () => {
     expect(decodeRegisters([0x41ac, 0x0000], 'float32')).toBe(21.5);
     expect(registerCount('float32')).toBe(2);
     expect(registerCount('int16')).toBe(1);
+  });
+});
+
+describe('Modbus connection', () => {
+  it('can be changed or switched off while a read is still waiting for the device', async () => {
+    // A device that accepts the connection but never answers, so the first read is still waiting
+    const sockets: net.Socket[] = [];
+    const device = net.createServer((socket) => sockets.push(socket));
+    await new Promise<void>((resolve) => device.listen(0, '127.0.0.1', resolve));
+    const port = (device.address() as net.AddressInfo).port;
+    const failures: unknown[] = [];
+    const onFailure = (err: unknown) => failures.push(err);
+    process.on('unhandledRejection', onFailure);
+    const states: string[] = [];
+    const adapter = CONNECTORS.modbus(
+      { host: '127.0.0.1', port, unitId: 1, intervalMs: 1000, points: [{ key: 'a', area: 'holding', address: 0, type: 'uint16', wordOrder: 'big', scale: 1 }] },
+      { onState: (state) => states.push(state), onMessage: () => undefined, onWarning: () => undefined },
+      { connectionId: 'lc_test' },
+    );
+    try {
+      adapter.start();
+      await vi.waitFor(() => expect(states).toContain('connected'));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      await adapter.stop();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(failures).toEqual([]);
+      expect(states.at(-1)).toBe('connected');
+    } finally {
+      process.off('unhandledRejection', onFailure);
+      sockets.forEach((socket) => socket.destroy());
+      device.close();
+    }
   });
 });
 

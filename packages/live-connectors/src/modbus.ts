@@ -53,28 +53,37 @@ export function createModbusAdapter(settings: AdapterSettings, events: AdapterEv
   const connect = async () => {
     if (stopped) return;
     events.onState('connecting');
-    client = new ModbusRTU();
+    const current = new ModbusRTU();
+    client = current;
     try {
-      await client.connectTCP(String(settings.host), { port: Number(settings.port ?? 502) });
-      client.setID(Number(settings.unitId ?? 1));
-      client.setTimeout(5000);
+      await current.connectTCP(String(settings.host), { port: Number(settings.port ?? 502) });
+      if (stopped) {
+        current.destroy(() => undefined);
+        return;
+      }
+      current.setID(Number(settings.unitId ?? 1));
+      current.setTimeout(5000);
       backoff.reset();
       healthy = true;
       events.onState('connected');
-      poll();
+      void poll();
     } catch (err) {
+      current.destroy(() => undefined);
+      if (stopped) return;
       events.onState('error', describeConnectionError(err, address));
-      client.close(() => undefined);
       client = null;
       schedule(backoff.nextDelayMs(), () => void connect());
     }
   };
 
   const poll = async () => {
-    if (stopped || !client) return;
+    // Its own reference: stop() clears `client` while a read may still be waiting
+    const current = client;
+    if (stopped || !current) return;
     const message: Record<string, number | boolean> = {};
     try {
-      for (const p of points) message[p.key] = await readPoint(client, p);
+      for (const p of points) message[p.key] = await readPoint(current, p);
+      if (stopped) return;
       if (!healthy) {
         healthy = true;
         events.onState('connected');
@@ -82,8 +91,10 @@ export function createModbusAdapter(settings: AdapterSettings, events: AdapterEv
       events.onMessage({ payload: JSON.stringify(message) });
       schedule(Number(settings.intervalMs) || 1000, () => void poll());
     } catch (err: any) {
+      // Stopped mid-read (the connection was changed or switched off): nothing to report
+      if (stopped) return;
       // A refused read (wrong address) keeps the connection; a dropped one reconnects
-      const lost = !client.isOpen;
+      const lost = !current.isOpen;
       healthy = false;
       events.onState(lost ? 'disconnected' : 'error', lost ? undefined : `Reading the device failed: ${err?.message || err}`);
       if (lost) {
@@ -100,7 +111,8 @@ export function createModbusAdapter(settings: AdapterSettings, events: AdapterEv
     async stop() {
       stopped = true;
       if (timer) clearTimeout(timer);
-      await new Promise<void>((resolve) => (client ? client.close(() => resolve()) : resolve()));
+      // destroy, not close: close waits for the device to hang up, which a stuck device never does
+      await new Promise<void>((resolve) => (client ? client.destroy(() => resolve()) : resolve()));
       client = null;
     },
   };
