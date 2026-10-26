@@ -67,7 +67,23 @@ export const PURE_FUNCTIONS: Record<string, (...args: any[]) => any> = {
     if (val === null || val === undefined || val === '') return fallback;
     return val;
   },
+  /** Adds numbers (and lists of numbers), skipping blanks: sum(live.m1.count, live.m2.count) */
+  sum: (...args: any[]) => numbersIn(args).reduce((a, b) => a + b, 0),
+  /** Average of the numbers given, skipping blanks; 0 when there are none */
+  avg: (...args: any[]) => {
+    const nums = numbersIn(args);
+    return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
+  },
 };
+
+/** The numbers among values (lists flattened, yes/no as 1/0, blanks and text skipped) */
+function numbersIn(args: any[]): number[] {
+  return args
+    .flatMap((a) => (Array.isArray(a) ? numbersIn(a) : [a]))
+    .filter((v) => v !== null && v !== undefined && v !== '')
+    .map((v) => (typeof v === 'boolean' ? (v ? 1 : 0) : Number(v)))
+    .filter((n) => !Number.isNaN(n));
+}
 
 /**
  * Checks if a string is a template or direct expression containing {{ ... }}

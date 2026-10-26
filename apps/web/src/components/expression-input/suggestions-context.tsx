@@ -25,6 +25,8 @@ export const COMMON_FUNCTIONS: readonly FunctionDoc[] = [
   { name: "formatNumber", signature: "formatNumber(value, decimals)", detail: "A number as text with fixed decimals" },
   { name: "min", signature: "min(a, b, …)", detail: "The smallest" },
   { name: "max", signature: "max(a, b, …)", detail: "The largest" },
+  { name: "sum", signature: "sum(a, b, …)", detail: "Adds them up, skipping blanks" },
+  { name: "avg", signature: "avg(a, b, …)", detail: "The average, skipping blanks" },
   { name: "abs", signature: "abs(value)", detail: "Without its minus sign" },
   { name: "floor", signature: "floor(value)", detail: "Rounds down" },
   { name: "ceil", signature: "ceil(value)", detail: "Rounds up" },

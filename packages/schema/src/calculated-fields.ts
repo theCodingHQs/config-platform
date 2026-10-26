@@ -25,7 +25,6 @@ export interface FormulaField {
 
 const flatten = (args: any[]): any[] => args.flatMap((a) => (Array.isArray(a) ? flatten(a) : [a]));
 const isBlank = (v: any) => v === null || v === undefined || v === '';
-const toNumber = (v: any) => (typeof v === 'boolean' ? (v ? 1 : 0) : Number(v));
 
 /** Functions formulas can use besides the expression basics (round, min, max, concat, upper…). */
 export const FORMULA_FUNCTIONS: ExpressionFunctions = {
@@ -33,11 +32,7 @@ export const FORMULA_FUNCTIONS: ExpressionFunctions = {
   countTrue: (...args: any[]) => flatten(args).filter((v) => v === true || v === 'true' || (typeof v === 'number' && v !== 0)).length,
   /** Number of values that are filled in */
   count: (...args: any[]) => flatten(args).filter((v) => !isBlank(v)).length,
-  sum: (...args: any[]) => flatten(args).reduce((total, v) => total + (isBlank(v) || Number.isNaN(toNumber(v)) ? 0 : toNumber(v)), 0),
-  avg: (...args: any[]) => {
-    const nums = flatten(args).filter((v) => !isBlank(v) && !Number.isNaN(toNumber(v))).map(toNumber);
-    return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
-  },
+  // sum() and avg() are expression basics (PURE_FUNCTIONS), shared with pages and live rules
   /** if(condition, valueWhenTrue, valueWhenFalse) */
   if: (condition: any, whenTrue: any, whenFalse: any) => (condition ? whenTrue : whenFalse),
   isBlank: (v: any) => isBlank(v),
