@@ -52,9 +52,13 @@ again after changing them.
 
 ## The drawings
 
-Setup also saves three visuals in Studio → Visuals. **Machine** is a symbol: a card with a status
-pill, a ring showing output against target, speed, power, a temperature bar against the limit and
-parts made. **Plant floor** places eight copies of it, one per machine, each wired to its own
-`machines.<code>.*` tags. **Machine view** places one copy that follows the machine picked on the
-Machine Detail page and takes its target and temperature limit from the machine register. Change
-the symbol once and both drawings change.
+Setup also saves three visuals in Studio → Visuals. **Machine** is a symbol: the machine itself,
+drawn for its type (CNC, lathe, press, molding, welding, painting, assembly), a stack light lit in
+its status colour, and an operator display with its name, status, speed, temperature and parts
+made. What moves follows live data: spindles and chucks turn while running, the press ram comes
+down once per part, the robot sparks, spray flows, parts ride the conveyor.
+
+**Plant floor** places eight copies of it, one per machine, each wired to its own
+`machines.<code>.*` tags, with plant totals underneath. **Machine view** places one copy that
+follows the machine picked on the Machine Detail page and takes its type, target and temperature
+limit from the machine register. Change the symbol once and both drawings change.

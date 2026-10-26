@@ -1,18 +1,21 @@
 /**
- * One machine, as a symbol in a modern dashboard style: a card with the machine's name, a status
- * pill under it (its dot pulses while running), a ring showing output against target, speed and power, a
- * temperature bar against the machine's limit, and parts made. Every copy is given its own
- * machine's live tags as inputs.
+ * One machine, as a symbol: the machine itself drawn for its type (see machine-looks.ts), a stack
+ * light beside it lit in its status colour, and a small dark operator display underneath with its
+ * name, status, speed, temperature and parts made. Every copy is given its own machine's live tags
+ * as inputs.
  */
 import type { VisualDefinition, VisualInputDef, VisualNode, VisualRule } from '@config-platform/schema';
+import { MACHINE_LOOKS, machineLooks } from './machine-looks.js';
+import { ALARM, PAINTS, PAUSED, RUNNING, tint } from './machine-style.js';
 import { group, shape, text } from './shapes.js';
 
 export const MACHINE_SYMBOL_NAME = 'Machine';
-export const MACHINE_WIDTH = 192;
-export const MACHINE_HEIGHT = 248;
+export const MACHINE_WIDTH = 200;
+export const MACHINE_HEIGHT = 246;
 
 const INPUTS: VisualInputDef[] = [
   { name: 'name', label: 'Name', type: 'text', default: 'Machine' },
+  { name: 'look', label: `Machine type: ${MACHINE_LOOKS.join(', ')}`, type: 'text', default: MACHINE_LOOKS[0] },
   { name: 'source', label: 'Fed by', type: 'text', default: '' },
   { name: 'status', label: 'Status: running, idle, alarm or stopped', type: 'text', default: '' },
   { name: 'speed', label: 'Speed (parts/min)', type: 'number', default: 0 },
@@ -23,103 +26,71 @@ const INPUTS: VisualInputDef[] = [
   { name: 'power', label: 'Power (kW)', type: 'number', default: 0 },
 ];
 
-const W = MACHINE_WIDTH;
-const PAD = 16;
-const RUNNING = 'inputs.status == "running"';
-const PAUSED = 'inputs.status == "idle" || inputs.status == "stopped"';
-const ALARM = 'inputs.status == "alarm"';
-const LABEL = { fill: 'var(--vis-label)' };
-const MUTED = { fill: 'var(--vis-grey)' };
-const tint = (colour: string, pct: number) => `color-mix(in srgb, ${colour} ${pct}%, transparent)`;
+const ON_PANEL = 'var(--vis-light)';
+const PANEL_MUTED = 'color-mix(in srgb, var(--vis-light) 55%, transparent)';
 
-/** The status colour, set on `attr` (a fill or an outline) */
-const statusRules = (attr: string, as: (colour: string) => string = (c) => c): VisualRule[] => [
-  { when: RUNNING, set: { [attr]: as('var(--vis-on)') } },
-  { when: PAUSED, set: { [attr]: as('var(--vis-idle)') } },
-  { when: ALARM, set: { [attr]: as('var(--vis-alarm)') } },
+/** Slim stack light: red, amber, green; the lit one glows */
+function stackLight(): VisualNode {
+  const segment = (id: string, y: number, when: string, colour: string, blink = false): VisualNode[] => [
+    shape('ellipse', `${id}-halo`, { x: 185, y: y + 6, rx: 14, ry: 11, fill: colour, opacity: 0 }, { rules: [{ when, set: { opacity: 0.3 }, effect: 'pulse' }] }),
+    shape('rect', id, { x: 179, y, width: 12, height: 12, rx: 3, fill: tint('var(--vis-steel)', 45) }, {
+      rules: [{ when, set: { fill: colour }, ...(blink ? { effect: 'blink' as const } : {}) }],
+    }),
+  ];
+  return group('stack-light', [
+    shape('rect', 'stack-pole', { x: 183, y: 80, width: 4, height: 62, fill: 'var(--vis-steel)' }),
+    shape('rect', 'stack-foot', { x: 178, y: 140, width: 14, height: 10, rx: 2, fill: 'var(--vis-dark)' }),
+    shape('rect', 'stack-cap', { x: 180, y: 38, width: 10, height: 4, rx: 2, fill: 'var(--vis-dark)' }),
+    ...segment('stack-red', 42, ALARM, 'var(--vis-alarm)', true),
+    ...segment('stack-amber', 55, PAUSED, 'var(--vis-idle)'),
+    ...segment('stack-green', 68, RUNNING, 'var(--vis-on)'),
+  ], {}, { name: 'Stack light' });
+}
+
+const statusColour = (attr: string): VisualRule[] => [
+  { when: RUNNING, set: { [attr]: 'var(--vis-on)' } },
+  { when: PAUSED, set: { [attr]: 'var(--vis-idle)' } },
+  { when: ALARM, set: { [attr]: 'var(--vis-alarm)' } },
 ];
 
-function statusPill(): VisualNode {
-  return group('pill', [
-    shape('rect', 'pill-bg', { width: 74, height: 22, rx: 11, fill: tint('var(--vis-off)', 18) }, { rules: statusRules('fill', (c) => tint(c, 16)) }),
-    shape('ellipse', 'pill-dot', { x: 13, y: 11, rx: 3.5, ry: 3.5, fill: 'var(--vis-off)' }, {
-      rules: [...statusRules('fill').slice(0, 2), { when: ALARM, set: { fill: 'var(--vis-alarm)' }, effect: 'blink' }],
-      effects: [{ type: 'pulse', when: RUNNING }],
-    }),
-    text('pill-text', 22, 14.5, 'NO DATA', 8.5, { fontWeight: '700', fill: 'var(--vis-grey)' }, {
+/** The operator display under the machine */
+function display(): VisualNode {
+  const value = (id: string, x: number, label: string, expr: string, rules: VisualRule[] = []): VisualNode[] => [
+    text(`${id}-label`, x, 36, label, 7, { fontWeight: '600', fill: PANEL_MUTED }),
+    text(id, x, 52, '—', 13, { fontWeight: '700', fill: ON_PANEL }, { bindings: { text: expr }, rules }),
+  ];
+  return group('display', [
+    shape('rect', 'display-face', { width: 188, height: 66, rx: 10, fill: 'color-mix(in srgb, var(--vis-shade) 88%, var(--vis-blue))' }),
+    text('name', 12, 19, 'Machine', 11, { fontWeight: '700', fill: ON_PANEL }, { name: 'Name', bindings: { text: 'inputs.name' } }),
+    shape('ellipse', 'status-dot', { x: 126, y: 15, rx: 3, ry: 3, fill: 'var(--vis-off)' }, { rules: statusColour('fill') }),
+    text('status', 133, 18.5, 'NO DATA', 8, { fontWeight: '700', fill: 'var(--vis-off)' }, {
+      name: 'Status',
       bindings: { text: 'inputs.status ? upper(inputs.status) : "NO DATA"' },
-      rules: statusRules('fill'),
+      rules: statusColour('fill'),
     }),
-  ], { x: PAD, y: 40 }, { name: 'Status' });
-}
-
-/** Output against target as a ring: a full circle drawn from the top, dashed to the fraction reached */
-function outputRing(cx: number, cy: number, r: number): VisualNode {
-  const circle = `M${cx} ${cy - r}A${r} ${r} 0 1 1 ${cx} ${cy + r}A${r} ${r} 0 1 1 ${cx} ${cy - r}`;
-  const length = Math.round(2 * Math.PI * r * 10) / 10;
-  const fraction = 'clamp(inputs.speed / inputs.target, 0, 1)';
-  return group('ring', [
-    shape('path', 'ring-track', { d: circle, fill: 'none', stroke: tint('var(--vis-steel)', 28), strokeWidth: 9 }),
-    shape('path', 'ring-value', { d: circle, fill: 'none', stroke: 'var(--vis-blue)', strokeWidth: 9, strokeLinecap: 'round', strokeDasharray: `0 ${length}` }, {
-      name: 'Output',
-      bindings: { strokeDasharray: `concat(${fraction} * ${length}, " ", ${length})` },
-      rules: [
-        { when: 'inputs.speed >= inputs.target * 0.9', set: { stroke: 'var(--vis-on)' } },
-        { when: ALARM, set: { stroke: 'var(--vis-alarm)' } },
-        { when: '!(inputs.speed > 0)', set: { opacity: 0 } },
-      ],
+    ...value('speed', 12, 'PARTS/MIN', 'concat(round(inputs.speed, 1))'),
+    ...value('temperature', 72, 'TEMP °C', 'concat(round(inputs.temperature, 1))', [
+      { when: 'inputs.temperature > inputs.maxTemperature * 0.85', set: { fill: 'var(--vis-orange)' } },
+      { when: 'inputs.temperature > inputs.maxTemperature', set: { fill: 'var(--vis-alarm)' }, effect: 'blink' },
+    ]),
+    ...value('count', 128, 'PARTS', 'concat(round(inputs.count))'),
+    shape('rect', 'output-track', { x: 12, y: 58, width: 164, height: 3, rx: 1.5, fill: tint('var(--vis-light)', 15) }),
+    shape('rect', 'output', { x: 12, y: 58, width: 0, height: 3, rx: 1.5, fill: 'var(--vis-on)' }, {
+      name: 'Output vs target',
+      bindings: { width: 'clamp(inputs.speed / inputs.target, 0, 1) * 164' },
+      rules: [{ when: ALARM, set: { fill: 'var(--vis-alarm)' } }],
+      smooth: 600,
     }),
-    text('ring-pct', cx, cy + 3, '—', 19, { fontWeight: '800', textAnchor: 'middle', ...LABEL }, {
-      bindings: { text: 'concat(round(min(inputs.speed / inputs.target, 9.99) * 100), "%")' },
-    }),
-    text('ring-label', cx, cy + 17, 'of target', 8.5, { textAnchor: 'middle', ...MUTED }),
-  ], {}, { name: 'Output vs target' });
-}
-
-/** A small label with a value under it */
-const metric = (id: string, x: number, y: number, label: string, value: string): VisualNode =>
-  group(id, [
-    text(`${id}-label`, 0, 0, label.toUpperCase(), 8, { fontWeight: '600', ...MUTED }),
-    text(`${id}-value`, 0, 19, '—', 17, { fontWeight: '700', ...LABEL }, { bindings: { text: value } }),
-  ], { x, y }, { name: label });
-
-function temperature(y: number): VisualNode {
-  const width = W - 2 * PAD;
-  return group('temperature', [
-    text('temp-label', 0, 0, 'TEMPERATURE', 8, { fontWeight: '600', ...MUTED }),
-    text('temp-value', width, 0, '—', 10, { fontWeight: '700', textAnchor: 'end', ...LABEL }, {
-      bindings: { text: 'concat(round(inputs.temperature, 1), " / ", round(inputs.maxTemperature), " °C")' },
-    }),
-    shape('rect', 'temp-track', { x: 0, y: 7, width, height: 6, rx: 3, fill: tint('var(--vis-steel)', 28) }),
-    shape('rect', 'temp-fill', { x: 0, y: 7, width: 0, height: 6, rx: 3, fill: 'var(--vis-on)' }, {
-      bindings: { width: `clamp(inputs.temperature / inputs.maxTemperature, 0, 1) * ${width}` },
-      rules: [
-        { when: 'inputs.temperature > inputs.maxTemperature * 0.85', set: { fill: 'var(--vis-orange)' } },
-        { when: 'inputs.temperature > inputs.maxTemperature', set: { fill: 'var(--vis-alarm)' }, effect: 'blink' },
-      ],
-      smooth: 700,
-    }),
-  ], { x: PAD, y }, { name: 'Temperature' });
+  ], { x: 6, y: 160 }, { name: 'Display' });
 }
 
 export function machineSymbol(): VisualDefinition {
   const nodes: VisualNode[] = [
-    shape('rect', 'card', { width: W, height: MACHINE_HEIGHT, rx: 16, fill: 'var(--vis-label-bg)', stroke: 'var(--vis-floor-line)', shadow: true }, {
-      name: 'Card',
-      rules: [{ when: ALARM, set: { stroke: 'var(--vis-alarm)', strokeWidth: 2 } }],
-    }),
-    group('content', [
-      text('name', PAD, 30, 'Machine', 13, { fontWeight: '700', ...LABEL }, { name: 'Name', bindings: { text: 'inputs.name' } }),
-      text('source', PAD + 82, 55, '', 9, MUTED, { name: 'Fed by', bindings: { text: 'inputs.source' } }),
-      statusPill(),
-      outputRing(PAD + 44, 120, 38),
-      metric('speed', 124, 96, 'Speed /min', 'concat(round(inputs.speed, 1))'),
-      metric('power', 124, 136, 'Power kW', 'concat(round(inputs.power, 1))'),
-      shape('line', 'divider', { x1: PAD, y1: 178, x2: W - PAD, y2: 178, stroke: 'var(--vis-floor-line)' }),
-      temperature(198),
-      text('count-label', PAD, 232, 'PARTS MADE', 8, { fontWeight: '600', ...MUTED }),
-      text('count', W - PAD, 233, '—', 13, { fontWeight: '800', textAnchor: 'end', ...LABEL }, { name: 'Parts made', bindings: { text: 'concat(round(inputs.count))' } }),
-    ], {}, { name: 'Content', bindings: { opacity: 'inputs.status ? 1 : 0.45' } }),
+    shape('ellipse', 'ground-shadow', { x: 92, y: 151, rx: 84, ry: 5, fill: 'var(--vis-shade)', opacity: 0.12 }),
+    group('machine', machineLooks(), {}, { name: 'Machine', bindings: { opacity: 'inputs.status ? 1 : 0.5' } }),
+    stackLight(),
+    display(),
+    text('source', MACHINE_WIDTH / 2, 240, '', 8.5, { textAnchor: 'middle', fill: 'var(--vis-grey)' }, { name: 'Fed by', bindings: { text: 'inputs.source' } }),
   ];
-  return { version: 2, width: W, height: MACHINE_HEIGHT, mode: 'flat', grid: true, gridSize: 2, inputs: INPUTS, nodes };
+  return { version: 2, width: MACHINE_WIDTH, height: MACHINE_HEIGHT, mode: 'flat', grid: true, gridSize: 2, inputs: INPUTS, paints: PAINTS, nodes };
 }
