@@ -17,6 +17,7 @@ import { dragAttrs, penAttrs, pointsAttrs } from '../src/studio/visuals/tools';
 import { parseNodes } from '../src/studio/visuals/clipboard';
 import { pickTarget } from '../src/studio/visuals/use-select-gestures';
 import { canDrop, moveLayers } from '../src/studio/visuals/layer-moves';
+import { snapMove, snapResize } from '../src/studio/visuals/smart-guides';
 
 afterEach(() => cleanup());
 
@@ -271,6 +272,46 @@ describe('moving layers in the list', () => {
     expect(ids(s.definition.nodes[1].children!)).toBe('bcd');
     s = editorReducer(s, { type: 'undo' });
     expect(ids(s.definition.nodes)).toBe('agd');
+  });
+});
+
+describe('smart guides', () => {
+  const canvas = { width: 1000, height: 600 };
+  const other = { x: 100, y: 100, width: 200, height: 100 };
+
+  it('snaps a moved shape to the edges and centre of another, and draws the line across both', () => {
+    // Left edge 4 units off the other's left edge; top 3 off its centre line
+    const r = snapMove({ x: 104, y: 397, width: 50, height: 50 }, [other], canvas, 6);
+    expect(r.dx).toBe(-4);
+    expect(r.dy).toBe(null);
+    expect(r.guides).toEqual([{ axis: 'x', at: 100, from: 100, to: 447 }]);
+    const centred = snapMove({ x: 173, y: 300, width: 50, height: 50 }, [other], canvas, 6);
+    expect(centred.dx).toBe(2); // centre 198 → 200
+    expect(centred.guides[0]).toMatchObject({ axis: 'x', at: 200 });
+  });
+
+  it('lines up with the canvas edges and centre, and leaves far-off shapes alone', () => {
+    const r = snapMove({ x: 480, y: 3, width: 50, height: 20 }, [], canvas, 6);
+    expect(r.dx).toBe(-5); // centre 505 → 500
+    expect(r.dy).toBe(-3); // top → 0
+    expect(r.guides.find((g) => g.axis === 'x')).toEqual({ axis: 'x', at: 500, from: 0, to: 600 });
+    expect(snapMove({ x: 700, y: 400, width: 10, height: 10 }, [other], { width: 2000, height: 2000 }, 6)).toMatchObject({ dx: null, dy: null, guides: [] });
+  });
+
+  it('snaps the dragged edge when resizing, keeping the other edge where it is', () => {
+    const r = snapResize({ x: 400, y: 50, width: 96, height: 40 }, 'w', [other], canvas, 6); // left 400 → right edge 300? too far
+    expect(r.box).toEqual({ x: 400, y: 50, width: 96, height: 40 });
+    const left = snapResize({ x: 303, y: 300, width: 97, height: 40 }, 'w', [other], canvas, 6);
+    expect(left.box).toEqual({ x: 300, y: 300, width: 100, height: 40 });
+    expect(left.guides[0]).toMatchObject({ axis: 'x', at: 300 });
+  });
+
+  it('matches the size of a neighbour when no edge is near', () => {
+    const r = snapResize({ x: 600, y: 300, width: 197, height: 40 }, 'e', [other], canvas, 6);
+    expect(r.box.width).toBe(200);
+    expect(r.sizes).toHaveLength(1);
+    expect(r.sizes[0]).toMatchObject({ axis: 'x', size: 200 });
+    expect(r.sizes[0].boxes).toHaveLength(2);
   });
 });
 

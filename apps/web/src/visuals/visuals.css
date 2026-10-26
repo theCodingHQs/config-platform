@@ -79,5 +79,8 @@
 .vis-grid-fine { stroke-width: 0.5; opacity: 0.6; }
 .vis-handle { fill: var(--vis-light); stroke: var(--vis-select); stroke-width: 1.2; vector-effect: non-scaling-stroke; }
 .vis-marquee { fill: color-mix(in srgb, var(--vis-select) 10%, transparent); stroke: var(--vis-select); stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+/* Smart guides while moving or resizing: what the shape lines up with, in a colour apart from the selection */
+.vis-guide { fill: none; stroke: #f43f5e; stroke-width: 1.5; vector-effect: non-scaling-stroke; pointer-events: none; }
+.vis-guide-label { fill: #f43f5e; font-weight: 600; pointer-events: none; }
 .vis-draft { fill: none; stroke: var(--vis-select); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .vis-hover { fill: none; stroke: var(--vis-select); stroke-width: 1; opacity: 0.6; vector-effect: non-scaling-stroke; pointer-events: none; }

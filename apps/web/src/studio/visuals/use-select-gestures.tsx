@@ -1,22 +1,37 @@
 /**
- * The select tool: click to select (Shift adds), drag to move (snapping to the grid; Alt places
- * freely), drag on empty canvas to select everything in a box, drag a handle to resize or turn,
- * double-click a group to work inside it.
+ * The select tool: click to select (Shift adds), drag to move (snapping to the shapes around it
+ * with smart guides, else to the grid; Alt places freely), drag on empty canvas to select
+ * everything in a box, drag a handle to resize or turn, double-click a group to work inside it.
  */
 import React, { useRef, useState } from "react";
 import type { VisualNode } from "@config-platform/schema";
 import type { CanvasCtx } from "./canvas-context";
 import { hitPath, nodeBox, parentSpace, snapPoint, toDrawing, unionBox, type Pt } from "./canvas-geometry";
-import { childrenOf, findNode, type NodePatch } from "./node-tree";
+import { childrenOf, findNode, parentIdOf, type NodePatch } from "./node-tree";
 import { dragBox, resizePatch, type Box } from "./resize";
+import { snapMove, snapResize, type Guide, type SizeMatch } from "./smart-guides";
+import { SmartGuides } from "./SmartGuides";
 
 type Drag =
-  | { mode: "move"; start: Pt; box: Box | null; items: Array<{ id: string; x: number; y: number; vector: (v: Pt) => Pt }>; group: string; moved: boolean }
+  | { mode: "move"; start: Pt; box: Box | null; items: Array<{ id: string; x: number; y: number; vector: (v: Pt) => Pt }>; targets: Box[]; group: string; moved: boolean }
   | { mode: "marquee"; start: Pt; now: Pt; additive: boolean }
-  | { mode: "resize"; id: string; handle: string; start: Pt; box: Box; node: VisualNode; group: string }
+  | { mode: "resize"; id: string; handle: string; start: Pt; box: Box; node: VisualNode; targets: Box[]; group: string }
   | { mode: "rotate"; id: string; centre: Pt; startAngle: number; startRotate: number; group: string };
 
 const num = (v: unknown, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
+/** Smart guides catch within this many screen pixels */
+const GUIDE_REACH = 6;
+
+/** The shapes a moved or resized one lines up with: the others at its level, as drawn */
+function guideTargets(svg: SVGSVGElement, nodes: readonly VisualNode[], ids: readonly string[]): Box[] {
+  return childrenOf(nodes, parentIdOf(nodes, ids[0]))
+    .filter((n) => !n.hidden && !ids.includes(n.id))
+    .flatMap((n) => {
+      const b = nodeBox(svg, n.id);
+      return b ? [b] : [];
+    });
+}
+
 const intersects = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 
 /** Which node a click on `path` (top-down ids) picks, given the open group */
@@ -32,6 +47,8 @@ export function pickTarget(path: string[], openGroup: string | null, deepest: bo
 export function useSelectGestures(ctxRef: React.MutableRefObject<CanvasCtx>, onEditText: (id: string) => void) {
   const drag = useRef<Drag | null>(null);
   const [marquee, setMarquee] = useState<Box | null>(null);
+  const [guides, setGuides] = useState<{ lines: Guide[]; sizes: SizeMatch[] }>({ lines: [], sizes: [] });
+  const showGuides = (lines: Guide[], sizes: SizeMatch[] = []) => setGuides((cur) => (!cur.lines.length && !cur.sizes.length && !lines.length && !sizes.length ? cur : { lines, sizes }));
 
   const startMove = (ids: string[], p: Pt) => {
     const { svg, state } = ctxRef.current;
@@ -41,7 +58,8 @@ export function useSelectGestures(ctxRef: React.MutableRefObject<CanvasCtx>, onE
       .filter((n): n is VisualNode => Boolean(n && !n.locked))
       .map((n) => ({ id: n.id, x: num(n.attrs.x), y: num(n.attrs.y), vector: parentSpace(svg, n.id).vector }));
     if (!items.length) return;
-    drag.current = { mode: "move", start: p, box: unionBox(items.map((i) => nodeBox(svg, i.id))), items, group: `move-${Date.now()}`, moved: false };
+    const targets = guideTargets(svg, state.definition.nodes, items.map((i) => i.id));
+    drag.current = { mode: "move", start: p, box: unionBox(items.map((i) => nodeBox(svg, i.id))), items, targets, group: `move-${Date.now()}`, moved: false };
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -91,6 +109,14 @@ export function useSelectGestures(ctxRef: React.MutableRefObject<CanvasCtx>, onE
         dx = s.x - d.box.x;
         dy = s.y - d.box.y;
       }
+      // Lining up with the shapes around it wins over the grid, axis by axis
+      if (d.box && !e.altKey) {
+        const raw = { x: p.x - d.start.x, y: p.y - d.start.y };
+        const smart = snapMove({ ...d.box, x: d.box.x + raw.x, y: d.box.y + raw.y }, d.targets, state.definition, GUIDE_REACH * unit);
+        if (smart.dx !== null) dx = raw.x + smart.dx;
+        if (smart.dy !== null) dy = raw.y + smart.dy;
+        showGuides(smart.guides);
+      } else showGuides([]);
       const changes = d.items.map((i) => {
         const v = i.vector({ x: dx, y: dy });
         return { id: i.id, patch: { attrs: { x: Math.round((i.x + v.x) * 100) / 100, y: Math.round((i.y + v.y) * 100) / 100 } } as NodePatch };
@@ -99,7 +125,13 @@ export function useSelectGestures(ctxRef: React.MutableRefObject<CanvasCtx>, onE
       return;
     }
     if (d.mode === "resize") {
-      const next = dragBox(d.box, d.handle, p.x - d.start.x, p.y - d.start.y, e.shiftKey, e.altKey);
+      let next = dragBox(d.box, d.handle, p.x - d.start.x, p.y - d.start.y, e.shiftKey, e.altKey);
+      // Smart guides for a plain resize (not keeping the shape with Shift, or from the centre with Alt)
+      if (!e.shiftKey && !e.altKey) {
+        const smart = snapResize(next, d.handle, d.targets, state.definition, GUIDE_REACH * unit);
+        next = smart.box;
+        showGuides(smart.guides, smart.sizes);
+      } else showGuides([]);
       const space = parentSpace(svg, d.id).point;
       const local = (b: Box): Box => {
         const a = space({ x: b.x, y: b.y });
@@ -120,6 +152,7 @@ export function useSelectGestures(ctxRef: React.MutableRefObject<CanvasCtx>, onE
     const { svg, state, dispatch } = ctxRef.current;
     const d = drag.current;
     drag.current = null;
+    showGuides([]);
     if (d?.mode !== "marquee" || !svg) return;
     setMarquee(null);
     const area = { x: Math.min(d.start.x, d.now.x), y: Math.min(d.start.y, d.now.y), width: Math.abs(d.now.x - d.start.x), height: Math.abs(d.now.y - d.start.y) };
@@ -155,7 +188,7 @@ export function useSelectGestures(ctxRef: React.MutableRefObject<CanvasCtx>, onE
     if (!svg || !node || node.locked) return;
     e.stopPropagation();
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
-    drag.current = { mode: "resize", id, handle, start: toDrawing(svg, e.clientX, e.clientY), box, node, group: `resize-${Date.now()}` };
+    drag.current = { mode: "resize", id, handle, start: toDrawing(svg, e.clientX, e.clientY), box, node, targets: guideTargets(svg, state.definition.nodes, [id]), group: `resize-${Date.now()}` };
   };
 
   const startRotate = (e: React.PointerEvent, id: string, box: Box) => {
@@ -169,6 +202,12 @@ export function useSelectGestures(ctxRef: React.MutableRefObject<CanvasCtx>, onE
     drag.current = { mode: "rotate", id, centre, startAngle: (Math.atan2(p.y - centre.y, p.x - centre.x) * 180) / Math.PI, startRotate: num(node.attrs.rotate), group: `rotate-${Date.now()}` };
   };
 
-  const overlay = marquee ? React.createElement("rect", { className: "vis-marquee", ...marquee }) : null;
+  const unit = ctxRef.current.unit;
+  const overlay = (
+    <>
+      {marquee && <rect className="vis-marquee" {...marquee} />}
+      <SmartGuides guides={guides.lines} sizes={guides.sizes} unit={unit} />
+    </>
+  );
   return { onPointerDown, onPointerMove, onPointerUp, onDoubleClick, overlay, startResize, startRotate };
 }
