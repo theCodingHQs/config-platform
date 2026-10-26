@@ -90,14 +90,14 @@ describe('drawing', () => {
       { id: 'pl', kind: 'polyline', attrs: { points: '0,0 10,10' } },
       { id: 'pg', kind: 'polygon', attrs: { points: '0,0 10,0 5,8' } },
       { id: 'p', kind: 'path', attrs: { d: 'M0 0L10 10' } },
-      { id: 't', kind: 'text', attrs: { text: 'PHF', textAnchor: 'middle' } },
+      { id: 't', kind: 'text', attrs: { text: 'Station A', textAnchor: 'middle' } },
       { id: 'i', kind: 'image', attrs: { href: 'javascript:alert(1)' } },
       { id: 'g', kind: 'group', attrs: { x: 5, fill: 'red' }, children: [{ id: 'c', kind: 'rect', attrs: { width: 4, height: 4 } }] },
       ...SHAPES.map((s, i): VisualNode => ({ id: `part${i}`, kind: 'preset', ref: s.type, attrs: { ...defaultProps(s), x: 100 + i * 40, y: 100 } })),
     ];
     const { container, getByText } = render(<VisualScene definition={def(nodes, { mode: 'isometric' })} scope={null} />);
     expect(container.querySelectorAll('[data-node-id]')).toHaveLength(nodes.length + 1);
-    expect(getByText('PHF').getAttribute('text-anchor')).toBe('middle');
+    expect(getByText('Station A').getAttribute('text-anchor')).toBe('middle');
     expect(container.querySelector('[data-node-id="g"]')!.getAttribute('transform')).toBe('translate(5 0)');
     expect(container.querySelector('[data-node-id="g"] g[fill="red"] [data-node-id="c"]')).toBeTruthy();
     // An unsafe picture link is never loaded
@@ -146,20 +146,20 @@ describe('format', () => {
     }
   });
 
-  it('the heat treatment line moves its wagon and lights its stations from the ht tags', () => {
-    const t = VISUAL_TEMPLATES.find((x) => x.id === 'heat-treatment')!;
-    const [station, wagon] = t.symbols!.map((s) => s.build());
-    const d = t.build({ station: 'st', wagon: 'wg' });
-    const symbols = new Map([['st', station], ['wg', wagon]]);
-    const scope = { live: { ht: { wagon: { position: 30700, busy: 'yes', moving: 'no', lift: 50 }, phf: { status: 'alarm', heat: 90 } } } };
+  it('the process line moves its carrier and lights its stations from the line tags', () => {
+    const t = VISUAL_TEMPLATES.find((x) => x.id === 'process-line')!;
+    const [station, carrier] = t.symbols!.map((s) => s.build());
+    const d = t.build({ station: 'st', carrier: 'cr' });
+    const symbols = new Map([['st', station], ['cr', carrier]]);
+    const scope = { live: { line: { carrier: { position: 30000, loaded: 'yes', moving: 'no', lift: 50 }, station4: { status: 'alarm', level: 90 } } } };
     const { container, getByText, getAllByText } = render(<VisualScene definition={d} scope={scope} symbols={symbols} />);
-    expect(container.querySelector('[data-node-id="wagon"]')!.getAttribute('transform')).toBe('translate(1266.3 184)');
+    expect(container.querySelector('[data-node-id="carrier"]')!.getAttribute('transform')).toBe('translate(1266.3 184)');
     expect(getByText('BUSY')).toBeTruthy();
-    expect(getByText('Wagon at 30700 of 30700 mm')).toBeTruthy();
-    expect(getAllByText('Waiting')).toHaveLength(3);
-    // PHF is in alarm: its status lamp blinks; the wagon is at the unloading end, so only that station shows it
-    expect(container.querySelector('[data-node-id="station-phf"] [data-node-id="status"] .vis-fx-blink')).toBeTruthy();
-    const here = [...container.querySelectorAll('[data-node-id="wagon-here"] polygon')].map((p) => p.getAttribute('fill'));
+    expect(getByText('Carrier at 30000 of 30000 mm')).toBeTruthy();
+    expect(getAllByText(/^Station [0-9]+$/)).toHaveLength(10);
+    // Station 4 is in alarm: its status lamp blinks; the carrier is at the far end, so only that station shows it
+    expect(container.querySelector('[data-node-id="station4"] [data-node-id="status"] .vis-fx-blink')).toBeTruthy();
+    const here = [...container.querySelectorAll('[data-node-id="carrier-here"] polygon')].map((p) => p.getAttribute('fill'));
     expect(here.filter((f) => f === 'var(--vis-blue)')).toHaveLength(1);
   });
 });
@@ -325,8 +325,8 @@ describe('SVG import', () => {
   it('brings in shapes, gradients, nested icons, transforms and titles; skips what it cannot show', async () => {
     const { importSvg } = await import('../src/studio/visuals/svg-import');
     const svg = `<svg viewBox="0 0 1400 420"><defs><linearGradient id="gBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".6" stop-color="#eef2f7"/></linearGradient><pattern id="gHaz"/></defs>
-      <g><title>PHF station</title><rect fill="url(#gBody)" stroke="#9aa8b8" stroke-width="1.3" x="20" y="56" width="112" height="170" rx="4"/>
-        <text x="76" y="26" text-anchor="middle" font-size="12" font-weight="700" style="font-family: ui-monospace, Menlo">PHF</text>
+      <g><title>Station A</title><rect fill="url(#gBody)" stroke="#9aa8b8" stroke-width="1.3" x="20" y="56" width="112" height="170" rx="4"/>
+        <text x="76" y="26" text-anchor="middle" font-size="12" font-weight="700" style="font-family: ui-monospace, Menlo">Station A</text>
         <g transform="translate(41, 231.5)"><svg width="12" height="12" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="#c3ccd6"/></svg></g>
         <rect x="-6" y="163" width="12" height="217" style="transform-box: fill-box; transform-origin: center bottom; transform: scaleY(0.5)"/>
         <rect x="0" y="0" width="5" height="5" fill="url(#gHaz)"/><use href="#x"/><script>alert(1)</script></g></svg>`;
@@ -334,10 +334,10 @@ describe('SVG import', () => {
     expect(r).toMatchObject({ width: 1400, height: 420, skipped: { use: 1 } });
     expect(r.paints).toEqual([{ id: 'gBody', type: 'linear', x1: 0, y1: 0, x2: 0, y2: 1, stops: [{ offset: 0, color: '#ffffff' }, { offset: 0.6, color: '#eef2f7' }] }]);
     const [g] = r.nodes;
-    expect(g).toMatchObject({ kind: 'group', name: 'PHF station' });
+    expect(g).toMatchObject({ kind: 'group', name: 'Station A' });
     const [body, label, icon, column, hatched] = g.children!;
     expect(body.attrs).toMatchObject({ x: 20, y: 56, width: 112, height: 170, rx: 4, fill: 'url(#gBody)', strokeWidth: 1.3 });
-    expect(label.attrs).toMatchObject({ text: 'PHF', fontSize: 12, fontWeight: '700', fontFamily: 'monospace', textAnchor: 'middle' });
+    expect(label.attrs).toMatchObject({ text: 'Station A', fontSize: 12, fontWeight: '700', fontFamily: 'monospace', textAnchor: 'middle' });
     // The icon's 16-unit viewBox is scaled into 12 × 12
     expect(icon.children![0]).toMatchObject({ kind: 'group', attrs: { scaleX: 0.75, scaleY: 0.75, pivot: 'anchor' } });
     // Shrunk to half height around its bottom edge: it now starts half way down

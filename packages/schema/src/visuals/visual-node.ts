@@ -4,7 +4,7 @@
  * can also be driven by live data the same way:
  *   bindings  attribute ← expression          x ← scale(live.cart.position, 0, 30700, 20, 1380)
  *   rules     when a condition holds, set some attributes (and maybe animate)
- *             when live.sqf1.status == "alarm" → fill = "var(--vis-alarm)", blink
+ *             when live.machine1.status == "alarm" → fill = "var(--vis-alarm)", blink
  *   effects   animations that run always, or while a condition holds
  */
 import { z } from 'zod';

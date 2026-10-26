@@ -38,7 +38,7 @@ export function RulesEditor({ rules, specs, resolved, paints, onChange }: Props)
               <span style={{ ...small, fontWeight: 600 }}>When</span>
               <ExpressionInput
                 aria-label={`Rule ${i + 1} condition`}
-                placeholder='live.sqf1.status == "alarm"'
+                placeholder='live.machine1.status == "alarm"'
                 value={rule.when}
                 onChange={(v) => change(i, { ...rule, when: v }, `rule-${i}-when`)}
                 style={{ flex: 1, minWidth: 0 }}

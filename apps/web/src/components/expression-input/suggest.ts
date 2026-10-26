@@ -1,11 +1,11 @@
 /**
  * What to suggest while typing an expression: the next part of the name being typed, wherever the
- * cursor is (also inside a function call). "live.ht.wa" offers the children of live.ht starting
+ * cursor is (also inside a function call). "live.area.ma" offers the children of live.area starting
  * with "wa"; a name with no dot offers the top-level names (live, inputs…) and functions.
  */
 
 export interface SuggestEntry {
-  /** Full name, e.g. "live.ht.wagon.position" */
+  /** Full name, e.g. "live.area.machine.speed" */
   path: string;
   /** Shown beside it: label, unit, where it comes from */
   detail?: string;
@@ -93,7 +93,7 @@ export function suggest(text: string, caret: number, entries: readonly SuggestEn
 
 const kindOrder = (s: Suggestion) => (s.kind === "function" ? 1 : 0);
 
-/** Where a value sits in a nested object, e.g. ["ht", "wagon", "position"] */
+/** Where a value sits in a nested object, e.g. ["area", "machine", "speed"] */
 export function valueAt(root: unknown, path: readonly string[]): unknown {
   let at: unknown = root;
   for (const key of path) {

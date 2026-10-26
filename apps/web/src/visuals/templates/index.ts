@@ -4,7 +4,7 @@
  */
 import { emptyVisualDefinition, type VisualDefinition } from "@config-platform/schema";
 import { assemblyLine } from "./assembly-line";
-import { heatTreatmentLine, stationSymbol, wagonSymbol } from "./heat-treatment";
+import { carrierSymbol, processLine, stationSymbol } from "./process-line";
 
 export interface TemplateSymbol {
   key: string;
@@ -26,13 +26,13 @@ export const VISUAL_TEMPLATES: readonly VisualTemplate[] = [
   { id: "blank-iso", label: "Blank (isometric)", description: "An empty 2.5D floor", build: () => emptyVisualDefinition("isometric") },
   { id: "assembly-line", label: "Assembly line", description: "Conveyors, a press, a robot and a tank wired to the Line 1 tags", build: assemblyLine },
   {
-    id: "heat-treatment",
-    label: "Heat treatment line",
-    description: "Ten stations and a wagon on a rail, made from two symbols and wired to the ht.* tags",
+    id: "process-line",
+    label: "Process line",
+    description: "Ten stations and a carrier on a track, made from two symbols and wired to line.* tags",
     symbols: [
       { key: "station", name: "Station", build: stationSymbol },
-      { key: "wagon", name: "Wagon", build: wagonSymbol },
+      { key: "carrier", name: "Carrier", build: carrierSymbol },
     ],
-    build: (ids) => heatTreatmentLine(ids.station, ids.wagon),
+    build: (ids) => processLine(ids.station, ids.carrier),
   },
 ];

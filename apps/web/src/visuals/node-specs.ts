@@ -78,7 +78,7 @@ const GEOMETRY: Record<Exclude<VisualNodeKind, "preset" | "symbol" | "group">, P
   polygon: shape([{ name: "points", label: "Points", kind: "code", default: "0,0 80,0 40,60", hint: "x,y pairs separated by spaces" }]),
   path: shape([{ name: "d", label: "Path data", kind: "code", default: "M0 0 L80 0 L40 60 Z", hint: "SVG path commands (M, L, C, A, Z…)" }]),
   text: [
-    { name: "text", label: "Text", kind: "text", default: "Text", group: GROUPS.text, hint: 'e.g. concat(live.phf.count, " pcs")' },
+    { name: "text", label: "Text", kind: "text", default: "Text", group: GROUPS.text, hint: 'e.g. concat(live.line1.count, " pcs")' },
     n("fontSize", "Size", 14, { group: GROUPS.text, min: 1, max: 1000 }),
     { name: "fontWeight", label: "Weight", kind: "select", default: "400", options: [{ value: "400", label: "Regular" }, { value: "500", label: "Medium" }, { value: "600", label: "Semibold" }, { value: "700", label: "Bold" }, { value: "800", label: "Extra bold" }], group: GROUPS.text },
     { name: "fontFamily", label: "Font", kind: "select", default: "inherit", options: [{ value: "inherit", label: "The app's font" }, { value: "monospace", label: "Monospace" }, { value: "serif", label: "Serif" }], group: GROUPS.text },

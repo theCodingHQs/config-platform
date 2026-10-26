@@ -42,7 +42,7 @@ function NewVisualForm({ kind, onCancel }: { kind: VisualKind; onCancel: () => v
       style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)", padding: "var(--space-4)", maxWidth: "32rem" }}
     >
       <Field label="Name" htmlFor="new-visual-name">
-        <input id="new-visual-name" className="form-input" autoFocus value={name} placeholder={kind === "symbol" ? "e.g. Furnace station" : "e.g. Line 1 overview"} onChange={(e) => setName(e.target.value)} />
+        <input id="new-visual-name" className="form-input" autoFocus value={name} placeholder={kind === "symbol" ? "e.g. Station" : "e.g. Line 1 overview"} onChange={(e) => setName(e.target.value)} />
       </Field>
       {kind === "symbol" ? (
         <p style={{ margin: 0, fontSize: "var(--font-size-sm)", color: "var(--text-muted)" }}>

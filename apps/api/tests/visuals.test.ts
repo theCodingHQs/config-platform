@@ -17,7 +17,7 @@ describe('Visuals API', () => {
   let viewer: TestSession;
 
   const conveyor = { id: 'c1', kind: 'preset', ref: 'conveyor', attrs: { x: 100, y: 200, length: 4 }, bindings: { running: 'live.line1.status == "running"' } };
-  const lamp = { id: 'lamp', kind: 'ellipse', attrs: { x: 40, y: 40, rx: 6, ry: 6, fill: 'grey' }, rules: [{ when: 'live.phf.ready', set: { fill: 'green' } }] };
+  const lamp = { id: 'lamp', kind: 'ellipse', attrs: { x: 40, y: 40, rx: 6, ry: 6, fill: 'grey' }, rules: [{ when: 'live.machine1.ready', set: { fill: 'green' } }] };
 
   beforeAll(async () => {
     await initializeMetadataCatalog(pool);
@@ -64,11 +64,11 @@ describe('Visuals API', () => {
     const symId = sym.json().id;
     const self = await call(builder, 'PUT', `/visuals/${symId}`, { name: 'Station', definition: { nodes: [{ id: 's', kind: 'symbol', ref: symId, attrs: {} }] }, expectedVersion: 1 });
     expect(self.json().message).toMatch(/can't contain itself/);
-    const line = await call(builder, 'POST', '/visuals', { name: 'HT line', definition: { nodes: [{ id: 'g', kind: 'group', attrs: {}, children: [{ id: 's1', kind: 'symbol', ref: symId, attrs: { x: 10, status: 'running' } }] }] } });
+    const line = await call(builder, 'POST', '/visuals', { name: 'Line drawing', definition: { nodes: [{ id: 'g', kind: 'group', attrs: {}, children: [{ id: 's1', kind: 'symbol', ref: symId, attrs: { x: 10, status: 'running' } }] }] } });
     expect(line.json().kind).toBe('drawing');
     const blocked = await call(builder, 'DELETE', `/visuals/${symId}`);
     expect(blocked.statusCode).toBe(409);
-    expect(blocked.json().message).toMatch(/placed in "HT line"/);
+    expect(blocked.json().message).toMatch(/placed in "Line drawing"/);
     expect((await call(builder, 'GET', '/visuals')).json().find((v: { id: string }) => v.id === symId).kind).toBe('symbol');
     expect((await call(builder, 'DELETE', `/visuals/${line.json().id}`)).statusCode).toBe(204);
     expect((await call(builder, 'DELETE', `/visuals/${symId}`)).statusCode).toBe(204);

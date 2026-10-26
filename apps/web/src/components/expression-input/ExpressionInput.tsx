@@ -39,7 +39,7 @@ export function ExpressionInput({ value, onChange, id, placeholder, style, ...ar
     const next = value.slice(0, result.start) + s.insert + value.slice(result.end);
     const caret = result.start + s.insert.length;
     onChange(next);
-    // A group (live.ht.) keeps the list open for its children
+    // A group (live.area.) keeps the list open for its children
     refresh(next, s.kind === "group" ? caret : null);
     requestAnimationFrame(() => ref.current?.setSelectionRange(caret, caret));
   };

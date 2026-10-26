@@ -2,7 +2,7 @@
  * Extra functions for visual bindings, on top of the usual expression functions:
  *   scale(live.cart.position, 0, 30700, 20, 1380)   a value in one range → the same place in another
  *   clamp(live.tank.level, 0, 100)
- *   pick(live.sqf1.status, "running", "green", "alarm", "red", "grey")   value → result, last = otherwise
+ *   pick(live.machine1.status, "running", "green", "alarm", "red", "grey")   value → result, last = otherwise
  */
 import type { ExpressionFunctions } from "@config-platform/schema";
 
