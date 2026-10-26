@@ -797,7 +797,8 @@ function AppContent({ user }: { user: CurrentUser }) {
               />
               <Route
                 path="/studio/visuals/:id"
-                element={<div className="page-container"><VisualsStudio /></div>}
+                // The editor always uses the whole window, like the page builder and grid designer
+                element={<div className="page-container page-container-full"><VisualsStudio /></div>}
               />
               <Route
                 path="/studio/export-templates"
