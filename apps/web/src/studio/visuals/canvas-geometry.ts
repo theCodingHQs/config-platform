@@ -98,3 +98,17 @@ export function hitPath(target: EventTarget | null): string[] {
   }
   return path;
 }
+
+/**
+ * The x, y that keeps a node where it appears when it moves into another group (null = the top
+ * level). Measured through the screen, so the canvas zoom doesn't matter.
+ */
+export function anchorInGroup(svg: SVGSVGElement, id: string, anchor: Pt, groupId: string | null): Pt {
+  const from = nodeElement(svg, id)?.parentElement;
+  const fromM = from instanceof SVGGraphicsElement ? from.getScreenCTM() : null;
+  const into = groupId ? nodeElement(svg, groupId)?.querySelector<SVGGElement>("g[data-node-body]")?.firstElementChild : svg;
+  const intoM = into instanceof SVGGraphicsElement ? into.getScreenCTM() : null;
+  if (!fromM || !intoM) return anchor;
+  const q = new DOMPoint(anchor.x, anchor.y).matrixTransform(fromM).matrixTransform(intoM.inverse());
+  return { x: q.x, y: q.y };
+}

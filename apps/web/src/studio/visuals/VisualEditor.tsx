@@ -15,7 +15,8 @@ import { useSymbols } from "../../visuals/use-symbols";
 import { SymbolsPalette } from "./SymbolsPalette";
 import { inputDefaults } from "./InputsEditor";
 import { symbolFromNodes } from "./make-symbol";
-import { nodeBox, parentSpace, unionBox } from "./canvas-geometry";
+import { anchorInGroup, nodeBox, parentSpace, unionBox } from "./canvas-geometry";
+import { dropParent, type LayerDrop } from "./layer-moves";
 import { useSvgImport } from "./use-svg-import";
 import { alignMoves, type AlignMode } from "./align";
 import { useExpressionSuggestions, useLiveTags } from "./use-expression-suggestions";
@@ -121,6 +122,21 @@ export function VisualEditor({ visual }: { visual: Visual }) {
     },
     onError: (err: Error) => setMessage({ tone: "error", text: err.message }),
   });
+  /** Layers dragged in the list; any that change group get the x, y that keeps them in place */
+  const moveLayers = (ids: string[], drop: LayerDrop) => {
+    const svg = svgRef.current;
+    const to = dropParent(nodes, drop);
+    const positions = new Map<string, { x: number; y: number }>();
+    if (svg) {
+      for (const id of ids) {
+        const n = findNode(nodes, id);
+        if (!n || parentIdOf(nodes, id) === to) continue;
+        const p = anchorInGroup(svg, id, { x: num(n.attrs.x), y: num(n.attrs.y) }, to);
+        positions.set(id, { x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 });
+      }
+    }
+    dispatch({ type: "move", ids, drop, positions });
+  };
   const align = (mode: AlignMode) => {
     const svg = svgRef.current;
     if (!svg) return;
@@ -299,6 +315,7 @@ export function VisualEditor({ visual }: { visual: Visual }) {
                     dispatch({ type: "select", ids });
                   }}
                   onToggleHidden={(n) => update(n.id, { hidden: !n.hidden })}
+                  onMove={moveLayers}
                 />
               ) : (
                 <ShapePalette onAdd={(shape) => addPart(shape)} />

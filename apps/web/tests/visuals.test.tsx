@@ -16,6 +16,7 @@ import { scalePath, scalePoints } from '../src/studio/visuals/path-scale';
 import { dragAttrs, penAttrs, pointsAttrs } from '../src/studio/visuals/tools';
 import { parseNodes } from '../src/studio/visuals/clipboard';
 import { pickTarget } from '../src/studio/visuals/use-select-gestures';
+import { canDrop, moveLayers } from '../src/studio/visuals/layer-moves';
 
 afterEach(() => cleanup());
 
@@ -226,6 +227,50 @@ describe('editing', () => {
     expect(pickTarget(['g', 'h', 'r'], 'g', false)).toEqual({ id: 'h', leaveGroup: false });
     expect(pickTarget(['x'], 'g', false)).toEqual({ id: 'x', leaveGroup: true });
     expect(pickTarget(['g', 'h', 'r'], null, true).id).toBe('r');
+  });
+});
+
+describe('moving layers in the list', () => {
+  const ids = (ns: readonly VisualNode[]) => ns.map((n) => n.id).join('');
+  const tree = (): VisualNode[] => [
+    rect({ id: 'a' }),
+    { id: 'g', kind: 'group', attrs: { x: 100 }, children: [rect({ id: 'b' }), rect({ id: 'c' })] },
+    rect({ id: 'd' }),
+  ];
+
+  it('puts a layer just in front of or just behind another (the list shows the front first)', () => {
+    expect(ids(moveLayers(tree(), ['a'], { targetId: 'd', place: 'above' }))).toBe('gda');
+    expect(ids(moveLayers(tree(), ['d'], { targetId: 'a', place: 'below' }))).toBe('dag');
+    expect(ids(moveLayers(tree(), ['a', 'd'], { targetId: 'g', place: 'above' }))).toBe('gad');
+  });
+
+  it('moves layers into and out of groups, at the position given so they stay in place', () => {
+    const into = moveLayers(tree(), ['a'], { targetId: 'g', place: 'inside' }, new Map([['a', { x: -90, y: 20 }]]));
+    expect(ids(into)).toBe('gd');
+    expect(ids(into[0].children!)).toBe('bca');
+    expect(into[0].children![2].attrs).toMatchObject({ x: -90, y: 20 });
+    const out = moveLayers(tree(), ['b'], { targetId: 'd', place: 'above' });
+    expect(ids(out)).toBe('agdb');
+    expect(ids(out[1].children!)).toBe('c');
+  });
+
+  it('refuses drops into a non-group, into itself, or of a locked layer', () => {
+    expect(canDrop(tree(), ['a'], { targetId: 'd', place: 'inside' })).toBe(false);
+    expect(canDrop(tree(), ['g'], { targetId: 'b', place: 'above' })).toBe(false);
+    expect(canDrop(tree(), ['g'], { targetId: 'g', place: 'inside' })).toBe(false);
+    const locked = updateNodes(tree(), new Map([['a', { locked: true }]]));
+    expect(canDrop(locked, ['a'], { targetId: 'd', place: 'above' })).toBe(false);
+    expect(moveLayers(locked, ['a'], { targetId: 'd', place: 'above' })).toBe(locked);
+  });
+
+  it('is one undo step, keeps the moved layers selected and opens the group they went into', () => {
+    let s = editorReducer({} as EditorState, { type: 'load', name: 'V', definition: def(tree()) });
+    s = editorReducer(s, { type: 'move', ids: ['d'], drop: { targetId: 'g', place: 'inside' } });
+    expect(s.selection).toEqual(['d']);
+    expect(s.openGroup).toBe('g');
+    expect(ids(s.definition.nodes[1].children!)).toBe('bcd');
+    s = editorReducer(s, { type: 'undo' });
+    expect(ids(s.definition.nodes)).toBe('agd');
   });
 });
 

@@ -5,6 +5,7 @@
  */
 import { useCallback, useMemo, useReducer } from "react";
 import type { VisualDefinition, VisualNode } from "@config-platform/schema";
+import { dropParent, moveLayers, type LayerDrop } from "./layer-moves";
 import { allIds, findNode, groupNodes, insertNodes, nextId, pathTo, removeNodes, reorderNodes, ungroupNode, updateNodes, type NodePatch, type OrderMove } from "./node-tree";
 
 interface Snapshot {
@@ -36,6 +37,8 @@ export type EditorAction =
   | ({ type: "order"; ids: string[]; move: OrderMove } & Change)
   | ({ type: "group"; ids: string[] } & Change)
   | ({ type: "ungroup"; id: string } & Change)
+  /** Dragged in the layers list; positions keep layers that change group where they appear */
+  | ({ type: "move"; ids: string[]; drop: LayerDrop; positions?: ReadonlyMap<string, { x: number; y: number }> } & Change)
   | { type: "select"; ids: string[] }
   | { type: "open"; id: string | null }
   | { type: "undo" }
@@ -90,6 +93,13 @@ export function editorReducer(state: EditorState, action: EditorAction): EditorS
     case "ungroup": {
       const kids = findNode(nodes, action.id)?.children?.map((c) => c.id) ?? [];
       return commit(state, withNodes(state, ungroupNode(nodes, action.id)), action.group, kids);
+    }
+    case "move": {
+      const moved = moveLayers(nodes, action.ids, action.drop, action.positions);
+      if (moved === nodes) return state;
+      const next = commit(state, withNodes(state, moved), action.group, action.ids);
+      // The moved layers stay selected, inside the group they went to
+      return { ...next, openGroup: dropParent(nodes, action.drop) };
     }
     case "select":
       return { ...state, selection: action.ids, lastGroup: null };
