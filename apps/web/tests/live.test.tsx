@@ -217,6 +217,20 @@ describe('live socket (browser)', () => {
     expect(screen.getByTestId('out').textContent).toBe('42 on');
   });
 
+  it('shows the connection on a page whose live values are all inside a visual', async () => {
+    const client = fakeClient();
+    function Page() {
+      // The page itself names no tag; the visual on it does, through the same socket
+      const { liveInfo } = useLiveScope({ root: { props: { text: "{{ liveInfo.connected ? 'Live' : 'Connecting' }}" } } }, client);
+      useLiveScope({ nodes: [{ bindings: { text: 'live.orders.open' } }] }, client);
+      return <p data-testid="out">{liveInfo.connected ? 'Live' : 'Connecting'}</p>;
+    }
+    render(<Page />);
+    expect(screen.getByTestId('out').textContent).toBe('Connecting');
+    act(() => FakeSocket.instances[0].open());
+    expect(screen.getByTestId('out').textContent).toBe('Live');
+  });
+
   it('finds every entity a page shows, in data sources and components', () => {
     expect(pageEntityRefs({ dataSources: [{ id: 'jobs', entityId: 'e_jobs' }], root: { children: [{ props: { entityId: 'machine' } }, { props: { entityId: 'e_jobs' } }] } })).toEqual(['e_jobs', 'machine']);
   });

@@ -32,13 +32,17 @@ const EMPTY_SCOPE: LiveScope = { live: {}, liveInfo: { connected: false, tags: {
 
 /** The `live` part of a page's expression scope, for the tags its definition mentions */
 export function useLiveScope(definition: unknown, client?: LiveSocketClient): LiveScope {
-  const refs = useMemo(() => (definition ? liveTagRefs(JSON.stringify(definition)) : []), [definition]);
+  const text = useMemo(() => (definition ? JSON.stringify(definition) : ""), [definition]);
+  const refs = useMemo(() => liveTagRefs(text), [text]);
+  // A page can show the connection ({{ liveInfo.connected }}) without using a tag itself, when its
+  // live values are all inside a visual: the socket is shared, so it still reports the visual's
+  const usesInfo = useMemo(() => /\bliveInfo\b/.test(text), [text]);
   const snapshot = useLiveSnapshot(refs, client);
   return useMemo(() => {
-    if (refs.length === 0) return EMPTY_SCOPE;
+    if (refs.length === 0 && !usesInfo) return EMPTY_SCOPE;
     return {
       live: nestTagValues(snapshot.values),
       liveInfo: { connected: snapshot.socket === "open", tags: snapshot.values, connections: snapshot.connections },
     };
-  }, [refs.length, snapshot]);
+  }, [refs.length, usesInfo, snapshot]);
 }
