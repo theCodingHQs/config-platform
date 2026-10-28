@@ -1,29 +1,33 @@
-import React, { useState } from "react";
+import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import type { LiveRule } from "@config-platform/schema";
 import { liveRulesApi } from "../../../live/live-api";
 import { LIVE_RULES_KEY, RuleEditor } from "./RuleEditor";
 import { describeTrigger } from "./rule-draft";
-
-type View = { mode: "list" } | { mode: "new" } | { mode: "edit"; id: string };
+import { livePath, useLiveRoute } from "../live-route";
+import { NotFound } from "../ConnectionsPanel";
 
 const STATUS_BADGE = { done: "badge badge-success", skipped: "badge", failed: "badge badge-danger" } as const;
 
 /** Studio → Live → Rules: tag changes that create or update records */
 export function RulesPanel({ canEdit }: { canEdit: boolean }) {
-  const [view, setView] = useState<View>({ mode: "list" });
+  const { view: route, go } = useLiveRoute();
+  const view = route.tab === "rules" ? route : ({ tab: "rules", screen: "list" } as const);
+  const toList = () => go(livePath.tab("rules"));
   const { data: rules = [], isLoading, error } = useQuery({ queryKey: LIVE_RULES_KEY, queryFn: liveRulesApi.list, refetchInterval: 5000 });
 
-  if (view.mode === "new") return <RuleEditor key="new" canEdit={canEdit} onSaved={(saved) => setView({ mode: "edit", id: saved.id })} onClose={() => setView({ mode: "list" })} />;
-  const editing = view.mode === "edit" ? rules.find((r) => r.id === view.id) : undefined;
-  if (editing) return <RuleEditor key={editing.id} rule={editing} canEdit={canEdit} onSaved={() => undefined} onClose={() => setView({ mode: "list" })} />;
+  // The saved rule takes the new form's place, so Back doesn't return to an empty form
+  if (view.screen === "new") return <RuleEditor key="new" canEdit={canEdit} onSaved={(saved) => go(livePath.rule(saved.id), { replace: true })} onClose={toList} />;
+  const editing = view.screen === "edit" ? rules.find((r) => r.id === view.id) : undefined;
+  if (editing) return <RuleEditor key={editing.id} rule={editing} canEdit={canEdit} onSaved={() => undefined} onClose={toList} />;
+  if (view.screen === "edit" && !isLoading) return <NotFound what="rule" onBack={toList} />;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
       {canEdit && (
         <div>
-          <button type="button" className="btn btn-primary" onClick={() => setView({ mode: "new" })}>
+          <button type="button" className="btn btn-primary" onClick={() => go(livePath.newRule())}>
             <Plus size="1em" /> New rule
           </button>
         </div>
@@ -37,7 +41,7 @@ export function RulesPanel({ canEdit }: { canEdit: boolean }) {
           No rules yet. A rule saves live events as records, for example a downtime record each time a machine stops.
         </div>
       ) : (
-        <RuleList rules={rules} onOpen={(id) => setView({ mode: "edit", id })} />
+        <RuleList rules={rules} onOpen={(id) => go(livePath.rule(id))} />
       )}
     </div>
   );

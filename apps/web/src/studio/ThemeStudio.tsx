@@ -18,8 +18,10 @@ import {
   ThemeSettingsTabs,
   themePanelId,
   themeTabId,
+  THEME_TAB_IDS,
   type ThemeTabId,
 } from "./ThemeSettingsTabs";
+import { useTabParam } from "../components/use-tab-param";
 import { ThemeStudioPreview, PREVIEW_HINT } from "./ThemeStudioPreview";
 
 const EMPTY_LAYOUT: ThemeLayoutOverride = {};
@@ -102,7 +104,7 @@ export function ThemeStudio() {
     workspaceTheme.overrides?.layout ?? EMPTY_LAYOUT,
   );
   const [layoutValid, setLayoutValid] = useState(true);
-  const [activeTab, setActiveTab] = useState<ThemeTabId>("colors");
+  const [activeTab, setActiveTab] = useTabParam<ThemeTabId>(THEME_TAB_IDS, "colors");
 
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);

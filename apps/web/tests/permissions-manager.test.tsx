@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ErdTable } from '@config-platform/schema';
 import { PermissionsManager } from '../src/studio/PermissionsManager';
@@ -31,7 +32,7 @@ function renderScreen() {
   return render(
     <QueryClientProvider client={client}>
       <MetadataProvider tenantId="t" initialEntities={[sheets]}>
-        <PermissionsManager />
+        <MemoryRouter><PermissionsManager /></MemoryRouter>
       </MetadataProvider>
     </QueryClientProvider>,
   );

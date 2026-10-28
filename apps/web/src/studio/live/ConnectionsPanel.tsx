@@ -1,19 +1,20 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
-import type { LiveConnection, LiveConnectionKind } from "@config-platform/schema";
+import type { LiveConnection } from "@config-platform/schema";
 import { liveApi } from "../../live/live-api";
 import { ConnectionEditor, LIVE_CONNECTIONS_KEY } from "./ConnectionEditor";
 import { ConnectionStatusBadge } from "./ConnectionStatusBadge";
 import { NewConnectionPicker } from "./NewConnectionPicker";
 import { draftFromConnection, emptyDraft } from "./connection-draft";
 import { KIND_UI } from "./kinds";
-
-type View = { mode: "list" } | { mode: "pick" } | { mode: "new"; kind: LiveConnectionKind } | { mode: "edit"; id: string };
+import { livePath, useLiveRoute } from "./live-route";
 
 /** Studio → Live → Connections: where live data comes from, and its tags */
 export function ConnectionsPanel({ canEdit }: { canEdit: boolean }) {
-  const [view, setView] = useState<View>({ mode: "list" });
+  const { view: route, go } = useLiveRoute();
+  const view = route.tab === "connections" ? route : ({ tab: "connections", screen: "list" } as const);
+  const toList = () => go(livePath.tab("connections"));
   /** An HTTP push token from creating a connection, carried into its editor (shown once) */
   const [createdToken, setCreatedToken] = useState<{ id: string; token: string } | null>(null);
   const { data: connections = [], isLoading, error } = useQuery({
@@ -22,25 +23,29 @@ export function ConnectionsPanel({ canEdit }: { canEdit: boolean }) {
     // Status (connected, last message) changes on its own
     refetchInterval: 5000,
   });
-  const editing = view.mode === "edit" ? connections.find((c) => c.id === view.id) : undefined;
+  const editing = view.screen === "edit" ? connections.find((c) => c.id === view.id) : undefined;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
-      {canEdit && view.mode === "list" && (
+      {canEdit && view.screen === "list" && (
         <div>
-          <button type="button" className="btn btn-primary" onClick={() => setView({ mode: "pick" })}>
+          <button type="button" className="btn btn-primary" onClick={() => go(livePath.newConnection())}>
             <Plus size="1em" /> New connection
           </button>
         </div>
       )}
-      {view.mode === "pick" && <NewConnectionPicker onPick={(kind) => setView({ mode: "new", kind })} onCancel={() => setView({ mode: "list" })} />}
-      {view.mode === "new" && (
-        <ConnectionEditor key="new" initial={emptyDraft(view.kind)} canEdit={canEdit} onSaved={(saved) => {
+      {view.screen === "pick" && <NewConnectionPicker onPick={(kind) => go(livePath.newConnection(kind), { replace: true })} onCancel={toList} />}
+      {view.screen === "new" && (
+        <ConnectionEditor key={`new-${view.kind}`} initial={emptyDraft(view.kind)} canEdit={canEdit} onSaved={(saved) => {
             if (saved.pushToken) setCreatedToken({ id: saved.id, token: saved.pushToken });
-            setView({ mode: "edit", id: saved.id });
-          }} onClose={() => setView({ mode: "list" })} />
+            // The saved connection takes the new form's place, so Back doesn't return to an empty form
+            go(livePath.connection(saved.id), { replace: true });
+          }} onClose={toList} />
       )}
-      {view.mode === "edit" && editing && (
+      {view.screen === "edit" && !editing && !isLoading && (
+        <NotFound what="connection" onBack={toList} />
+      )}
+      {view.screen === "edit" && editing && (
         <ConnectionEditor
           key={editing.id}
           connection={editing}
@@ -50,13 +55,25 @@ export function ConnectionsPanel({ canEdit }: { canEdit: boolean }) {
           onSaved={() => undefined}
           onClose={() => {
             setCreatedToken(null);
-            setView({ mode: "list" });
+            toList();
           }}
         />
       )}
-      {view.mode === "list" && (
-        <ConnectionList connections={connections} loading={isLoading} error={error as Error | null} onOpen={(id) => setView({ mode: "edit", id })} />
+      {view.screen === "list" && (
+        <ConnectionList connections={connections} loading={isLoading} error={error as Error | null} onOpen={(id) => go(livePath.connection(id))} />
       )}
+    </div>
+  );
+}
+
+/** An address for something that's gone (deleted, or a link from another workspace) */
+export function NotFound({ what, onBack }: { what: string; onBack: () => void }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "var(--space-2)" }}>
+      <p style={{ margin: 0, color: "var(--text-muted)" }}>This {what} doesn't exist any more, or isn't in this workspace.</p>
+      <button type="button" className="btn btn-secondary" onClick={onBack}>
+        Back to the list
+      </button>
     </div>
   );
 }

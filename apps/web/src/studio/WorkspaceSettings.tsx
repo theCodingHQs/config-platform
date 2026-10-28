@@ -27,16 +27,13 @@ import {
   Globe,
   Mail,
 } from 'lucide-react';
-import { useSearchParams } from 'react-router-dom';
+import { useTabParam } from '../components/use-tab-param';
 import { EmailSettingsPanel } from './EmailSettingsPanel';
 
 export function WorkspaceSettings() {
   const { user } = useAuth();
   type Tab = 'usage' | 'regional' | 'email' | 'audit' | 'export-import';
-  const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<Tab>(() =>
-    (['usage', 'regional', 'email', 'audit', 'export-import'] as const).find((t) => t === searchParams.get('tab')) ?? 'usage'
-  );
+  const [activeTab, setActiveTab] = useTabParam<Tab>(['usage', 'regional', 'email', 'audit', 'export-import'], 'usage');
 
   // Usage state
   const [usage, setUsage] = useState<WorkspaceUsage | null>(null);

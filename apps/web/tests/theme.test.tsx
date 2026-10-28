@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import {
   THEME_PRESETS,
   neutralLightPalette,
@@ -278,7 +279,7 @@ describe('Theme Foundation Unit & Integration Tests', () => {
             initialTheme="light"
             initialWorkspaceTheme={{ presetId: 'neutral', overrides: {} }}
           >
-            <ThemeStudio />
+            <MemoryRouter><ThemeStudio /></MemoryRouter>
           </ThemeProvider>
         </AuthContext.Provider>
       );
@@ -309,7 +310,7 @@ describe('Theme Foundation Unit & Integration Tests', () => {
         <AuthContext.Provider value={ownerAuth}>
           <ThemeProvider initialTheme="light" initialWorkspaceTheme={{ presetId: 'neutral', overrides: {} }}>
             <AppBarProvider>
-              <ThemeStudio />
+              <MemoryRouter><ThemeStudio /></MemoryRouter>
             </AppBarProvider>
           </ThemeProvider>
         </AuthContext.Provider>
@@ -332,7 +333,7 @@ describe('Theme Foundation Unit & Integration Tests', () => {
       render(
         <AuthContext.Provider value={mockAuthContext}>
           <ThemeProvider initialTheme="light" initialWorkspaceTheme={{ presetId: 'neutral', overrides: {} }}>
-            <ThemeStudio />
+            <MemoryRouter><ThemeStudio /></MemoryRouter>
           </ThemeProvider>
         </AuthContext.Provider>
       );
@@ -366,7 +367,7 @@ describe('Theme Foundation Unit & Integration Tests', () => {
       render(
         <AuthContext.Provider value={mockAuthContext}>
           <ThemeProvider initialTheme="light" initialWorkspaceTheme={{ presetId: 'neutral', overrides: {} }}>
-            <ThemeStudio />
+            <MemoryRouter><ThemeStudio /></MemoryRouter>
           </ThemeProvider>
         </AuthContext.Provider>
       );
@@ -402,7 +403,7 @@ describe('Theme Foundation Unit & Integration Tests', () => {
             initialTheme="light"
             initialWorkspaceTheme={{ presetId: 'neutral', overrides: {} }}
           >
-            <ThemeStudio />
+            <MemoryRouter><ThemeStudio /></MemoryRouter>
           </ThemeProvider>
         </AuthContext.Provider>
       );
@@ -436,7 +437,7 @@ describe('Theme Foundation Unit & Integration Tests', () => {
             initialThemeEditing="locked"
             initialWorkspaceTheme={{ presetId: 'neutral', overrides: {} }}
           >
-            <ThemeStudio />
+            <MemoryRouter><ThemeStudio /></MemoryRouter>
           </ThemeProvider>
         </AuthContext.Provider>
       );

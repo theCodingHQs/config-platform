@@ -1,13 +1,12 @@
-import React, { useState } from "react";
+import React from "react";
 import { RadioTower } from "lucide-react";
 import { useAuth } from "../../context/auth-context";
 import { ConnectionsPanel } from "./ConnectionsPanel";
 import { RulesPanel } from "./rules/RulesPanel";
 import { AgentsPanel } from "./agents/AgentsPanel";
+import { livePath, useLiveRoute, type LiveTab } from "./live-route";
 
-type Tab = "connections" | "rules" | "agents";
-
-const TABS: Array<{ id: Tab; label: string }> = [
+const TABS: Array<{ id: LiveTab; label: string }> = [
   { id: "connections", label: "Connections" },
   { id: "rules", label: "Rules" },
   { id: "agents", label: "Edge agents" },
@@ -17,7 +16,8 @@ const TABS: Array<{ id: Tab; label: string }> = [
 export function LiveStudio() {
   const { user } = useAuth();
   const canEdit = user?.role === "owner" || user?.role === "admin";
-  const [tab, setTab] = useState<Tab>("connections");
+  const { view, go } = useLiveRoute();
+  const tab = view.tab;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)", maxWidth: "72rem" }}>
@@ -37,7 +37,7 @@ export function LiveStudio() {
             role="tab"
             aria-selected={tab === t.id}
             className="btn btn-ghost"
-            onClick={() => setTab(t.id)}
+            onClick={() => go(livePath.tab(t.id))}
             style={{
               borderRadius: "var(--radius-none)",
               borderBottom: `2px solid ${tab === t.id ? "var(--accent)" : "transparent"}`,

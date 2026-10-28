@@ -10,6 +10,8 @@ export const THEME_TABS: ReadonlyArray<{ id: ThemeTabId; label: string; icon: Re
   { id: "layout", label: "Layout", icon: <LayoutPanelLeft size={15} /> },
 ];
 
+export const THEME_TAB_IDS: readonly ThemeTabId[] = THEME_TABS.map((t) => t.id);
+
 export const themeTabId = (id: ThemeTabId) => `theme-tab-${id}`;
 export const themePanelId = (id: ThemeTabId) => `theme-panel-${id}`;
 

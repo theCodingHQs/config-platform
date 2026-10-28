@@ -33,6 +33,7 @@ import { useStatusNotify } from "../context/app-bar-context";
 import { useDateDisplayPrefs } from "../context/date-display-context";
 import { formatPlainDate, plainDateInTimeZone } from "@config-platform/schema";
 import { useMetadata } from "../context/metadata-context";
+import { useTabParam } from "../components/use-tab-param";
 
 const ROLES = ["owner", "admin", "builder", "editor", "viewer"] as const;
 type Role = (typeof ROLES)[number];
@@ -60,9 +61,7 @@ const RECORD_ACTIONS = [
 export function PermissionsManager() {
   const { tenantId } = useMetadata();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<"entities" | "members">(
-    "entities",
-  );
+  const [activeTab, setActiveTab] = useTabParam(["entities", "members"] as const, "entities");
   const [selectedEntityId, setSelectedEntityId] = useState<string>("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<Role>("viewer");

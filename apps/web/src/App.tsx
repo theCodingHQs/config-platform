@@ -788,7 +788,8 @@ function AppContent({ user }: { user: CurrentUser }) {
                 element={<div className="page-container"><ReportSchedules /></div>}
               />
               <Route
-                path="/studio/live"
+                // Each Live screen (a connection, a rule, a tab) has its own address: see live-route.ts
+                path="/studio/live/*"
                 element={<div className="page-container"><LiveStudio /></div>}
               />
               <Route
