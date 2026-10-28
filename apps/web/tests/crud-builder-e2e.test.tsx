@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { AppBarProvider } from '../src/context/app-bar-context';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
@@ -135,6 +136,7 @@ describe('End-to-End: CRUD Page via Builder UI Operations', () => {
 
     render(
       <QueryClientProvider client={queryClient}>
+        <AppBarProvider>
         <MetadataProvider tenantId={tenantId} initialEntities={mockEntities}>
           <MemoryRouter initialEntries={['/studio/pages/p_crud_test']}>
             <Routes>
@@ -142,6 +144,7 @@ describe('End-to-End: CRUD Page via Builder UI Operations', () => {
             </Routes>
           </MemoryRouter>
         </MetadataProvider>
+      </AppBarProvider>
       </QueryClientProvider>
     );
 

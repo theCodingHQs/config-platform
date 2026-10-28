@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 
 import { useMetadata } from "../context/metadata-context";
+import { useStatusNotify } from "../context/app-bar-context";
 import { renderNode } from "../renderer/render-node";
 import { PageRuntimeProvider } from "../context/page-runtime-context";
 import { ExpressionInput } from "./ExpressionInput";
@@ -694,7 +695,8 @@ export const PageBuilder: React.FC = () => {
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const [isPreviewPublished, setIsPreviewPublished] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  // Feedback goes to the status bar at the bottom, like everywhere else in the app
+  const notify = useStatusNotify();
   const [showValidationPopover, setShowValidationPopover] = useState(false);
 
   // Modals for State, Data Sources, and Templates
@@ -707,10 +709,13 @@ export const PageBuilder: React.FC = () => {
   const [history, setHistory] = useState<PageDefinition[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
-  const { data, isLoading, error } = useQuery<PageDetail, Error>({
-    queryKey: ["page", tenantId, id],
+  const pageKey = ["page", tenantId, id] as const;
+  const { data, isLoading, error, isFetchedAfterMount } = useQuery<PageDetail, Error>({
+    queryKey: pageKey,
     queryFn: () => fetchPage(tenantId, id!),
     enabled: Boolean(id),
+    // Always the page as it is now: a copy kept from an earlier visit can be versions behind
+    refetchOnMount: "always",
   });
 
   const { data: exportTemplates = [] } = useQuery({
@@ -719,14 +724,16 @@ export const PageBuilder: React.FC = () => {
   });
 
   useEffect(() => {
-    if (data && !draft) {
+    // Editing starts from the page as fetched now, never from an older kept copy: its version
+    // would be behind the server's, and every save would then fail as a version conflict
+    if (data && !draft && isFetchedAfterMount) {
       setPageDetail(data);
       setDraft(data.draft);
       setHistory([data.draft]);
       setHistoryIndex(0);
       setSelectedNodeId(data.draft.root?.id || null);
     }
-  }, [data, draft]);
+  }, [data, draft, isFetchedAfterMount]);
 
   // Update draft with undo/redo history tracking
   const pushDraftUpdate = useCallback(
@@ -774,12 +781,22 @@ export const PageBuilder: React.FC = () => {
     };
   }, [draft]);
 
+  // Leaving the builder within the auto-save's wait saves the last change instead of dropping it
+  const flushOnLeaveRef = useRef<() => void>(() => undefined);
+  flushOnLeaveRef.current = () => {
+    if (saveTimeoutRef.current && isDraftDirtyRef.current) handleSaveDraft().catch(() => {});
+  };
+  useEffect(() => () => flushOnLeaveRef.current(), []);
+
   // Change detection: is draft modified vs DB draft, and does draft differ from live published
   const isDraftDirty = Boolean(
     draft &&
     pageDetail &&
     stableStringify(draft) !== stableStringify(pageDetail.draft),
   );
+
+  const isDraftDirtyRef = useRef(isDraftDirty);
+  isDraftDirtyRef.current = isDraftDirty;
 
   const hasUnpublishedChanges = Boolean(
     draft &&
@@ -819,6 +836,8 @@ export const PageBuilder: React.FC = () => {
     });
     latestPageRef.current = updated;
     setPageDetail(updated);
+    // Keep the kept copy current too, for the next time this page is opened
+    queryClient.setQueryData(pageKey, updated);
     return updated;
   };
 
@@ -837,13 +856,20 @@ export const PageBuilder: React.FC = () => {
           saveQueuedRef.current = false;
           updated = (await runSave()) ?? updated;
         }
-        setSaveStatus("Draft saved");
-        setTimeout(() => setSaveStatus(null), 2500);
+        notify("success", "Draft saved");
         queryClient.invalidateQueries({ queryKey: ["pages", tenantId] });
         return updated;
       } catch (err: any) {
         saveQueuedRef.current = false;
-        setSaveStatus(`Save error: ${err.message}`);
+        // Saved elsewhere meanwhile (another tab or person): their version would be overwritten
+        notify(
+          "error",
+          err?.statusCode === 409
+            ? "Not saved: this page was changed elsewhere since you opened it. Reload the page to get that version (changes made here since will be lost)."
+            : `Save error: ${err.message}`,
+          // Nothing saves until it's sorted, so it stays until dismissed
+          { durationMs: err?.statusCode === 409 ? 0 : undefined },
+        );
         throw err;
       } finally {
         saveInFlightRef.current = null;
@@ -858,14 +884,15 @@ export const PageBuilder: React.FC = () => {
     mutationFn: () => publishPage(tenantId, pageDetail?.id || id!),
     onSuccess: (updated) => {
       setPageDetail(updated);
-      setSaveStatus("Published successfully!");
-      setTimeout(() => setSaveStatus(null), 3000);
+      latestPageRef.current = updated;
+      queryClient.setQueryData(pageKey, updated);
+      notify("success", "Published");
       queryClient.invalidateQueries({ queryKey: ["pages", tenantId] });
       queryClient.invalidateQueries({
         queryKey: ["published-pages", tenantId],
       });
     },
-    onError: (err: any) => setSaveStatus(`Publish error: ${err.message}`),
+    onError: (err: any) => notify("error", `Publish error: ${err.message}`),
   });
 
   const handlePublish = async () => {
@@ -1119,22 +1146,12 @@ export const PageBuilder: React.FC = () => {
       root: updatedRoot,
     });
     setSelectedNodeId(clone.id);
-    setSaveStatus(`Duplicated "${target.type}" (${clone.id})`);
-    setTimeout(() => {
-      try {
-        if (typeof window !== "undefined") setSaveStatus(null);
-      } catch {}
-    }, 2500);
+    notify("success", `Duplicated "${target.type}" (${clone.id})`);
   };
 
   const handleCopyNode = (node: NodeDefinition) => {
     setCopiedNode(node);
-    setSaveStatus(`Copied "${node.type}" (${node.id})`);
-    setTimeout(() => {
-      try {
-        if (typeof window !== "undefined") setSaveStatus(null);
-      } catch {}
-    }, 2500);
+    notify("info", `Copied "${node.type}" (${node.id})`);
   };
 
   const handlePasteNode = (targetNodeId?: string) => {
@@ -1160,8 +1177,7 @@ export const PageBuilder: React.FC = () => {
       root: updatedRoot,
     });
     setSelectedNodeId(clone.id);
-    setSaveStatus(`Pasted "${clone.type}" (${clone.id})`);
-    setTimeout(() => setSaveStatus(null), 2500);
+    notify("success", `Pasted "${clone.type}" (${clone.id})`);
   };
 
   // Keyboard shortcuts: Delete removes selected node, Cmd/Ctrl+Z/Shift+Z undo/redo, Cmd/Ctrl+D duplicates, Cmd/Ctrl+C copies, Cmd/Ctrl+V pastes
@@ -1423,18 +1439,6 @@ export const PageBuilder: React.FC = () => {
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", flexShrink: 0 }}>
-          {saveStatus && (
-            <span
-              role={saveStatus.startsWith("Save error") ? "alert" : "status"}
-              style={{
-                fontSize: "var(--font-size-xs)",
-                color: saveStatus.startsWith("Save error") ? "var(--danger)" : "var(--text-muted)",
-              }}
-            >
-              {saveStatus}
-            </span>
-          )}
-
           {/* Undo / Redo */}
           <button
             type="button"
@@ -1490,10 +1494,7 @@ export const PageBuilder: React.FC = () => {
               sourceId={pageDetail.id}
               dirty={isDraftDirty}
               className="btn btn-secondary btn-sm"
-              onMessage={(_tone, text) => {
-                setSaveStatus(text);
-                setTimeout(() => setSaveStatus(null), 5000);
-              }}
+              onMessage={(tone, text) => notify(tone, text)}
             />
           )}
 
@@ -5485,8 +5486,7 @@ export const PageBuilder: React.FC = () => {
           );
           pushDraftUpdate(newDraft);
           setSelectedNodeId(newDraft.root.id);
-          setSaveStatus(`Applied ${template} template`);
-          setTimeout(() => setSaveStatus(null), 3000);
+          notify("success", `Applied ${template} template`);
         }}
         currentPageId={pageDetail?.id}
         onApplyDefinition={(definition, name, missingFields) => {
@@ -5495,8 +5495,8 @@ export const PageBuilder: React.FC = () => {
           const newDraft = { ...definition, id: pageDetail.id, route: pageDetail.route, version: draft.version, allowedRoles: draft.allowedRoles };
           pushDraftUpdate(newDraft);
           setSelectedNodeId(newDraft.root.id);
-          setSaveStatus(missingFields.length ? `Applied "${name}". Not in your entity: ${missingFields.join(", ")}` : `Applied "${name}"`);
-          setTimeout(() => setSaveStatus(null), missingFields.length ? 10000 : 3000);
+          if (missingFields.length) notify("info", `Applied "${name}". Not in your entity: ${missingFields.join(", ")}`, { durationMs: 10000 });
+          else notify("success", `Applied "${name}"`);
         }}
       />
 

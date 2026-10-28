@@ -183,8 +183,10 @@ function VisualsList() {
 }
 
 function VisualLoader({ id }: { id: string }) {
-  const { data, error, isLoading } = useQuery({ queryKey: visualKey(id), queryFn: () => visualsApi.get(id) });
-  if (isLoading) return <p style={{ color: "var(--text-muted)" }}>Loading…</p>;
+  // The editor starts from the visual as fetched now: a copy kept from an earlier visit can be a
+  // version behind, and its first save would then be refused
+  const { data, error, isLoading, isFetchedAfterMount } = useQuery({ queryKey: visualKey(id), queryFn: () => visualsApi.get(id), refetchOnMount: "always" });
+  if (isLoading || (data && !isFetchedAfterMount && !error)) return <p style={{ color: "var(--text-muted)" }}>Loading…</p>;
   if (error || !data) return <p style={{ color: "var(--danger)" }}>{(error as Error)?.message ?? "Visual not found"}</p>;
   if (isBuiltinRef(data.id)) return <BuiltinSymbolView visual={data} />;
   if (isSharedRef(data.id)) return <SharedSymbolView visual={data} />;
