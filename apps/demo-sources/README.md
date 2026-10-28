@@ -24,7 +24,7 @@ With the app running (API on port 4000):
 
 ```sh
 # once: extends Machine, adds the machines, connections, rules and pages
-pnpm demo:setup -- --email admin@example.com --password '…' [--url http://localhost:4000]
+pnpm demo:setup --email admin@example.com --password '…' [--url http://localhost:4000]
 
 # then, whenever you want the machines running
 pnpm demo:sources

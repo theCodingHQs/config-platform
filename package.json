@@ -14,8 +14,8 @@
     "test:db:down": "docker compose down",
     "tokens:generate": "node scripts/generate-tokens.cjs",
     "lint:theme": "node scripts/lint-theme.cjs",
-    "demo:setup": "pnpm --filter @config-platform/demo-sources setup",
-    "demo:sources": "pnpm --filter @config-platform/demo-sources start",
+    "demo:setup": "pnpm --filter @config-platform/demo-sources run setup",
+    "demo:sources": "pnpm --filter @config-platform/demo-sources run start",
     "build": "pnpm -r build",
     "test": "pnpm -r test"
   },
