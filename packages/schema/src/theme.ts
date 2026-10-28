@@ -1243,6 +1243,7 @@ const VISUAL_TOKENS_CSS = `/* ==================================================
   --vis-label: #18181b;
   --vis-label-bg: #ffffff;
   --vis-select: #2563eb;
+  --vis-guide: #f43f5e;
 }
 
 [data-theme="dark"] {
@@ -1260,6 +1261,7 @@ const VISUAL_TOKENS_CSS = `/* ==================================================
   --vis-label: #f4f4f5;
   --vis-label-bg: #18181b;
   --vis-select: #60a5fa;
+  --vis-guide: #fb7185;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -1279,5 +1281,6 @@ const VISUAL_TOKENS_CSS = `/* ==================================================
     --vis-label: #f4f4f5;
     --vis-label-bg: #18181b;
     --vis-select: #60a5fa;
+    --vis-guide: #fb7185;
   }
 }`;

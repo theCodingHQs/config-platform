@@ -44,7 +44,7 @@ function DropLine({ place }: { place: "above" | "below" }) {
   return (
     <span
       aria-hidden="true"
-      style={{ position: "absolute", left: 0, right: 0, height: 2, borderRadius: 1, background: "var(--accent)", pointerEvents: "none", ...(place === "above" ? { top: -3 } : { bottom: -3 }) }}
+      style={{ position: "absolute", left: 0, right: 0, height: 2, borderRadius: "var(--radius-full)", background: "var(--accent)", pointerEvents: "none", ...(place === "above" ? { top: -3 } : { bottom: -3 }) }}
     />
   );
 }
@@ -82,7 +82,7 @@ function Row({ node, parentId, props, drag }: { node: VisualNode; parentId: stri
           alignItems: "center",
           gap: "var(--space-1)",
           padding: "0.125rem 0.375rem",
-          marginBottom: "2px",
+          marginBottom: "calc(var(--space-1) / 2)",
           borderRadius: "var(--radius-control)",
           backgroundColor: dropHere === "inside" || selected ? "var(--accent-subtle)" : highlighted ? "var(--surface-2)" : "transparent",
           border: dropHere === "inside" ? "1px dashed var(--accent)" : selected ? "1px solid var(--accent)" : highlighted ? "1px dashed var(--accent)" : "1px solid transparent",
