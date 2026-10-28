@@ -9,6 +9,11 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./visual-library": {
+      "import": "./dist/visual-library/index.js",
+      "default": "./dist/visual-library/index.js",
+      "types": "./dist/visual-library/index.d.ts"
     }
   },
   "scripts": {

@@ -4,7 +4,7 @@
  * a line chart and pills. Every part takes the live expressions it shows.
  */
 import type { VisualNode } from '@config-platform/schema';
-import { group, shape, text } from './shapes.js';
+import { group, shape, text } from '@config-platform/schema/visual-library';
 
 export const O = (path: string) => `live.orders.${path}`;
 

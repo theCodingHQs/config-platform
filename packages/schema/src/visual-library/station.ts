@@ -3,8 +3,8 @@
  * two-zone, spray), with lamps and arrows underneath. Every copy gets its own inputs, so ten
  * stations are ten copies wired to their own tags.
  */
-import { emptyVisualDefinition, type VisualDefinition, type VisualInputDef, type VisualNode } from "@config-platform/schema";
-import { group, shape, shownWhen, text, tray } from "../build";
+import { emptyVisualDefinition, type VisualDefinition, type VisualInputDef, type VisualNode } from "../visuals/index.js";
+import { group, shape, shownWhen, text, tray } from "./builder.js";
 
 export const STATION_LOOKS = ["lift", "shelf", "chamber", "two-zone", "spray"] as const;
 

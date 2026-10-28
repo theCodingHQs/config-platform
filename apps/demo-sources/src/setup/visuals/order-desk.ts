@@ -9,7 +9,7 @@ import type { VisualDefinition, VisualNode } from '@config-platform/schema';
 import { ORDER_STATUSES, ORDER_TYPES, PRODUCT_LINES, REGIONS, STATUS_LABELS, TIERS, type Choice } from '../../orders/order-catalog.js';
 import { RECENT_COUNT } from '../../orders/order-summary.js';
 import { ACCENT, barList, card, CARD, donut, INK, kilo, legend, lineChart, MUTED, O, pill, SERIES, tintOf, whole } from './dash-parts.js';
-import { group, shape, text } from './shapes.js';
+import { group, shape, text } from '@config-platform/schema/visual-library';
 
 export const ORDER_DESK_NAME = 'Order desk';
 const W = 1600;

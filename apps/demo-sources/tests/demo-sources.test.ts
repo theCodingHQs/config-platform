@@ -7,7 +7,7 @@ import { SimMachine } from '../src/plant/sim-machine.js';
 import { encodeReading, REGISTER_MAP } from '../src/sources/modbus-registers.js';
 import { connectionPlans } from '../src/setup/connections.js';
 import { rulePlans } from '../src/setup/rules.js';
-import { machineSymbol } from '../src/setup/visuals/machine-symbol.js';
+import { BUILTIN_SYMBOL_IDS, builtinSymbol } from '@config-platform/schema/visual-library';
 import { machineView, plantFloor } from '../src/setup/visuals/plant-floor.js';
 import { ProcessArea } from '../src/process/process-area.js';
 import { OrderBook, orderHistory } from '../src/orders/order-book.js';
@@ -101,9 +101,9 @@ describe('demo rules', () => {
 });
 
 describe('demo visuals', () => {
-  const symbolDef = machineSymbol();
+  const symbolDef = builtinSymbol(BUILTIN_SYMBOL_IDS.machine)!.definition;
   const inputs = new Set(symbolDef.inputs!.map((i) => i.name));
-  const drawings = { plantFloor: plantFloor(DEMO_MACHINES, 'vis_machine'), machineView: machineView(DEMO_MACHINES, 'vis_machine') };
+  const drawings = { plantFloor: plantFloor(DEMO_MACHINES), machineView: machineView(DEMO_MACHINES) };
 
   it('are valid visuals', () => {
     for (const [name, def] of Object.entries({ symbol: symbolDef, ...drawings })) {
@@ -117,6 +117,7 @@ describe('demo visuals', () => {
     assert.deepEqual(copies.map((c) => c.id), DEMO_MACHINES.map((m) => m.code));
     for (const c of [...copies, ...walkVisualNodes(drawings.machineView.nodes)].filter((n) => n.kind === 'symbol')) {
       const given = [...Object.keys(c.bindings ?? {}), ...Object.keys(c.attrs).filter((k) => !['x', 'y'].includes(k))];
+      assert.equal(c.ref, BUILTIN_SYMBOL_IDS.machine);
       for (const k of given) assert.ok(inputs.has(k), `${c.id} sets ${k}, which the symbol has no input for`);
     }
   });

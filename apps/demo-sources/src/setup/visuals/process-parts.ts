@@ -4,7 +4,7 @@
  * or wrong (an alarm). Every part takes the live expressions it shows.
  */
 import type { VisualNode } from '@config-platform/schema';
-import { group, shape, text } from './shapes.js';
+import { group, shape, text } from '@config-platform/schema/visual-library';
 
 export const P = (path: string) => `live.process.${path}`;
 

@@ -1,15 +1,14 @@
 /**
- * One machine, as a symbol: the machine itself drawn for its type (see machine-looks.ts), a stack
+ * One machine, as a symbol: the machine itself drawn for its type (see looks.ts), a stack
  * light beside it lit in its status colour, and a small dark operator display underneath with its
  * name, status, speed, temperature and parts made. Every copy is given its own machine's live tags
  * as inputs.
  */
-import type { VisualDefinition, VisualInputDef, VisualNode, VisualRule } from '@config-platform/schema';
-import { MACHINE_LOOKS, machineLooks } from './machine-looks.js';
-import { ALARM, PAINTS, PAUSED, RUNNING, tint } from './machine-style.js';
-import { group, shape, text } from './shapes.js';
+import type { VisualDefinition, VisualInputDef, VisualNode, VisualRule } from '../../visuals/index.js';
+import { MACHINE_LOOKS, machineLooks } from './looks.js';
+import { ALARM, PAINTS, PAUSED, RUNNING, tint } from './style.js';
+import { group, shape, text } from '../builder.js';
 
-export const MACHINE_SYMBOL_NAME = 'Machine';
 export const MACHINE_WIDTH = 200;
 export const MACHINE_HEIGHT = 246;
 

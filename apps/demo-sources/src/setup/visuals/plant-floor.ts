@@ -1,5 +1,5 @@
 /**
- * The demo's drawings, both made of copies of the Machine symbol:
+ * The demo's drawings, both made of copies of the built-in Machine symbol:
  *   Plant floor    every machine on its line's floor, and a plant totals display underneath
  *   Machine view   one copy that follows the machine picked on the page (state.code) and takes its
  *                  target and limit from the machine register (the page's data source)
@@ -7,8 +7,7 @@
 import type { VisualDefinition, VisualNode } from '@config-platform/schema';
 import { SOURCE_LABELS, type DemoMachine } from '../../catalog.js';
 import { tag } from '../pages/blocks.js';
-import { MACHINE_HEIGHT, MACHINE_WIDTH } from './machine-symbol.js';
-import { group, shape, symbol, text } from './shapes.js';
+import { BUILTIN_SYMBOL_IDS, MACHINE_HEIGHT, MACHINE_WIDTH, group, shape, symbol, text } from '@config-platform/schema/visual-library';
 
 export const PLANT_FLOOR_NAME = 'Plant floor';
 export const MACHINE_VIEW_NAME = 'Machine view';
@@ -49,7 +48,7 @@ function totalsDisplay(x: number, y: number, width: number, readouts: Array<[str
   ], { x, y }, { name: 'Plant totals' });
 }
 
-export function plantFloor(machines: readonly DemoMachine[], symbolId: string): VisualDefinition {
+export function plantFloor(machines: readonly DemoMachine[]): VisualDefinition {
   const areas: VisualNode[] = [];
   const copies: VisualNode[] = [];
   let x = MARGIN + AREA_PAD;
@@ -58,7 +57,7 @@ export function plantFloor(machines: readonly DemoMachine[], symbolId: string): 
     const inLine = machines.filter((m) => m.line === line);
     const start = x;
     inLine.forEach((m, i) => {
-      copies.push(symbol(m.code, symbolId, { x, y: TOP, name: m.name, look: m.machineType, source: SOURCE_LABELS[m.source], target: targetPerMinute(m), maxTemperature: temperatureLimit(m) }, { name: m.name, bindings: liveInputs(m.code) }));
+      copies.push(symbol(m.code, BUILTIN_SYMBOL_IDS.machine, { x, y: TOP, name: m.name, look: m.machineType, source: SOURCE_LABELS[m.source], target: targetPerMinute(m), maxTemperature: temperatureLimit(m) }, { name: m.name, bindings: liveInputs(m.code) }));
       x += MACHINE_WIDTH;
       if (i < inLine.length - 1) x += GAP;
     });
@@ -95,7 +94,7 @@ export function plantFloor(machines: readonly DemoMachine[], symbolId: string): 
   };
 }
 
-export function machineView(machines: readonly DemoMachine[], symbolId: string): VisualDefinition {
+export function machineView(machines: readonly DemoMachine[]): VisualDefinition {
   const REC = 'ds.ds_machine[0]';
   const sourceByCode = machines.flatMap((m) => [`"${m.code}"`, `"${SOURCE_LABELS[m.source]}"`]).join(', ');
   return {
@@ -106,7 +105,7 @@ export function machineView(machines: readonly DemoMachine[], symbolId: string):
     grid: true,
     gridSize: 4,
     nodes: [
-      symbol('machine', symbolId, { x: 16, y: 16 }, {
+      symbol('machine', BUILTIN_SYMBOL_IDS.machine, { x: 16, y: 16 }, {
         name: 'Picked machine',
         bindings: {
           ...liveInputs('state.code'),

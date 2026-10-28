@@ -7,7 +7,7 @@
  */
 import type { VisualDefinition, VisualNode } from '@config-platform/schema';
 import { ADDITIVE, conditioner, FACE, INK, LIQUID, P, pipe, pump, reading, readout, REJECT, screenVessel, tank, WATER } from './process-parts.js';
-import { group, shape, text } from './shapes.js';
+import { group, shape, text } from '@config-platform/schema/visual-library';
 
 export const PROCESS_OVERVIEW_NAME = 'Process overview';
 const W = 1600;

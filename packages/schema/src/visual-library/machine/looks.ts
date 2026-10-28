@@ -4,9 +4,9 @@
  * runs, the press ram comes down once per part made, the robot's torch sparks, spray flows, parts
  * ride the conveyor.
  */
-import type { VisualNode } from '@config-platform/schema';
-import { ACCENT, DARK, EDGE, GLASS, ITEM, RUNNING, SHELL, STEEL, glare, screen, workGlow } from './machine-style.js';
-import { group, shape } from './shapes.js';
+import type { VisualNode } from '../../visuals/index.js';
+import { ACCENT, DARK, EDGE, GLASS, ITEM, RUNNING, SHELL, STEEL, glare, screen, workGlow } from './style.js';
+import { group, shape } from '../builder.js';
 
 /** Machine types the symbol can draw (the machine register's Machine Type values) */
 export const MACHINE_LOOKS = ['cnc', 'lathe', 'press', 'molding', 'welding', 'painting', 'assembly'] as const;

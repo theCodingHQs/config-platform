@@ -3,10 +3,13 @@ import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Component, Factory, Plus, Trash2 } from "lucide-react";
-import { emptyVisualDefinition, type VisualKind, type VisualSummary } from "@config-platform/schema";
+import { emptyVisualDefinition, isSharedRef, type VisualKind, type VisualSummary } from "@config-platform/schema";
 import { VISUALS_KEY, visualKey, visualsApi } from "../../visuals/visuals-api";
+import { isBuiltinRef } from "@config-platform/schema/visual-library";
 import { VISUAL_TEMPLATES } from "../../visuals/templates";
 import { Field } from "../live/Field";
+import { BuiltinSymbolCards, BuiltinSymbolView } from "./BuiltinSymbols";
+import { SharedSymbolCards, SharedSymbolView } from "./SharedSymbols";
 import { VisualEditor } from "./VisualEditor";
 
 /** A symbol starts as a small flat canvas; draw one station, lamp or cart on it */
@@ -21,10 +24,7 @@ function NewVisualForm({ kind, onCancel }: { kind: VisualKind; onCancel: () => v
     mutationFn: async () => {
       if (kind === "symbol") return visualsApi.create({ name: name.trim(), kind, definition: blankSymbol() });
       const chosen = VISUAL_TEMPLATES.find((t) => t.id === template)!;
-      // The template's own symbols first, named after the new drawing, so it can place them
-      const ids: Record<string, string> = {};
-      for (const s of chosen.symbols ?? []) ids[s.key] = (await visualsApi.create({ name: `${name.trim()}: ${s.name}`, kind: "symbol", definition: s.build() })).id;
-      return visualsApi.create({ name: name.trim(), kind, definition: chosen.build(ids) });
+      return visualsApi.create({ name: name.trim(), kind, definition: chosen.build() });
     },
     onSuccess: (saved) => {
       queryClient.setQueryData(visualKey(saved.id), saved);
@@ -153,7 +153,21 @@ function VisualsList() {
             )}
           </section>
           <section style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-            <h2 style={sectionTitle}>Symbols</h2>
+            <h2 style={sectionTitle}>Built-in symbols</h2>
+            <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
+              They come with the app: place them in any drawing from the Symbols palette. To change one, open it and make your own copy.
+            </p>
+            <BuiltinSymbolCards grid={grid} />
+          </section>
+          <section style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+            <h2 style={sectionTitle}>Shared symbols</h2>
+            <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
+              Symbols a workspace published for reuse. Each is a fixed release: it changes only when it's shared again.
+            </p>
+            <SharedSymbolCards grid={grid} />
+          </section>
+          <section style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
+            <h2 style={sectionTitle}>My symbols</h2>
             {symbols.length ? (
               <ul style={grid}>{symbols.map((v) => <VisualCard key={v.id} v={v} onDelete={onDelete} />)}</ul>
             ) : (
@@ -172,6 +186,8 @@ function VisualLoader({ id }: { id: string }) {
   const { data, error, isLoading } = useQuery({ queryKey: visualKey(id), queryFn: () => visualsApi.get(id) });
   if (isLoading) return <p style={{ color: "var(--text-muted)" }}>Loading…</p>;
   if (error || !data) return <p style={{ color: "var(--danger)" }}>{(error as Error)?.message ?? "Visual not found"}</p>;
+  if (isBuiltinRef(data.id)) return <BuiltinSymbolView visual={data} />;
+  if (isSharedRef(data.id)) return <SharedSymbolView visual={data} />;
   // Keyed by id so opening another visual starts a fresh editor (and undo history)
   return <VisualEditor key={data.id} visual={data} />;
 }

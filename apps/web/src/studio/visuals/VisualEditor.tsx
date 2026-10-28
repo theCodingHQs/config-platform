@@ -13,6 +13,7 @@ import { defaultProps } from "../../visuals/resolve-props";
 import { VISUALS_KEY, visualKey, visualsApi } from "../../visuals/visuals-api";
 import { useSymbols } from "../../visuals/use-symbols";
 import { SymbolsPalette } from "./SymbolsPalette";
+import { ShareSymbolButton } from "./ShareSymbolButton";
 import { inputDefaults } from "./InputsEditor";
 import { symbolFromNodes } from "./make-symbol";
 import { anchorInGroup, nodeBox, parentSpace, unionBox } from "./canvas-geometry";
@@ -290,6 +291,7 @@ export function VisualEditor({ visual }: { visual: Visual }) {
           <button type="button" className="btn btn-primary" disabled={!state.dirty || save.isPending} onClick={() => save.mutate()} title="Save (Ctrl+S)">
             <Save size="1em" /> {save.isPending ? "Saving…" : state.dirty ? "Save" : "Saved"}
           </button>
+          {isSymbol && <ShareSymbolButton symbolId={visual.id} dirty={state.dirty} onMessage={report} />}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "auto 13rem minmax(0, 1fr) 20rem", gap: "var(--space-3)", flex: 1, minHeight: 0 }}>

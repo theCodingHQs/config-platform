@@ -1,10 +1,9 @@
 /** The look shared by the machine drawings: colours, conditions and small reusable parts */
-import type { VisualNode, VisualPaint } from '@config-platform/schema';
-import { group, shape } from './shapes.js';
+import type { VisualNode, VisualPaint } from '../../visuals/index.js';
+import { group, shape } from '../builder.js';
+import { ALARM, RUNNING } from '../status.js';
 
-export const RUNNING = 'inputs.status == "running"';
-export const PAUSED = 'inputs.status == "idle" || inputs.status == "stopped"';
-export const ALARM = 'inputs.status == "alarm"';
+export { ALARM, PAUSED, RUNNING } from '../status.js';
 
 /** Machine shell, glass, round steel (shaded across), and the parts being made */
 export const SHELL = 'url(#shell)';

@@ -1,7 +1,6 @@
 /** The inspector for one selected node: its name, every attribute (each can follow live data), rules and animations */
 import React from "react";
-import { Link } from "react-router-dom";
-import { Component, Copy, ExternalLink, Eye, EyeOff, Lock, Trash2, Unlock } from "lucide-react";
+import { Component, Copy, Eye, EyeOff, Lock, Trash2, Unlock } from "lucide-react";
 import type { VisualDefinition, VisualNode } from "@config-platform/schema";
 import { shapeOf, type PropSpec } from "../../visuals/shapes";
 import type { ResolvedNode } from "../../visuals/resolve-props";
@@ -10,6 +9,7 @@ import { Field } from "../live/Field";
 import { PropField } from "./PropField";
 import { RulesEditor } from "./RulesEditor";
 import { EffectsEditor } from "./EffectsEditor";
+import { PlacedSymbolNote } from "./PlacedSymbolNote";
 import type { NodePatch } from "./node-tree";
 
 export const KIND_LABELS: Record<VisualNode["kind"], string> = {
@@ -93,14 +93,7 @@ export function NodeInspector({ node, definition, specs, resolved, onPatch, onDu
         </button>
       </div>
       {part && <p style={{ margin: 0, fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>{part.description}</p>}
-      {node.kind === "symbol" && node.ref && (
-        <p style={{ margin: 0, fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
-          A copy of a symbol: set or bind its inputs below.{" "}
-          <Link to={`/studio/visuals/${node.ref}`} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: "var(--space-1)" }}>
-            Edit the symbol <ExternalLink size="1em" />
-          </Link>
-        </p>
-      )}
+      {node.kind === "symbol" && node.ref && <PlacedSymbolNote symbolId={node.ref} onUseCopy={(ref) => onPatch({ ref })} />}
 
       <Field label="Name" htmlFor="vis-node-name" hint="To find it in the layers list">
         <input id="vis-node-name" className="form-input" value={node.name ?? ""} placeholder={part?.label ?? KIND_LABELS[node.kind]} onChange={(e) => onPatch({ name: e.target.value || undefined }, group("name"))} />

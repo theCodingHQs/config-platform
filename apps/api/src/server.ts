@@ -45,6 +45,7 @@ import { liveRoutes } from './live/live-routes.js';
 import { liveSocketRoutes } from './live/live-socket-routes.js';
 import { liveRuleRoutes } from './live/rules/live-rule-routes.js';
 import { visualRoutes } from './visuals/visual-routes.js';
+import { sharedRoutes } from './shared-library/shared-routes.js';
 import { livePushRoutes } from './live/live-push-routes.js';
 import { agentSocketRoutes } from './live/agents/agent-socket-routes.js';
 import { agentRoutes } from './live/agents/agent-routes.js';
@@ -351,6 +352,7 @@ export async function buildServer() {
       await protectedApp.register(liveRuleRoutes);
       await protectedApp.register(agentRoutes);
       await protectedApp.register(visualRoutes);
+      await protectedApp.register(sharedRoutes);
     });
   }, { prefix: '/api' });
 

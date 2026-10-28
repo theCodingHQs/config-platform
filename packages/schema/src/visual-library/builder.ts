@@ -1,5 +1,5 @@
 /** Shorthand for writing drawings in code: shapes, groups and placed symbols with their live settings */
-import type { VisualAttrValue, VisualNode, VisualNodeKind } from "@config-platform/schema";
+import type { VisualAttrValue, VisualNode, VisualNodeKind } from "../visuals/index.js";
 
 type Attrs = Record<string, VisualAttrValue>;
 type Extra = Partial<Pick<VisualNode, "name" | "bindings" | "rules" | "effects" | "smooth" | "locked">>;

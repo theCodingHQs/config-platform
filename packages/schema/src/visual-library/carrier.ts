@@ -1,6 +1,6 @@
 /** A carrier that travels along a track, as a symbol: FREE/BUSY badge, a moving lamp, and a lift column that rises with its input */
-import { emptyVisualDefinition, type VisualDefinition } from "@config-platform/schema";
-import { group, shape, text } from "../build";
+import { emptyVisualDefinition, type VisualDefinition } from "../visuals/index.js";
+import { group, shape, text } from "./builder.js";
 
 const OUTLINE = { stroke: "var(--vis-dark)", strokeWidth: 0.8 };
 

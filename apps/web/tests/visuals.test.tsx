@@ -1,7 +1,8 @@
 import React from 'react';
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
-import { VisualDefinitionSchema, emptyVisualDefinition, type VisualDefinition, type VisualNode } from '@config-platform/schema';
+import { VisualDefinitionSchema, emptyVisualDefinition, symbolRefs, type VisualDefinition, type VisualNode } from '@config-platform/schema';
+import { BUILTIN_SYMBOLS, BUILTIN_SYMBOL_IDS, builtinSymbol, isBuiltinRef } from '@config-platform/schema/visual-library';
 import { SHAPES, shapeOf } from '../src/visuals/shapes';
 import { defaultProps, resolveNode } from '../src/visuals/resolve-props';
 import { specsFor } from '../src/visuals/node-specs';
@@ -139,20 +140,45 @@ describe('format', () => {
     expect(d.nodes[0]).toMatchObject({ kind: 'preset', ref: 'zone', attrs: { x: 400, y: 100, length: 5 } });
   });
 
-  it('templates and their symbols are valid drawings with known parts', () => {
+  it('templates are valid drawings with known parts, placing only built-in symbols', () => {
     for (const t of VISUAL_TEMPLATES) {
-      const ids = Object.fromEntries((t.symbols ?? []).map((s) => [s.key, `sym-${s.key}`]));
-      const d = VisualDefinitionSchema.parse(t.build(ids));
+      const d = VisualDefinitionSchema.parse(t.build());
       expect(d.nodes.every((n) => n.kind !== 'preset' || shapeOf(n.ref!))).toBe(true);
-      for (const s of t.symbols ?? []) VisualDefinitionSchema.parse(s.build());
+      expect(symbolRefs(d.nodes).every((ref) => builtinSymbol(ref))).toBe(true);
     }
+  });
+
+  it('built-in symbols are valid symbols with unique built-in ids', () => {
+    expect(new Set(BUILTIN_SYMBOLS.map((s) => s.id)).size).toBe(BUILTIN_SYMBOLS.length);
+    for (const s of BUILTIN_SYMBOLS) {
+      expect(isBuiltinRef(s.id)).toBe(true);
+      const d = VisualDefinitionSchema.parse(s.build());
+      expect(d.inputs?.length).toBeGreaterThan(0);
+      expect(d.nodes.every((n) => n.kind !== 'preset' || shapeOf(n.ref!))).toBe(true);
+    }
+    expect(builtinSymbol('builtin:nothing')).toBeUndefined();
+  });
+
+  it('built-in symbols follow their inputs', () => {
+    const symbols = new Map([[BUILTIN_SYMBOL_IDS.gauge, builtinSymbol(BUILTIN_SYMBOL_IDS.gauge)!.definition], [BUILTIN_SYMBOL_IDS.tank, builtinSymbol(BUILTIN_SYMBOL_IDS.tank)!.definition]]);
+    const d = def([
+      { id: 'g', kind: 'symbol', ref: BUILTIN_SYMBOL_IDS.gauge, attrs: { x: 0, y: 0, label: 'Flow', value: 50, unit: 'L/min', max: 100 } },
+      { id: 't', kind: 'symbol', ref: BUILTIN_SYMBOL_IDS.tank, attrs: { x: 200, y: 0, name: 'Tank A', level: 5 } },
+    ]);
+    const { container, getByText } = render(<VisualScene definition={d} scope={null} symbols={symbols} />);
+    expect(getByText('50 L/min')).toBeTruthy();
+    expect(getByText('Tank A')).toBeTruthy();
+    expect(getByText('5%')).toBeTruthy();
+    // Half way between min and max points the needle straight up
+    expect(container.querySelector('[data-node-id="g"] [data-node-id="needle"]')!.innerHTML).not.toContain('rotate(-120');
+    // Below the low limit, the tank's outline blinks
+    expect(container.querySelector('[data-node-id="t"] [data-node-id="shell"] .vis-fx-blink, [data-node-id="t"] [data-node-id="shell"].vis-fx-blink')).toBeTruthy();
   });
 
   it('the process line moves its carrier and lights its stations from the line tags', () => {
     const t = VISUAL_TEMPLATES.find((x) => x.id === 'process-line')!;
-    const [station, carrier] = t.symbols!.map((s) => s.build());
-    const d = t.build({ station: 'st', carrier: 'cr' });
-    const symbols = new Map([['st', station], ['cr', carrier]]);
+    const d = t.build();
+    const symbols = new Map([BUILTIN_SYMBOL_IDS.station, BUILTIN_SYMBOL_IDS.carrier].map((id) => [id, builtinSymbol(id)!.definition]));
     const scope = { live: { line: { carrier: { position: 30000, loaded: 'yes', moving: 'no', lift: 50 }, station4: { status: 'alarm', level: 90 } } } };
     const { container, getByText, getAllByText } = render(<VisualScene definition={d} scope={scope} symbols={symbols} />);
     expect(container.querySelector('[data-node-id="carrier"]')!.getAttribute('transform')).toBe('translate(1266.3 184)');

@@ -621,6 +621,33 @@ export const catalogMigrations: CatalogMigration[] = [
       `);
     },
   },
+  {
+    version: 26,
+    name: '026_shared_items',
+    up: async (client: PoolClient) => {
+      // The shared library: published releases of a workspace's symbols (and later templates);
+      // `everywhere` (set by a platform owner) shares one with every workspace
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.shared_item (
+          id VARCHAR(64) PRIMARY KEY,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          kind VARCHAR(32) NOT NULL,
+          source_id VARCHAR(64),
+          name VARCHAR(120) NOT NULL,
+          description VARCHAR(300) NOT NULL DEFAULT '',
+          content JSONB NOT NULL,
+          version INTEGER NOT NULL DEFAULT 1,
+          everywhere BOOLEAN NOT NULL DEFAULT FALSE,
+          published_by VARCHAR(64) REFERENCES public.app_user(id) ON DELETE SET NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS idx_shared_item_tenant ON public.shared_item(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_shared_item_everywhere ON public.shared_item(everywhere) WHERE everywhere;
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_shared_item_source ON public.shared_item(tenant_id, kind, source_id) WHERE source_id IS NOT NULL;
+      `);
+    },
+  },
 ];
 
 /**
