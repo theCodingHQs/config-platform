@@ -62,6 +62,9 @@ import { gridTemplateToUniver, univerToGridTemplate } from './export-grid/univer
 import { ChartEditorModal } from './export-grid/ChartEditorModal';
 import { ChartOverlayCanvas, GridChartFloatDomCard, createChartDataStore } from './export-grid/ChartOverlayCanvas';
 import { useOptionalMetadata } from '../context/metadata-context';
+import { ShareButton } from '../library/ShareButton';
+import { SharedTemplateChooser } from '../library/SharedTemplateChooser';
+import { MyExportLayouts } from './MyExportLayouts';
 import { useTheme } from '../context/theme-context';
 import { useOptionalAppBar } from '../context/app-bar-context';
 
@@ -1134,23 +1137,28 @@ export function GridTemplateDesigner() {
     }
   };
 
+  /** Replaces the draft with a starting layout (built-in, shared or copied from another export) */
+  const applyLayout = (layout: GridExportTemplateDefinition, name: string, missingFields: string[] = []) => {
+    const univerData = gridTemplateToUniver(layout, { designView: viewMode === 'design' });
+    initUniverWithData(univerData);
+    setTemplate((prev) => (prev ? { ...prev, draft: layout } : prev));
+    if (layout.datasets && layout.datasets.length > 0) {
+      setSelectedDatasetId(layout.datasets[0].id);
+    }
+    setHasUnsavedChanges(true);
+    setShowStarterTemplates(false);
+    if (missingFields.length) showNotification('error', `Applied ${name}. Not in your entity: ${missingFields.join(', ')}`);
+    else showNotification('success', `Applied ${name} template`);
+  };
+
   const handleApplyStarterTemplate = (kind: GridStarterTemplateId) => {
     if (!template) return;
     const targetEntity = metadata?.entities?.find((e: any) => e.id === template.entityId) || {
       id: template.entityId,
       name: template.name || 'Entity',
     };
-    const starterDraft = buildGridStarterTemplate(targetEntity, kind);
-    const univerData = gridTemplateToUniver(starterDraft, { designView: viewMode === 'design' });
-    initUniverWithData(univerData);
-    setTemplate((prev) => (prev ? { ...prev, draft: starterDraft } : prev));
-    if (starterDraft.datasets && starterDraft.datasets.length > 0) {
-      setSelectedDatasetId(starterDraft.datasets[0].id);
-    }
-    setHasUnsavedChanges(true);
-    setShowStarterTemplates(false);
     const starterName = GRID_STARTER_TEMPLATES.find((starter) => starter.id === kind)?.name || 'Starter';
-    showNotification('success', `Applied ${starterName} template`);
+    applyLayout(buildGridStarterTemplate(targetEntity, kind), starterName);
   };
 
   // ─── Toggle View Mode ──────────────────────────────────────────────────────
@@ -1979,6 +1987,10 @@ export function GridTemplateDesigner() {
             <FileSpreadsheet size={14} style={{ color: 'var(--accent)' }} />
             <span style={{ fontSize: 'var(--font-size-sm)' }}>Starter Templates</span>
           </button>
+
+          {id && template && (
+            <ShareButton kind="export-template" sourceId={id} dirty={hasUnsavedChanges} onMessage={showNotification} />
+          )}
 
           <button
             type="button"
@@ -3256,12 +3268,13 @@ export function GridTemplateDesigner() {
                 <X size={16} />
               </button>
             </div>
+            <h3 style={{ margin: 0, padding: 'var(--space-5) var(--space-5) 0', fontSize: 'var(--font-size-base)' }}>Built-in</h3>
             <div
               style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
                 gap: 'var(--space-3)',
-                padding: 'var(--space-5)',
+                padding: 'var(--space-2) var(--space-5) var(--space-5)',
               }}
             >
               {GRID_STARTER_TEMPLATES.map((starter) => {
@@ -3316,6 +3329,25 @@ export function GridTemplateDesigner() {
                 );
               })}
             </div>
+            {template && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)', padding: '0 var(--space-5) var(--space-5)' }}>
+                <section aria-labelledby="shared-layouts-title" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                  <h3 id="shared-layouts-title" style={{ margin: 0, fontSize: 'var(--font-size-base)' }}>Shared</h3>
+                  <SharedTemplateChooser
+                    kind="export-template"
+                    entities={metadata?.entities ?? []}
+                    // The template's own entity becomes the one this export is for
+                    fixedFor={(content) => (content.entityId ? { [content.entityId]: template.entityId } : {})}
+                    emptyHint="No shared export templates yet. Save an export and choose Share to share its layout."
+                    onUse={(used, name) => applyLayout(used.definition as GridExportTemplateDefinition, name, used.missingFields)}
+                  />
+                </section>
+                <section aria-labelledby="my-layouts-title" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+                  <h3 id="my-layouts-title" style={{ margin: 0, fontSize: 'var(--font-size-base)' }}>Mine</h3>
+                  <MyExportLayouts entityId={template.entityId} currentId={id} onUse={(draft, name) => applyLayout(draft as GridExportTemplateDefinition, name)} />
+                </section>
+              </div>
+            )}
           </div>
         </div>
       )}

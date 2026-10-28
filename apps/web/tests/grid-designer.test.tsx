@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import {
   Univer,
@@ -22,6 +23,13 @@ import {
 import { gridTemplateToUniver, univerToGridTemplate } from '../src/studio/export-grid/univer-adapter';
 import { GridTemplateDesigner } from '../src/studio/GridTemplateDesigner';
 import { AppBarProvider, STATUS_MESSAGE_DURATION_MS, useStatusNotify } from '../src/context/app-bar-context';
+
+// The designer uses React Query (its Share button and shared layouts), as it does inside the app
+const render = (ui: React.ReactElement) => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  // A wrapper (not wrapping the element) so rerender keeps the provider
+  return rtlRender(ui, { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+};
 
 // Mock API client
 vi.mock('../src/api/client', () => ({

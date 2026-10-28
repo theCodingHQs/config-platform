@@ -30,6 +30,19 @@ export async function sharedRoutes(fastify: FastifyInstance) {
     return reply.status(saved.version === 1 ? 201 : 200).send(saved);
   }));
 
+  // Builders apply a shared page or export template to their own page or export
+  fastify.post('/shared/:id/use', { preHandler: csrfCheckHook }, guarded('builder', async (req) => sharedService.use(req.session.tenantId, idOf(req), req.body)));
+
+  // Builders install a shared solution: first what it would do, then the install with their choices
+  fastify.get('/shared/:id/install-plan', guarded('builder', async (req) => sharedService.installPlan(req.session.tenantId, idOf(req))));
+
+  fastify.post('/shared/:id/install', { preHandler: csrfCheckHook }, guarded('builder', async (req, reply) => {
+    const { tenantId, userId, email } = req.session;
+    const result = await sharedService.install(tenantId, idOf(req), req.body, req.session);
+    await auditLogService.log({ tenantId, userId, userEmail: email, action: 'shared.install', entityType: 'shared_item', entityId: idOf(req), afterState: { created: result.created, reused: result.reused, pages: result.pages.length, exportTemplates: result.exportTemplates.length } });
+    return reply.status(201).send(result);
+  }));
+
   fastify.put('/shared/:id/everywhere', { preHandler: csrfCheckHook }, guarded('viewer', async (req) => {
     if (!(await isPlatformOwner(req))) throw new LiveSettingsError('Only platform owners can share with every workspace', 403);
     const everywhere = (req.body as { everywhere?: unknown } | null)?.everywhere;

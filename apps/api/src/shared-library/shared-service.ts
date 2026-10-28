@@ -1,13 +1,23 @@
-/** Publishing to the shared library: what may be published, and not pulling an item out from under the drawings using it */
-import { PublishInputSchema, SHARED_KINDS, isSharedRef, sharedRef, symbolRefs, type SharedItem, type SharedItemSummary, type SharedKind } from '@config-platform/schema';
-import { isBuiltinRef } from '@config-platform/schema/visual-library';
+/** Publishing to the shared library, using shared templates, and not pulling a symbol out from under the drawings using it */
+import { PublishInputSchema, SHARED_KINDS, TEMPLATE_KINDS, UseTemplateInputSchema, sharedRef, type SharedItem, type SharedItemSummary, type SharedKind, type SolutionContent, type TemplateContent, type UsedTemplate, type InstallPlan, type InstallResult } from '@config-platform/schema';
+import type { SessionPayload } from '../auth/auth-types.js';
 import { LiveSettingsError } from '../live/live-errors.js';
-import { visualRepository } from '../visuals/visual-repository.js';
+import { PUBLISHERS } from './publishers.js';
 import { sharedRepository } from './shared-repository.js';
+import { installPlan, installSolution } from './solution-installer.js';
+import { remapTemplate } from './template-entities.js';
 
 const notFound = () => new LiveSettingsError('Shared item not found', 404);
 
+async function solutionContent(loading: Promise<SharedItem>): Promise<SolutionContent> {
+  const item = await loading;
+  if (item.kind !== 'solution') throw new LiveSettingsError('Only solutions are installed');
+  return item.content as SolutionContent;
+}
+
 const quoted = (names: string[]) => names.map((n) => `"${n}"`).join(', ');
+
+const problems = (issues: Array<{ message: string }>) => new LiveSettingsError(issues.map((i) => i.message).join('; '));
 
 function parseKind(raw: unknown): SharedKind {
   const kind = String(raw ?? 'symbol');
@@ -15,7 +25,7 @@ function parseKind(raw: unknown): SharedKind {
   return kind as SharedKind;
 }
 
-/** "used by …" for a refusal; null when nothing uses it */
+/** "used by …" for a refusal; null when nothing uses it (templates are copied when used, so never) */
 async function inUse(tenantId: string, id: string): Promise<string | null> {
   const { here, elsewhere } = await sharedRepository.usage(tenantId, sharedRef(id));
   const parts = [
@@ -33,27 +43,34 @@ export const sharedService = {
     return (await sharedRepository.get(tenantId, id)) ?? Promise.reject(notFound());
   },
 
-  /** Publishes a symbol: its first release, or the next one */
+  /** Publishes the first release of one of the workspace's own items, or the next one */
   async publish(tenantId: string, userId: string, body: unknown): Promise<SharedItem> {
     const parsed = PublishInputSchema.safeParse(body);
-    if (!parsed.success) throw new LiveSettingsError(parsed.error.issues.map((i) => i.message).join('; '));
-    const { sourceId, description } = parsed.data;
-    const symbol = await visualRepository.get(tenantId, sourceId);
-    if (!symbol) throw new LiveSettingsError('Symbol not found', 404);
-    if (symbol.kind !== 'symbol') throw new LiveSettingsError('Only symbols can be shared');
-
-    // Everyone using it must be able to load what it places: built-in and shared symbols only
-    const refs = symbolRefs(symbol.definition.nodes);
-    const local = refs.filter((r) => !isBuiltinRef(r) && !isSharedRef(r));
-    if (local.length) {
-      const names = await Promise.all(local.map(async (r) => (await visualRepository.get(tenantId, r))?.name ?? r));
-      throw new LiveSettingsError(`It places ${quoted(names)}, which ${names.length === 1 ? "isn't" : "aren't"} shared. Share ${names.length === 1 ? 'that symbol' : 'those symbols'} first and place the shared ${names.length === 1 ? 'one' : 'ones'} instead.`);
-    }
-    const published = (await sharedRepository.list(tenantId, 'symbol')).find((s) => s.own && s.sourceId === sourceId);
-    if (published && refs.includes(sharedRef(published.id))) throw new LiveSettingsError("A symbol can't contain itself");
-
-    const id = await sharedRepository.publish(tenantId, userId, { kind: 'symbol', sourceId, name: symbol.name, description, content: symbol.definition });
+    if (!parsed.success) throw problems(parsed.error.issues);
+    const { kind, sourceId, description } = parsed.data;
+    const published = (await sharedRepository.list(tenantId, kind)).find((s) => s.own && s.sourceId === sourceId);
+    const { name, content } = await PUBLISHERS[kind](tenantId, parsed.data, published?.id);
+    const id = await sharedRepository.publish(tenantId, userId, { kind, sourceId, name, description, content });
     return this.get(tenantId, id);
+  },
+
+  /** A page or export template's layout, pointed at this workspace's entities */
+  async use(tenantId: string, id: string, body: unknown): Promise<UsedTemplate> {
+    const parsed = UseTemplateInputSchema.safeParse(body ?? {});
+    if (!parsed.success) throw problems(parsed.error.issues);
+    const item = await this.get(tenantId, id);
+    if (!TEMPLATE_KINDS.includes(item.kind)) throw new LiveSettingsError('Only page and export templates are used this way');
+    const content = item.content as TemplateContent;
+    return remapTemplate(tenantId, content, parsed.data.entityMap, content.entityId);
+  },
+
+  /** What installing a solution would do: which of its entities clash with the workspace's, and how */
+  async installPlan(tenantId: string, id: string): Promise<InstallPlan> {
+    return installPlan(tenantId, await solutionContent(this.get(tenantId, id)));
+  },
+
+  async install(tenantId: string, id: string, body: unknown, session?: SessionPayload): Promise<InstallResult> {
+    return installSolution(tenantId, await solutionContent(this.get(tenantId, id)), body, session);
   },
 
   /** Platform owners: share with every workspace, or stop (not while other workspaces use it) */

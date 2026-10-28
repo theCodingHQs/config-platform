@@ -9,6 +9,8 @@ import {
 } from "../api/client";
 import { useStatusNotify } from "../context/app-bar-context";
 import { DynamicIcon } from "../components/dynamic-icon";
+import type { InstallResult } from "@config-platform/schema";
+import { SharedSolutions } from "../library/SharedSolutions";
 
 /**
  * Template gallery: ready-made apps for factories (Production Tracker, Maintenance Log, Quality
@@ -30,6 +32,16 @@ export function TemplateGallery({
   const [sampleData, setSampleData] = useState(true);
   const [installing, setInstalling] = useState(false);
   const [result, setResult] = useState<SolutionInstallResult | null>(null);
+  /** Built into the app, or shared by a workspace */
+  const [source, setSource] = useState<"built-in" | "shared">("built-in");
+  const [sharedResult, setSharedResult] = useState<{ result: InstallResult; name: string } | null>(null);
+
+  const refreshAfterInstall = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["schema-entities", tenantId] }),
+      queryClient.invalidateQueries({ queryKey: ["page-navigation", tenantId] }),
+      queryClient.invalidateQueries({ queryKey: ["published-pages", tenantId] }),
+    ]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && !installing && onClose();
@@ -42,11 +54,7 @@ export function TemplateGallery({
     setInstalling(true);
     try {
       const installed = await installSolutionTemplate(chosen.id, sampleData);
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["schema-entities", tenantId] }),
-        queryClient.invalidateQueries({ queryKey: ["page-navigation", tenantId] }),
-        queryClient.invalidateQueries({ queryKey: ["published-pages", tenantId] }),
-      ]);
+      await refreshAfterInstall();
       setResult(installed);
       onInstalled(installed);
       notify("success", `${chosen.name} is installed.`);
@@ -76,6 +84,55 @@ export function TemplateGallery({
             <X size="1.1em" />
           </button>
         </div>
+
+        {!result && !sharedResult && (
+          <div role="tablist" aria-label="Template source" style={{ display: "flex", gap: "var(--space-1)", padding: "var(--space-3) var(--space-6) 0" }}>
+            {(["built-in", "shared"] as const).map((s) => (
+              <button key={s} type="button" role="tab" aria-selected={source === s} className={source === s ? "btn btn-secondary btn-sm" : "btn btn-ghost btn-sm"} onClick={() => setSource(s)}>
+                {s === "built-in" ? "Built-in" : "Shared"}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {source === "shared" && (
+          <>
+            <div style={{ padding: "var(--space-4) var(--space-6)", overflowY: "auto" }}>
+              {sharedResult ? (
+                <div role="status" style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)", fontSize: "var(--font-size-sm)" }}>
+                  <p style={{ margin: 0, fontSize: "var(--font-size-base)" }}>
+                    <strong>{sharedResult.name}</strong> is installed.
+                  </p>
+                  <ul style={{ margin: 0, paddingLeft: "var(--space-5)" }}>
+                    {sharedResult.result.created.length > 0 && <li>New data: {sharedResult.result.created.join(", ")}, in Data Entities.</li>}
+                    {sharedResult.result.reused.length > 0 && <li>Using your existing: {sharedResult.result.reused.join(", ")}.</li>}
+                    {sharedResult.result.pages.length > 0 && <li>Pages: {sharedResult.result.pages.map((p) => `${p.name} (${p.route})`).join(", ")}.</li>}
+                    {sharedResult.result.exportTemplates.length > 0 && <li>Excel templates: {sharedResult.result.exportTemplates.join(", ")}, in Export Templates.</li>}
+                  </ul>
+                  {sharedResult.result.missingFields.length > 0 && (
+                    <p style={{ margin: 0, color: "var(--warning)" }}>Not added, so shown as missing where they're used: {sharedResult.result.missingFields.join(", ")}.</p>
+                  )}
+                </div>
+              ) : (
+                <SharedSolutions
+                  onInstalled={async (installedResult, name) => {
+                    await refreshAfterInstall();
+                    setSharedResult({ result: installedResult, name });
+                    notify("success", `${name} is installed.`);
+                  }}
+                />
+              )}
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", padding: "var(--space-4) var(--space-6)", borderTop: "var(--border-width-sm) solid var(--border)" }}>
+              <button type="button" className={sharedResult ? "btn btn-primary" : "btn btn-secondary"} onClick={onClose}>
+                {sharedResult ? "Done" : "Close"}
+              </button>
+            </div>
+          </>
+        )}
+
+        {source === "built-in" && (
+        <>
 
         <div style={{ padding: "var(--space-4) var(--space-6)", overflowY: "auto", display: "flex", flexDirection: "column", gap: "var(--space-4)" }}>
           {result && chosen ? (
@@ -165,6 +222,8 @@ export function TemplateGallery({
             </>
           )}
         </div>
+        </>
+        )}
       </div>
     </div>
   );

@@ -83,6 +83,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** The signed-in person, or null outside the signed-in app (e.g. a component rendered on its own) */
+export function useOptionalAuth() {
+  return useContext(AuthContext)?.user ?? null;
+}
+
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {

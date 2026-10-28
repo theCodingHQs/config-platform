@@ -1,11 +1,19 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render as rtlRender, screen, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { GridTemplateDesigner } from '../src/studio/GridTemplateDesigner';
 import { ChartEditorModal } from '../src/studio/export-grid/ChartEditorModal';
 import { ChartOverlayCanvas } from '../src/studio/export-grid/ChartOverlayCanvas';
 import type { GridChartDefinition } from '@config-platform/schema';
+
+// The designer uses React Query (its Share button and shared layouts), as it does inside the app
+const render = (ui: React.ReactElement) => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  // A wrapper (not wrapping the element) so rerender keeps the provider
+  return rtlRender(ui, { wrapper: ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> });
+};
 
 // Mock API client
 const mockUpdateExportTemplate = vi.fn().mockResolvedValue({ success: true });

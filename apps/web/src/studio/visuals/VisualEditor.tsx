@@ -6,14 +6,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ChevronRight, FileUp, Maximize, Redo2, Save, Undo2, ZoomIn, ZoomOut } from "lucide-react";
-import type { Visual, VisualNode } from "@config-platform/schema";
+import { sharedRef, type Visual, type VisualNode } from "@config-platform/schema";
 import { useLiveScope } from "../../live/use-live";
 import { shapeOf, type ShapeDef } from "../../visuals/shapes";
 import { defaultProps } from "../../visuals/resolve-props";
 import { VISUALS_KEY, visualKey, visualsApi } from "../../visuals/visuals-api";
 import { useSymbols } from "../../visuals/use-symbols";
 import { SymbolsPalette } from "./SymbolsPalette";
-import { ShareSymbolButton } from "./ShareSymbolButton";
+import { ShareButton } from "../../library/ShareButton";
 import { inputDefaults } from "./InputsEditor";
 import { symbolFromNodes } from "./make-symbol";
 import { anchorInGroup, nodeBox, parentSpace, unionBox } from "./canvas-geometry";
@@ -291,7 +291,7 @@ export function VisualEditor({ visual }: { visual: Visual }) {
           <button type="button" className="btn btn-primary" disabled={!state.dirty || save.isPending} onClick={() => save.mutate()} title="Save (Ctrl+S)">
             <Save size="1em" /> {save.isPending ? "Saving…" : state.dirty ? "Save" : "Saved"}
           </button>
-          {isSymbol && <ShareSymbolButton symbolId={visual.id} dirty={state.dirty} onMessage={report} />}
+          {isSymbol && <ShareButton kind="symbol" sourceId={visual.id} dirty={state.dirty} onMessage={report} onShared={(item) => queryClient.removeQueries({ queryKey: visualKey(sharedRef(item.id)) })} />}
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "auto 13rem minmax(0, 1fr) 20rem", gap: "var(--space-3)", flex: 1, minHeight: 0 }}>

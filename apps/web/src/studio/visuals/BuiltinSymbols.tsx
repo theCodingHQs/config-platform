@@ -4,7 +4,8 @@ import { Link } from "react-router-dom";
 import type { Visual } from "@config-platform/schema";
 import { BUILTIN_SYMBOLS } from "@config-platform/schema/visual-library";
 import { SymbolThumb } from "./SymbolsPalette";
-import { Badge, SymbolPreview } from "./SymbolPreview";
+import { Badge } from "../../library/SharedControls";
+import { SymbolPreview } from "./SymbolPreview";
 
 export function SymbolCard({ to, thumbId, name, description, badges }: { to?: string; thumbId?: string; name: string; description?: string; badges?: React.ReactNode }) {
   const body = (

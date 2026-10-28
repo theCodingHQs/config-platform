@@ -49,6 +49,7 @@ import { ActionEditor } from "./ActionEditor";
 import { StateEditorModal } from "./StateEditorModal";
 import { DataSourceEditorModal } from "./DataSourceEditorModal";
 import { TemplatePickerModal } from "./TemplatePickerModal";
+import { ShareButton } from "../library/ShareButton";
 import { ComponentOverlay } from "./ComponentOverlay";
 import { defaultChartAxisTitles } from "../components/chart-axis-titles";
 import { ContentLayoutFields, ContentLayoutSection } from "./ContentLayoutFields";
@@ -1482,6 +1483,19 @@ export const PageBuilder: React.FC = () => {
           >
             <LayoutTemplate size={TOOLBAR_ICON_SIZE} /> Templates
           </button>
+
+          {pageDetail && (
+            <ShareButton
+              kind="page-template"
+              sourceId={pageDetail.id}
+              dirty={isDraftDirty}
+              className="btn btn-secondary btn-sm"
+              onMessage={(_tone, text) => {
+                setSaveStatus(text);
+                setTimeout(() => setSaveStatus(null), 5000);
+              }}
+            />
+          )}
 
           <button
             type="button"
@@ -5472,6 +5486,16 @@ export const PageBuilder: React.FC = () => {
           setSelectedNodeId(newDraft.root.id);
           setSaveStatus(`Applied ${template} template`);
           setTimeout(() => setSaveStatus(null), 3000);
+        }}
+        currentPageId={pageDetail?.id}
+        onApplyDefinition={(definition, name, missingFields) => {
+          if (!pageDetail) return;
+          // The page keeps its own id, route, version and who may open it
+          const newDraft = { ...definition, id: pageDetail.id, route: pageDetail.route, version: draft.version, allowedRoles: draft.allowedRoles };
+          pushDraftUpdate(newDraft);
+          setSelectedNodeId(newDraft.root.id);
+          setSaveStatus(missingFields.length ? `Applied "${name}". Not in your entity: ${missingFields.join(", ")}` : `Applied "${name}"`);
+          setTimeout(() => setSaveStatus(null), missingFields.length ? 10000 : 3000);
         }}
       />
 

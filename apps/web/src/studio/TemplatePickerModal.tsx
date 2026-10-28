@@ -1,14 +1,27 @@
 import React, { useState } from 'react';
 import { X, LayoutTemplate, FileSpreadsheet, LayoutDashboard, Database } from 'lucide-react';
-import type { ErdTable } from '@config-platform/schema';
+import type { ErdTable, PageDefinition } from '@config-platform/schema';
 import type { TemplateType } from './templates';
+import { SharedTemplateChooser } from '../library/SharedTemplateChooser';
+import { MyPageTemplates } from './MyPageTemplates';
 
 interface TemplatePickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   entities: ErdTable[];
   onApply: (template: TemplateType, entity: ErdTable) => void;
+  /** A shared template or a copy of another page: the layout to put in this page, and what couldn't be matched */
+  onApplyDefinition: (definition: PageDefinition, name: string, missingFields: string[]) => void;
+  currentPageId?: string;
 }
+
+/** Where a template comes from: built into the app, shared by a workspace, or one of this workspace's pages */
+type Source = 'built-in' | 'shared' | 'mine';
+const SOURCES: Array<{ id: Source; label: string }> = [
+  { id: 'built-in', label: 'Built-in' },
+  { id: 'shared', label: 'Shared' },
+  { id: 'mine', label: 'Mine' },
+];
 
 const TEMPLATES: Array<{
   id: TemplateType;
@@ -41,7 +54,10 @@ export const TemplatePickerModal: React.FC<TemplatePickerModalProps> = ({
   onClose,
   entities,
   onApply,
+  onApplyDefinition,
+  currentPageId,
 }) => {
+  const [source, setSource] = useState<Source>('built-in');
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateType>('CRUD list');
   const [selectedEntityId, setSelectedEntityId] = useState<string>(entities[0]?.id || '');
 
@@ -109,6 +125,49 @@ export const TemplatePickerModal: React.FC<TemplatePickerModalProps> = ({
           </button>
         </div>
 
+        <div role="tablist" aria-label="Template source" style={{ display: 'flex', gap: 'var(--space-1)', padding: 'var(--space-3) var(--space-5) 0' }}>
+          {SOURCES.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              role="tab"
+              aria-selected={source === s.id}
+              className={source === s.id ? 'btn btn-secondary btn-sm' : 'btn btn-ghost btn-sm'}
+              onClick={() => setSource(s.id)}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        {source === 'shared' && (
+          <div style={{ padding: 'var(--space-5)', overflowY: 'auto' }}>
+            <SharedTemplateChooser
+              kind="page-template"
+              entities={entities}
+              emptyHint="No shared page templates yet. Open a page and choose Share to share it as a template."
+              onUse={(used, name) => {
+                onApplyDefinition(used.definition as PageDefinition, name, used.missingFields);
+                onClose();
+              }}
+            />
+          </div>
+        )}
+
+        {source === 'mine' && (
+          <div style={{ padding: 'var(--space-5)', overflowY: 'auto' }}>
+            <MyPageTemplates
+              currentPageId={currentPageId}
+              onUse={(draft, name) => {
+                onApplyDefinition(draft, name, []);
+                onClose();
+              }}
+            />
+          </div>
+        )}
+
+        {source === 'built-in' && (
+        <>
         <div style={{ padding: 'var(--space-5)', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
           <div>
             <label className="form-label" style={{ fontWeight: 600, marginBottom: 'var(--space-2)' }}>
@@ -204,6 +263,8 @@ export const TemplatePickerModal: React.FC<TemplatePickerModalProps> = ({
             Apply Template
           </button>
         </div>
+        </>
+        )}
       </div>
     </div>
   );
