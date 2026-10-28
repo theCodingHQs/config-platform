@@ -7,6 +7,7 @@ import { VisualScene } from "../visuals/VisualScene";
 import { visualKey, visualsApi } from "../visuals/visuals-api";
 import { useSymbols } from "../visuals/use-symbols";
 import { BrokenBinding } from "../renderer/broken-binding";
+import { safeColor } from "../visuals/coerce";
 
 const css = (v: number | string | undefined) => (typeof v === "number" ? `${v}px` : v);
 
@@ -46,6 +47,10 @@ export const VisualComponent: React.FC<VisualProps> = ({ visualId, height, title
   if (error && (error as any).statusCode === 404) return <BrokenBinding type="visual" id={visualId} />;
 
   const ratio = visual ? `${visual.definition.width} / ${visual.definition.height}` : "16 / 9";
+  // The drawing decides: its frame (a border, and the canvas colour behind it unless it has its own background)
+  const frame = visual?.definition.frame !== false;
+  const ownBackground = visual?.definition.background && safeColor(visual.definition.background);
+  const behind = ownBackground ?? (frame ? "var(--vis-floor)" : "transparent");
   return (
     <div style={box} data-testid="visual-component">
       {title && <div style={{ fontWeight: 600, fontSize: "var(--font-size-sm)" }}>{title}</div>}
@@ -54,10 +59,10 @@ export const VisualComponent: React.FC<VisualProps> = ({ visualId, height, title
           width: "100%",
           height: height ? `${height}px` : undefined,
           aspectRatio: height ? undefined : ratio,
-          borderRadius: "var(--radius-surface)",
+          borderRadius: frame ? "var(--radius-surface)" : undefined,
           overflow: "hidden",
-          border: "var(--border-width-sm) solid var(--border)",
-          background: "var(--vis-floor)",
+          border: frame ? "var(--border-width-sm) solid var(--border)" : undefined,
+          background: behind,
         }}
       >
         {visual ? (

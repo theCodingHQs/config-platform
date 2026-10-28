@@ -33,6 +33,7 @@ export const CardComponent: React.FC<CardProps & { children?: React.ReactNode }>
     bordered: 'none',
     flat: 'none',
     elevated: 'var(--shadow-lg)',
+    plain: 'none',
   };
 
   const borderMap = {
@@ -40,6 +41,7 @@ export const CardComponent: React.FC<CardProps & { children?: React.ReactNode }>
     bordered: '2px solid var(--border)',
     flat: 'none',
     elevated: 'var(--border-width-sm) solid var(--border)',
+    plain: 'none',
   };
 
   const body = contentLayout({ direction, gap, align, justify, wrap });
@@ -55,7 +57,7 @@ export const CardComponent: React.FC<CardProps & { children?: React.ReactNode }>
       data-testid="card-container"
       style={{
         backgroundColor:
-          variant === 'flat' ? 'var(--surface-subtle)' : 'var(--surface)',
+          variant === 'plain' ? 'transparent' : variant === 'flat' ? 'var(--surface-subtle)' : 'var(--surface)',
         border: borderMap[variant],
         borderRadius: 'var(--radius-surface)',
         overflow: 'hidden',

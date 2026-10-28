@@ -40,8 +40,10 @@ const DefinitionObject = z
     /** Show (and snap to) the grid while editing; isometric drawings also show the floor grid when shown */
     grid: z.boolean().default(true),
     gridSize: z.number().int().min(2).max(200).default(10),
-    /** Canvas colour; the theme's floor colour when unset */
+    /** Canvas colour; none when unset */
     background: z.string().max(100).optional(),
+    /** On pages: a border, and the theme's canvas colour behind a drawing with no background of its own. On unless false. */
+    frame: z.boolean().optional(),
     paints: z.array(VisualPaintSchema).max(100).optional(),
     /** Only for symbols */
     inputs: z.array(VisualInputDefSchema).max(40).optional(),

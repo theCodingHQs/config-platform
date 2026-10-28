@@ -225,7 +225,8 @@ export const CardPropsSchema = z.object({
   title: z.string().optional(),
   subtitle: z.string().optional(),
   headerIcon: z.string().optional(),
-  variant: z.enum(['default', 'bordered', 'flat', 'elevated']).default('default'),
+  /** plain: no background, border or shadow; it only groups what's in it */
+  variant: z.enum(['default', 'bordered', 'flat', 'elevated', 'plain']).default('default'),
   padding: z.enum(['none', 'sm', 'md', 'lg']).default('md'),
 }).merge(LayoutPropsSchema).merge(ContentLayoutPropsSchema);
 export type CardProps = z.infer<typeof CardPropsSchema>;

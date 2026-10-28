@@ -69,7 +69,7 @@ export function EditorCanvas({ state, dispatch, scope, symbols, zoom, tool, onTo
 
   return (
     <div
-      style={{ width: `${definition.width * zoom}px`, height: `${definition.height * zoom}px`, flex: "none", boxShadow: "var(--shadow-sm)", cursor: tool === "select" ? "default" : "crosshair", touchAction: "none" }}
+      style={{ width: `${definition.width * zoom}px`, height: `${definition.height * zoom}px`, flex: "none", boxShadow: "var(--shadow-sm)", background: definition.frame === false ? undefined : "var(--vis-floor)", cursor: tool === "select" ? "default" : "crosshair", touchAction: "none" }}
       onPointerDown={gestures.onPointerDown}
       onPointerMove={gestures.onPointerMove}
       onPointerUp={gestures.onPointerUp}

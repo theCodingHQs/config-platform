@@ -4373,6 +4373,7 @@ export const PageBuilder: React.FC = () => {
                         <option value="bordered">Bordered</option>
                         <option value="flat">Flat (Subtle)</option>
                         <option value="elevated">Elevated</option>
+                        <option value="plain">Plain (no background or border)</option>
                       </select>
                     </div>
                     <div>

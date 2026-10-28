@@ -79,7 +79,8 @@ export function VisualScene({ definition, scope, symbols, className, style, svgR
       style={style}
     >
       <PaintDefs paints={definition.paints} prefix={prefix} />
-      <rect x={0} y={0} width={definition.width} height={definition.height} style={{ fill: (definition.background && safeColor(definition.background)) || "var(--vis-floor)" }} data-background="" />
+      {/* No background unless the drawing sets one; on a page, the visual's frame gives the canvas colour */}
+      <rect x={0} y={0} width={definition.width} height={definition.height} style={{ fill: (definition.background && safeColor(definition.background)) || "none" }} data-background="" />
       {isometric && definition.grid && (
         <svg x={0} y={0} width={definition.width} height={definition.height} overflow="hidden" pointerEvents="none">
           <FloorGrid width={definition.width} height={definition.height} />

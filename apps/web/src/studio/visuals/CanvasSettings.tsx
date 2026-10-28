@@ -52,9 +52,18 @@ export function CanvasSettings({ definition, isSymbol, onCanvas }: Props) {
           <input id="vis-grid" className="form-input" type="number" min={2} max={200} value={definition.gridSize} onChange={(e) => onCanvas({ gridSize: num(e.target.value, definition.gridSize, 2, 200) }, "canvas-grid")} />
         </Field>
       )}
-      <Field label="Background" htmlFor="vis-bg" hint="Empty: the theme's canvas colour">
+      <Field label="Background" htmlFor="vis-bg" hint="Empty: none">
         <ColorInput id="vis-bg" value={definition.background ?? ""} paints={[]} onChange={(v) => onCanvas({ background: v || undefined }, "canvas-bg")} />
       </Field>
+      {!isSymbol && (
+        <label style={{ display: "flex", gap: "var(--space-2)", alignItems: "flex-start", fontSize: "var(--font-size-sm)" }}>
+          <input type="checkbox" checked={definition.frame !== false} onChange={(e) => onCanvas({ frame: e.target.checked ? undefined : false })} />
+          <span>
+            Show a frame
+            <span style={{ display: "block", fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>On pages: a border, and the canvas colour behind it when it has no background. Off: only what the drawing draws, on the page.</span>
+          </span>
+        </label>
+      )}
       <details open={Boolean(definition.paints?.length)}>
         <summary style={{ cursor: "pointer", fontSize: "var(--font-size-sm)", fontWeight: 600 }}>Gradients</summary>
         <div style={{ paddingTop: "var(--space-2)" }}>
