@@ -46,6 +46,26 @@ describe('agent hub (leader)', () => {
     expect(theirs.onMessage).not.toHaveBeenCalled();
   });
 
+  it('shows a connection as connected once its messages arrive after the agent reconnects, even if the agent never says so', () => {
+    const hub = new AgentHub();
+    const e1 = events();
+    hub.proxyFor('ag_1', 'modbus')({}, e1, { connectionId: 'lc_1' }).start();
+    hub.fromAgent('ag_1', { type: 'hello', version: '1', hostname: 'h' });
+    expect(e1.onState).toHaveBeenLastCalledWith('connecting');
+    // The agent kept running the connection through the reconnect, so it only sends values
+    hub.fromAgent('ag_1', { type: 'message', connectionId: 'lc_1', payload: '{"a":1}', encoding: 'utf8' });
+    expect(e1.onState).toHaveBeenLastCalledWith('connected');
+    hub.fromAgent('ag_1', { type: 'message', connectionId: 'lc_1', payload: '{"a":2}', encoding: 'utf8' });
+    expect(e1.onState).toHaveBeenCalledTimes(3);
+
+    // What the agent does say wins: an error stays an error while stray values arrive
+    hub.agentOffline('ag_1');
+    hub.fromAgent('ag_1', { type: 'hello', version: '1', hostname: 'h' });
+    hub.fromAgent('ag_1', { type: 'state', connectionId: 'lc_1', state: 'error', error: 'PLC refused' });
+    hub.fromAgent('ag_1', { type: 'message', connectionId: 'lc_1', payload: '{"a":3}', encoding: 'utf8' });
+    expect(e1.onState).toHaveBeenLastCalledWith('error', 'PLC refused');
+  });
+
   it("marks an agent's connections disconnected when it goes offline", () => {
     const hub = new AgentHub();
     const e1 = events();

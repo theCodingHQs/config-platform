@@ -1,7 +1,8 @@
 /**
  * Runs the connections the app assigns to this agent, with the same connectors the app server
  * uses. Each new config is compared with what's running: new connections start, removed ones
- * stop, changed ones restart, unchanged ones keep running.
+ * stop, changed ones restart, unchanged ones keep running (and their state is reported again: the
+ * app sends a config when the agent reconnects, and shows each connection as connecting until told).
  */
 import type { AgentConnectionConfig, AgentToServer } from '@config-platform/schema';
 import { CONNECTORS, type AdapterFactory, type ConnectorKind, type LiveAdapter } from '@config-platform/live-connectors';
@@ -12,6 +13,8 @@ interface Running {
   /** To spot a changed connection */
   fingerprint: string;
   adapter: LiveAdapter;
+  /** The connection's last state, to report again */
+  state?: Extract<AgentToServer, { type: 'state' }>;
 }
 
 export class ConnectionRunner {
@@ -28,7 +31,11 @@ export class ConnectionRunner {
       const next = wanted.get(id);
       if (!next || JSON.stringify(next) !== r.fingerprint) await this.stop(id);
     }
-    for (const config of configs) if (!this.running.has(config.id)) this.start(config);
+    for (const config of configs) {
+      const kept = this.running.get(config.id);
+      if (!kept) this.start(config);
+      else if (kept.state) this.report(kept.state);
+    }
   }
 
   async stopAll(): Promise<void> {
@@ -53,7 +60,12 @@ export class ConnectionRunner {
           const binary = Buffer.isBuffer(payload);
           this.report({ type: 'message', connectionId: id, payload: binary ? payload.toString('base64') : payload, encoding: binary ? 'base64' : 'utf8', topic });
         },
-        onState: (state, error) => this.report({ type: 'state', connectionId: id, state, error }),
+        onState: (state, error) => {
+          const report: Extract<AgentToServer, { type: 'state' }> = { type: 'state', connectionId: id, state, error };
+          const running = this.running.get(id);
+          if (running) running.state = report;
+          this.report(report);
+        },
         onWarning: (warning) => this.report({ type: 'warning', connectionId: id, warning }),
       },
       { connectionId: id },

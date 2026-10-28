@@ -46,6 +46,17 @@ describe('edge agent: running what the app assigns', () => {
     ]);
   });
 
+  it('reports the state of connections it keeps running again when the app sends the same config (after a reconnect)', async () => {
+    const { connectors } = fakeConnectors();
+    const reports: any[] = [];
+    const runner = new ConnectionRunner((m: any) => reports.push(m), connectors as any);
+    const config = [{ id: 'a', kind: 'modbus', settings: {} }];
+    await runner.apply(config);
+    reports.length = 0;
+    await runner.apply(config);
+    assert.deepEqual(reports, [{ type: 'state', connectionId: 'a', state: 'connected', error: undefined }]);
+  });
+
   it('says so when the app asks for a kind this agent version cannot run', async () => {
     const reports: any[] = [];
     await new ConnectionRunner((m: any) => reports.push(m), {} as any).apply([{ id: 'a', kind: 'future-kind', settings: {} }]);
