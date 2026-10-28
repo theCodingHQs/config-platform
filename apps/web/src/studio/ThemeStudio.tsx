@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   THEME_PRESETS,
   type ThemePresetId,
@@ -110,8 +110,14 @@ export function ThemeStudio() {
   const notify = useStatusNotify();
   const [modalPreviewOpen, setModalPreviewOpen] = useState(false);
 
+  // The configs this page sent to the live preview. They come back as workspaceTheme, and must not be
+  // copied into the draft: while a slider is dragged, an older one arriving late would set the draft
+  // back, which sends it to the preview again, and the two values would chase each other for good.
+  const previewed = useRef(new WeakSet<WorkspaceThemeConfig>());
+
   // Sync draft state if workspaceTheme loads or changes from server
   useEffect(() => {
+    if (previewed.current.has(workspaceTheme)) return;
     setSelectedPreset(workspaceTheme.presetId || "neutral");
     setAccentColor(workspaceTheme.overrides?.accent || "");
     setRadius(workspaceTheme.overrides?.radius);
@@ -177,6 +183,7 @@ export function ThemeStudio() {
 
   // Apply draft config live to preview while on this page
   useEffect(() => {
+    previewed.current.add(draftConfig);
     setWorkspaceTheme(draftConfig);
   }, [draftConfig, setWorkspaceTheme]);
 
