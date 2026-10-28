@@ -41,23 +41,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkAuth();
   }, []);
 
-  const login = async (email: string, pass: string) => {
-    const loggedIn = await apiLogin(email, pass);
-    setUser(loggedIn);
-    return loggedIn;
+  // The sign-in replies carry only the basics; /auth/me adds platform owner, theme and date settings
+  const signedIn = async (basic: CurrentUser) => {
+    const full = (await fetchMe()) ?? basic;
+    setUser(full);
+    return full;
   };
 
-  const signup = async (email: string, pass: string, tenantName?: string) => {
-    const newUser = await apiSignup(email, pass, tenantName);
-    setUser(newUser);
-    return newUser;
-  };
+  const login = async (email: string, pass: string) => signedIn(await apiLogin(email, pass));
 
-  const acceptInvite = async (token: string, email: string, pass: string) => {
-    const acceptedUser = await apiAcceptInvite(token, email, pass);
-    setUser(acceptedUser);
-    return acceptedUser;
-  };
+  const signup = async (email: string, pass: string, tenantName?: string) =>
+    signedIn(await apiSignup(email, pass, tenantName));
+
+  const acceptInvite = async (token: string, email: string, pass: string) =>
+    signedIn(await apiAcceptInvite(token, email, pass));
 
   const logout = async () => {
     await apiLogout();

@@ -517,7 +517,7 @@ const SortableTreeItem: React.FC<{
           </span>
         </div>
 
-        <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
+        <div style={{ display: "flex", alignItems: "center" }}>
           {/* Copy configuration button */}
           <button
             type="button"
@@ -1694,7 +1694,7 @@ export const PageBuilder: React.FC = () => {
             style={{
               borderBottom: "1px solid var(--border)",
               overflowY: "auto",
-              maxWidth: "300px",
+              maxWidth: "360px",
             }}
           >
             <div
@@ -1765,7 +1765,7 @@ export const PageBuilder: React.FC = () => {
           </div>
 
           {/* Tree View */}
-          <div style={{ flex: 1, overflowY: "auto", maxWidth: "300px" }}>
+          <div style={{ flex: 1, overflowY: "auto", maxWidth: "360px" }}>
             <div
               style={{
                 fontSize: "var(--font-size-xs)",
