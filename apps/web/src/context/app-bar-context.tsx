@@ -9,6 +9,7 @@ import React, {
   useState,
 } from "react";
 import { CircleAlert, CircleCheck, Info, X } from "lucide-react";
+import { StatusIndicators } from "../status/StatusIndicators";
 
 export type AppBarMessageType = "success" | "error" | "info";
 
@@ -80,7 +81,12 @@ export function AppBarProvider({
     setActions(null);
   }, []);
 
+  // The message clears itself after its time, which stands still while it's hovered or focused
   const timerRef = useRef<number | null>(null);
+  /** Time left before the message clears (0: it stays until dismissed) */
+  const remainingRef = useRef(0);
+  const startedAtRef = useRef(0);
+  const holdRef = useRef({ hover: false, focus: false });
   const stopTimer = useCallback(() => {
     if (timerRef.current !== null) {
       window.clearTimeout(timerRef.current);
@@ -89,25 +95,44 @@ export function AppBarProvider({
   }, []);
   useEffect(() => stopTimer, [stopTimer]);
 
+  const runTimer = useCallback(() => {
+    const held = holdRef.current.hover || holdRef.current.focus;
+    if (timerRef.current !== null || held || remainingRef.current <= 0) return;
+    startedAtRef.current = Date.now();
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null;
+      remainingRef.current = 0;
+      setMessage(null);
+    }, remainingRef.current);
+  }, []);
+  /** Hovering or focusing the message holds it; letting go carries on with the time it had left */
+  const hold = useCallback((why: "hover" | "focus", on: boolean) => {
+    holdRef.current = { ...holdRef.current, [why]: on };
+    if (on && timerRef.current !== null) {
+      stopTimer();
+      remainingRef.current -= Date.now() - startedAtRef.current;
+    } else if (!on) {
+      runTimer();
+    }
+  }, [stopTimer, runTimer]);
+
   const showMessage = useCallback((nextMessage: AppBarMessage) => {
     stopTimer();
+    remainingRef.current = 0;
     show(nextMessage);
   }, [stopTimer, show]);
   const clearMessage = useCallback(() => {
     stopTimer();
+    remainingRef.current = 0;
+    holdRef.current = { hover: false, focus: false };
     setMessage(null);
   }, [stopTimer]);
   const notify = useCallback<AppBarContextValue["notify"]>((type, text, options) => {
     stopTimer();
     show({ type, message: text });
-    const duration = options?.durationMs ?? STATUS_MESSAGE_DURATION_MS[type];
-    if (duration > 0) {
-      timerRef.current = window.setTimeout(() => {
-        timerRef.current = null;
-        setMessage(null);
-      }, duration);
-    }
-  }, [stopTimer, show]);
+    remainingRef.current = options?.durationMs ?? STATUS_MESSAGE_DURATION_MS[type];
+    runTimer();
+  }, [stopTimer, show, runTimer]);
 
   const value = useMemo(
     () => ({ setContent, clearContent, showMessage, clearMessage, notify }),
@@ -128,8 +153,9 @@ export function AppBarProvider({
           <div className="app-statusbar-actions">{actions}</div>
         )}
         {message && (
-          <StatusMessage key={message.id} message={message} onDismiss={clearMessage} />
+          <StatusMessage key={message.id} message={message} onDismiss={clearMessage} onHold={hold} />
         )}
+        <StatusIndicators />
       </footer>
     </AppBarContext.Provider>
   );
@@ -144,8 +170,9 @@ const MESSAGE_ICONS = {
 /**
  * A status message filling the bar's height in its type's colour. It opens from zero to its
  * measured width (CSS can't transition to `width: auto`); reduced motion skips the animation.
+ * While it's hovered or focused, its time to clear stands still.
  */
-function StatusMessage({ message, onDismiss }: { message: ShownMessage; onDismiss: () => void }) {
+function StatusMessage({ message, onDismiss, onHold }: { message: ShownMessage; onDismiss: () => void; onHold: (why: "hover" | "focus", on: boolean) => void }) {
   const innerRef = useRef<HTMLSpanElement | null>(null);
   const [width, setWidth] = useState(0);
 
@@ -165,6 +192,10 @@ function StatusMessage({ message, onDismiss }: { message: ShownMessage; onDismis
       aria-live={message.type === "error" ? "assertive" : "polite"}
       aria-atomic="true"
       style={{ width }}
+      onMouseEnter={() => onHold("hover", true)}
+      onMouseLeave={() => onHold("hover", false)}
+      onFocus={() => onHold("focus", true)}
+      onBlur={() => onHold("focus", false)}
     >
       <span ref={innerRef} className="app-statusbar-message-inner">
         <Icon className="app-statusbar-message-icon" size="1.15em" aria-hidden="true" />

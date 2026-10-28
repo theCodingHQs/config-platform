@@ -32,8 +32,17 @@
   z-index: 1100;
 }
 
+/* A screen's own content (e.g. the selected cell) at the left, its actions right after it */
 .app-statusbar-content,
-.app-statusbar-actions,
+.app-statusbar-actions {
+  flex: 0 1 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow: hidden;
+}
+
 /* Action feedback: fills the bar's height in its colour, at the right edge, and opens
    from zero to its width (the width is measured and set inline). */
 .app-statusbar-message {
@@ -88,6 +97,102 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: min(36rem, 45vw);
+}
+
+/* Connection status at the right end: online, server, live. A message sits just before it. */
+.app-statusbar-indicators {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+.app-statusbar-message + .app-statusbar-indicators {
+  margin-left: 0;
+}
+
+/* The message reaches the bar's edge only when it's the last thing in the bar */
+.app-statusbar-message:not(:last-child) {
+  margin-right: 0;
+}
+
+.app-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-1);
+  min-width: 1.5rem;
+  min-height: 1.375rem;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.app-status-indicator:hover,
+.app-status-indicator[aria-expanded="true"] {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* Live: a dot, solid or split by the share of connections in each state (set inline) */
+.app-status-dot {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: var(--radius-full);
+  flex: 0 0 auto;
+}
+
+.app-status-icon-ok { color: var(--success); }
+.app-status-icon-warn { color: var(--warning); }
+.app-status-icon-bad { color: var(--danger); }
+.app-status-icon-idle { color: var(--text-muted); }
+
+.app-status-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--space-2));
+  width: min(22rem, 90vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  background: var(--surface);
+  color: var(--text);
+  border: var(--border-width-sm) solid var(--border);
+  border-radius: var(--radius-surface);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--font-size-sm);
+  white-space: normal;
+}
+
+.app-status-panel p {
+  margin: 0;
+}
+
+.app-status-panel-muted {
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+}
+
+.app-status-panel-list {
+  margin: 0;
+  padding-left: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.app-status-panel-link {
+  font-size: var(--font-size-xs);
 }
 
 .app-statusbar-action {

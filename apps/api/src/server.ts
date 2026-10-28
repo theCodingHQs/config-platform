@@ -300,6 +300,11 @@ export async function buildServer() {
     return { status: 'ok', timestamp: new Date().toISOString() };
   });
 
+  // The same under /api, which is what the web app (and its dev proxy) can reach: the status bar checks it
+  fastify.get('/api/health', async () => {
+    return { status: 'ok', timestamp: new Date().toISOString() };
+  });
+
   fastify.get('/health/live', async () => {
     return { status: 'live', uptime: process.uptime() };
   });
