@@ -18,7 +18,7 @@ export function SymbolPreview({ visual, about, badges, actions }: { visual: Visu
   const copy = useCopySymbol((saved) => navigate(`/studio/visuals/${saved.id}`));
   const inputs = visual.definition.inputs ?? [];
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)", maxWidth: "56rem" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)", maxWidth: "56rem", margin: "0 auto", padding: "var(--space-6) var(--space-4)" }}>
       <Link to="/studio/visuals" style={{ ...muted, display: "inline-flex", alignItems: "center", gap: "var(--space-1)" }}>
         <ArrowLeft size="1em" /> Visuals
       </Link>

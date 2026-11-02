@@ -121,6 +121,9 @@ import {
   LogOut,
   Shield,
   Folder,
+  Search,
+  X,
+  ChevronDown,
 } from "lucide-react";
 import type { PageDefinition } from "@config-platform/schema";
 import { AppBarProvider } from "./context/app-bar-context";
@@ -368,7 +371,27 @@ function AppContent({ user }: { user: CurrentUser }) {
   const isStudioRoute = location.pathname.startsWith("/studio");
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
+  const [desktopCollapsed, setDesktopCollapsed] = useState(
+    () => localStorage.getItem("sidebar-collapsed") === "1",
+  );
+  useEffect(() => {
+    localStorage.setItem("sidebar-collapsed", desktopCollapsed ? "1" : "0");
+  }, [desktopCollapsed]);
+  const [navSearch, setNavSearch] = useState("");
+  // Folders the user has closed; kept per browser so the sidebar stays how they left it
+  const [closedFolders, setClosedFolders] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("sidebar-closed-folders") ?? "[]");
+    } catch {
+      return [];
+    }
+  });
+  const toggleFolder = (id: string) =>
+    setClosedFolders((prev) => {
+      const next = prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id];
+      localStorage.setItem("sidebar-closed-folders", JSON.stringify(next));
+      return next;
+    });
 
   // Close mobile drawer when route changes
   useEffect(() => {
@@ -387,41 +410,72 @@ function AppContent({ user }: { user: CurrentUser }) {
   });
   const publishedPageIds = new Set(effectivePages.map((page) => page.id));
   const visibleNavigationPages = (pageNavigation?.pages ?? []).filter((page) => publishedPageIds.has(page.id));
+  const folderPageCount = (folderId: string): number =>
+    visibleNavigationPages.filter((page) => page.folderId === folderId).length +
+    (pageNavigation?.folders ?? [])
+      .filter((folder) => folder.parentId === folderId)
+      .reduce((sum, folder) => sum + folderPageCount(folder.id), 0);
+  const renderPageLink = (summary: (typeof visibleNavigationPages)[number], depth: number, hint?: string) => {
+    const page = effectivePages.find((candidate) => candidate.id === summary.id);
+    if (!page) return null;
+    // The page's saved name; definitions don't carry one (migration strips it), so
+    // getPageTitle would fall back to the route for pages that don't start with a text node.
+    const title = summary.name?.trim() || getPageTitle(page);
+    return { page, title, node: (
+      <NavLink
+        key={page.id}
+        to={page.route}
+        title={title}
+        className={({ isActive }) => `app-sidebar-item ${isActive ? "active" : ""}`}
+        // The indent is in CSS (--nav-depth), so the collapsed sidebar can line icons up
+        style={{ "--nav-depth": depth } as React.CSSProperties}
+        onClick={() => setMobileMenuOpen(false)}
+      >
+        <span className="app-sidebar-icon">{getPageIcon(page, metadata)}</span>
+        <span className="app-sidebar-item-title">{title}</span>
+        {hint && <span className="app-sidebar-item-hint">{hint}</span>}
+      </NavLink>
+    ) };
+  };
   const renderNavigation = (folderId: string | null, depth = 0): React.ReactNode => (
     <>
-      {visibleNavigationPages.filter((page) => page.folderId === folderId).map((summary) => {
-        const page = effectivePages.find((candidate) => candidate.id === summary.id);
-        if (!page) return null;
-        // The page's saved name; definitions don't carry one (migration strips it), so
-        // getPageTitle would fall back to the route for pages that don't start with a text node.
-        const title = summary.name?.trim() || getPageTitle(page);
-        const icon = getPageIcon(page, metadata);
+      {visibleNavigationPages.filter((page) => page.folderId === folderId).map((summary) => renderPageLink(summary, depth)?.node)}
+      {(pageNavigation?.folders ?? []).filter((folder) => folder.parentId === folderId).map((folder) => {
+        // The icon-only sidebar always shows every page
+        const open = desktopCollapsed || !closedFolders.includes(folder.id);
         return (
-          <NavLink
-            key={page.id}
-            to={page.route}
-            title={title}
-            className={({ isActive }) => `app-sidebar-item ${isActive ? "active" : ""}`}
-            // The indent is in CSS (--nav-depth), so the collapsed sidebar can line icons up
-            style={{ "--nav-depth": depth } as React.CSSProperties}
-            onClick={() => setMobileMenuOpen(false)}
-          >
-            <span className="app-sidebar-icon">{icon}</span>
-            <span className="app-sidebar-item-title">{title}</span>
-          </NavLink>
+          <div key={folder.id} className={`app-sidebar-folder ${open ? "open" : ""}`}>
+            <button
+              type="button"
+              className="app-sidebar-folder-summary"
+              title={folder.name}
+              aria-expanded={open}
+              style={{ "--nav-depth": depth } as React.CSSProperties}
+              onClick={() => toggleFolder(folder.id)}
+            >
+              <ChevronDown size={14} className="app-sidebar-folder-chevron" />
+              {folder.icon ? <DynamicIcon name={folder.icon} size={16} /> : <Folder size={16} />}
+              <span className="app-sidebar-item-title">{folder.name}</span>
+              <span className="app-sidebar-count">{folderPageCount(folder.id)}</span>
+            </button>
+            {open && <div className="app-sidebar-folder-body">{renderNavigation(folder.id, depth + 1)}</div>}
+          </div>
         );
       })}
-      {(pageNavigation?.folders ?? []).filter((folder) => folder.parentId === folderId).map((folder) => (
-        <details key={folder.id} open className="app-sidebar-folder">
-          <summary className="app-sidebar-folder-summary" title={folder.name} style={{ "--nav-depth": depth } as React.CSSProperties}>
-            {folder.icon ? <DynamicIcon name={folder.icon} size={16} /> : <Folder size={16} />}
-            <span className="app-sidebar-item-title">{folder.name}</span>
-          </summary>
-          {renderNavigation(folder.id, depth + 1)}
-        </details>
-      ))}
     </>
   );
+  // While searching, show one flat list of matching pages, each with the folder it lives in
+  const searchTerm = navSearch.trim().toLowerCase();
+  const searchResults = searchTerm
+    ? visibleNavigationPages.flatMap((summary) => {
+        const rendered = renderPageLink(
+          summary,
+          0,
+          (pageNavigation?.folders ?? []).find((folder) => folder.id === summary.folderId)?.name,
+        );
+        return rendered && rendered.title.toLowerCase().includes(searchTerm) ? [rendered.node] : [];
+      })
+    : [];
 
   return (
     <div
@@ -845,9 +899,10 @@ function AppContent({ user }: { user: CurrentUser }) {
             }`}
           >
             <div className="app-sidebar-header">
+              <span className="app-sidebar-header-title">Pages</span>
               <button
                 type="button"
-                className="btn btn-ghost app-sidebar-collapse-btn"
+                className="app-sidebar-collapse-btn"
                 onClick={() => setDesktopCollapsed((prev) => !prev)}
                 title={desktopCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
                 aria-label={
@@ -862,8 +917,45 @@ function AppContent({ user }: { user: CurrentUser }) {
               </button>
             </div>
 
+            {effectivePages.length > 0 && (
+              desktopCollapsed ? (
+                <button
+                  type="button"
+                  className="app-sidebar-search-icon"
+                  title="Search pages"
+                  aria-label="Search pages"
+                  onClick={() => setDesktopCollapsed(false)}
+                >
+                  <Search size={16} />
+                </button>
+              ) : (
+                <div className="app-sidebar-search">
+                  <Search size={14} />
+                  <input
+                    type="text"
+                    value={navSearch}
+                    placeholder="Search pages"
+                    aria-label="Search pages"
+                    onChange={(e) => setNavSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === "Escape" && setNavSearch("")}
+                  />
+                  {navSearch && (
+                    <button type="button" aria-label="Clear search" onClick={() => setNavSearch("")}>
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+              )
+            )}
+
             <nav className="app-sidebar-nav">
-              {effectivePages.length === 0 ? (
+              {searchTerm && !desktopCollapsed ? (
+                searchResults.length > 0 ? (
+                  searchResults
+                ) : (
+                  <p className="app-sidebar-empty">No pages match “{navSearch.trim()}”.</p>
+                )
+              ) : effectivePages.length === 0 ? (
                 <div
                   style={{
                     padding: "1rem 0.75rem",

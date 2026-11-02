@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Component, Factory, Plus, Trash2 } from "lucide-react";
+import { Component, Factory, Plus, Search, Trash2, X } from "lucide-react";
 import { emptyVisualDefinition, isSharedRef, type VisualKind, type VisualSummary } from "@config-platform/schema";
 import { VISUALS_KEY, visualKey, visualsApi } from "../../visuals/visuals-api";
 import { isBuiltinRef } from "@config-platform/schema/visual-library";
@@ -78,14 +78,14 @@ function NewVisualForm({ kind, onCancel }: { kind: VisualKind; onCancel: () => v
 
 function VisualCard({ v, onDelete }: { v: VisualSummary; onDelete: (v: VisualSummary) => void }) {
   return (
-    <li className="card" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "var(--space-3)" }}>
+    <li className="card visual-card" style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", padding: "var(--space-3)" }}>
       <Link to={`/studio/visuals/${v.id}`} style={{ flex: 1, minWidth: 0, textDecoration: "none", color: "inherit" }}>
         <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.name}</div>
         <div style={{ fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
           {v.elementCount} {v.elementCount === 1 ? "shape" : "shapes"} · saved {new Date(v.updatedAt).toLocaleDateString()}
         </div>
       </Link>
-      <button type="button" className="btn btn-ghost" aria-label={`Delete ${v.name}`} title="Delete" style={{ padding: "var(--space-1)", color: "var(--danger)" }} onClick={() => onDelete(v)}>
+      <button type="button" className="btn btn-ghost visual-card-delete" aria-label={`Delete ${v.name}`} title="Delete" style={{ padding: "var(--space-1)", color: "var(--danger)" }} onClick={() => onDelete(v)}>
         <Trash2 size="1em" />
       </button>
     </li>
@@ -95,10 +95,20 @@ function VisualCard({ v, onDelete }: { v: VisualSummary; onDelete: (v: VisualSum
 const grid = { listStyle: "none", margin: 0, padding: 0, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(16rem, 1fr))", gap: "var(--space-3)" } as const;
 const sectionTitle = { margin: 0, fontSize: "var(--font-size-lg)", fontWeight: 600, display: "flex", alignItems: "center", gap: "var(--space-2)" } as const;
 
+function SectionTitle({ children, count }: { children: React.ReactNode; count?: number }) {
+  return (
+    <h2 style={sectionTitle}>
+      {children}
+      {count !== undefined && <span className="visuals-count">{count}</span>}
+    </h2>
+  );
+}
+
 function VisualsList() {
   const queryClient = useQueryClient();
   const [creating, setCreating] = useState<VisualKind | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
   const { data: visuals = [], isLoading } = useQuery({ queryKey: VISUALS_KEY, queryFn: visualsApi.list });
   const remove = useMutation({
     mutationFn: visualsApi.remove,
@@ -109,8 +119,10 @@ function VisualsList() {
     setProblem(null);
     if (window.confirm(`Delete "${v.name}"? This can't be undone.`)) remove.mutate(v.id);
   };
-  const drawings = visuals.filter((v) => v.kind !== "symbol");
-  const symbols = visuals.filter((v) => v.kind === "symbol");
+  const term = search.trim().toLowerCase();
+  const matches = (v: VisualSummary) => v.name.toLowerCase().includes(term);
+  const drawings = visuals.filter((v) => v.kind !== "symbol" && matches(v));
+  const symbols = visuals.filter((v) => v.kind === "symbol" && matches(v));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-4)", maxWidth: "72rem" }}>
@@ -122,6 +134,15 @@ function VisualsList() {
           <p style={{ margin: "var(--space-1) 0 0", color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
             Draw your line or plant, flat or in 2.5D, and let live data drive any part of it. Show a drawing on a page with the Visual component.
           </p>
+        </div>
+        <div className="visuals-search">
+          <Search size={14} />
+          <input type="text" value={search} placeholder="Search visuals" aria-label="Search visuals" onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => e.key === "Escape" && setSearch("")} />
+          {search && (
+            <button type="button" aria-label="Clear search" onClick={() => setSearch("")}>
+              <X size={14} />
+            </button>
+          )}
         </div>
         {!creating && (
           <div style={{ display: "flex", gap: "var(--space-2)" }}>
@@ -145,34 +166,34 @@ function VisualsList() {
       ) : (
         <>
           <section style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-            <h2 style={sectionTitle}>Drawings</h2>
+            <SectionTitle count={drawings.length}>Drawings</SectionTitle>
             {drawings.length ? (
               <ul style={grid}>{drawings.map((v) => <VisualCard key={v.id} v={v} onDelete={onDelete} />)}</ul>
             ) : (
-              <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>No drawings yet. Start one from the Assembly line example to see how live data drives it.</p>
+              <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>{term ? `No drawings match “${search.trim()}”.` : "No drawings yet. Start one from the Assembly line example to see how live data drives it."}</p>
             )}
           </section>
           <section style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-            <h2 style={sectionTitle}>Built-in symbols</h2>
+            <SectionTitle>Built-in symbols</SectionTitle>
             <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
               They come with the app: place them in any drawing from the Symbols palette. To change one, open it and make your own copy.
             </p>
-            <BuiltinSymbolCards grid={grid} />
+            <BuiltinSymbolCards grid={grid} filter={term} />
           </section>
           <section style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-            <h2 style={sectionTitle}>Shared symbols</h2>
+            <SectionTitle>Shared symbols</SectionTitle>
             <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
               Symbols a workspace published for reuse. Each is a fixed release: it changes only when it's shared again.
             </p>
             <SharedSymbolCards grid={grid} />
           </section>
           <section style={{ display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
-            <h2 style={sectionTitle}>My symbols</h2>
+            <SectionTitle count={symbols.length}>My symbols</SectionTitle>
             {symbols.length ? (
               <ul style={grid}>{symbols.map((v) => <VisualCard key={v.id} v={v} onDelete={onDelete} />)}</ul>
             ) : (
               <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
-                A symbol is a drawing you reuse: draw a station once, then place it many times, each copy with its own name and tags.
+                {term ? `No symbols match “${search.trim()}”.` : "A symbol is a drawing you reuse: draw a station once, then place it many times, each copy with its own name and tags."}
               </p>
             )}
           </section>

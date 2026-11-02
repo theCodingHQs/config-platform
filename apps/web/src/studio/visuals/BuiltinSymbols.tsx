@@ -28,11 +28,11 @@ export function SymbolCard({ to, thumbId, name, description, badges }: { to?: st
   );
 }
 
-export function BuiltinSymbolCards({ grid }: { grid: React.CSSProperties }) {
+export function BuiltinSymbolCards({ grid, filter = "" }: { grid: React.CSSProperties; filter?: string }) {
   return (
     <ul style={grid}>
-      {BUILTIN_SYMBOLS.map((s) => (
-        <li key={s.id} className="card" style={{ padding: "var(--space-3)" }}>
+      {BUILTIN_SYMBOLS.filter((s) => s.name.toLowerCase().includes(filter)).map((s) => (
+        <li key={s.id} className="card visual-card" style={{ padding: "var(--space-3)" }}>
           <SymbolCard to={`/studio/visuals/${s.id}`} thumbId={s.id} name={s.name} description={s.description} />
         </li>
       ))}
