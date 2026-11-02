@@ -10,6 +10,7 @@ import { importRoutes } from './records/import/import-routes.js';
 import { importWizardRoutes } from './records/import/import-wizard-routes.js';
 import { solutionTemplateRoutes } from './workspace/solution-template-routes.js';
 import { pagesRoutes } from './pages/pages-routes.js';
+import { favoriteRoutes } from './favorites/favorite-routes.js';
 import { permissionRoutes } from './permissions/permission-routes.js';
 import { authRoutes, memberRoutes } from './auth/auth-routes.js';
 import { workspaceRoutes } from './workspace/workspace-routes.js';
@@ -347,6 +348,7 @@ export async function buildServer() {
       await protectedApp.register(solutionTemplateRoutes);
       await protectedApp.register(exportRoutes);
       await protectedApp.register(pagesRoutes);
+      await protectedApp.register(favoriteRoutes);
       await protectedApp.register(permissionRoutes);
       await protectedApp.register(workspaceRoutes);
       await protectedApp.register(auditRoutes);

@@ -53,14 +53,19 @@ export const PageManager: React.FC = () => {
   ]);
 
   const createPageMut = useMutation({
-    mutationFn: (values: PageSettingsValues) => createPage(tenantId, {
-      name: values.name,
-      route: `/${[...folderPath(folders, values.folderId), values.slug].join('/')}`,
-      folderId: values.folderId,
-      // Defaults ('theme' width, automatic icon) are omitted
-      ...(values.width === 'full' ? { width: 'full' as const } : {}),
-      ...(values.icon ? { icon: values.icon } : {}),
-    }),
+    mutationFn: async (values: PageSettingsValues) => {
+      const created = await createPage(tenantId, {
+        name: values.name,
+        route: `/${[...folderPath(folders, values.folderId), values.slug].join('/')}`,
+        folderId: values.folderId,
+        // Defaults ('theme' width, automatic icon) are omitted
+        ...(values.width === 'full' ? { width: 'full' as const } : {}),
+        ...(values.icon ? { icon: values.icon } : {}),
+      });
+      // A view (no sidebar entry) is a navigation setting, so it is applied once the page exists
+      if (values.hidden) await updatePageSettings(created.id, { hidden: true });
+      return created;
+    },
     onSuccess: (newPage) => {
       setPageDialog(null);
       queryClient.invalidateQueries({ queryKey: ['page-navigation', tenantId] });
@@ -78,6 +83,7 @@ export const PageManager: React.FC = () => {
       if (values.folderId !== (page.folderId ?? null)) change.folderId = values.folderId;
       if (values.width !== (page.width === 'full' ? 'full' : 'theme')) change.width = values.width;
       if (values.icon !== (page.icon ?? null)) change.icon = values.icon;
+      if (values.hidden !== (page.hidden ?? false)) change.hidden = values.hidden;
       return updatePageSettings(page.id, change);
     },
     onSuccess: () => {

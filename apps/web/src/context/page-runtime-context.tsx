@@ -16,6 +16,7 @@ import type {
 } from "@config-platform/schema";
 import { evaluateExpression, resolveTemplate } from "@config-platform/schema";
 import * as apiClient from "../api/client";
+import { isPageLink } from "../renderer/page-link";
 import {
   executeActionChain,
   type ActionExecutionContext,
@@ -121,6 +122,8 @@ export function PageRuntimeProvider({
   params = DEFAULT_PARAMS,
   user = DEFAULT_USER,
   navigate = (url: string) => {
+    // Links to a page by id only resolve in the running app; the builder preview stays put
+    if (isPageLink(url)) return;
     if (typeof window !== "undefined") {
       window.location.href = url;
     }

@@ -7,6 +7,7 @@ import {
   Navigate,
   useParams,
   useLocation,
+  useSearchParams,
   useNavigate,
 } from "react-router-dom";
 import {
@@ -22,6 +23,8 @@ import { DynamicIcon } from "./components/dynamic-icon";
 import { PageRuntimeProvider } from "./context/page-runtime-context";
 import { AuthProvider, useAuth } from "./context/auth-context";
 import { renderNode } from "./renderer/render-node";
+import { isPageLink, resolvePageLink } from "./renderer/page-link";
+import { SidebarFavorites } from "./favorites/SidebarFavorites";
 const EntityManager = React.lazy(() =>
   import("./studio/EntityManager").then((m) => ({ default: m.EntityManager }))
 );
@@ -111,6 +114,7 @@ import { HeaderMobileMenu } from "./components/header-mobile-menu";
 import {
   Zap,
   Menu,
+  ArrowLeft,
   ChevronLeft,
   ChevronRight,
   Plus,
@@ -138,16 +142,43 @@ const queryClient = new QueryClient({
   },
 });
 
+/** Set on the router state when a page is opened by a page link: where the user came from */
+interface CameFrom {
+  route: string;
+  name: string;
+}
+
 function RuntimeDynamicPage({
   pages,
+  pageNames,
   tenantId,
 }: {
   pages: PageDefinition[];
+  /** Page id → its name, for the "Back to …" button */
+  pageNames: Record<string, string>;
   tenantId: string;
 }) {
-  const params = useParams();
-  const navigate = useNavigate();
-  const currentPath = `/${params["*"] || ""}`;
+  const routeParams = useParams();
+  const location = useLocation();
+  const cameFrom = (location.state as { from?: CameFrom } | null)?.from;
+  const [searchParams] = useSearchParams();
+  const routerNavigate = useNavigate();
+  // Values in the address (?machine=M12) reach the page as {{ params.machine }}
+  const searchKey = searchParams.toString();
+  const params = React.useMemo(() => ({ ...Object.fromEntries(new URLSearchParams(searchKey)), ...routeParams }), [searchKey, routeParams]);
+  const navigate = React.useCallback(
+    (url: string) => {
+      if (!isPageLink(url)) return routerNavigate(url);
+      const target = resolvePageLink(url, pages);
+      if (!target) return console.warn("Link points to a page that is not published:", url);
+      // Remember where the user was, so the page can offer a way back (a view has no sidebar entry)
+      const here = pages.find((page) => page.route === location.pathname);
+      const from: CameFrom | undefined = here && { route: location.pathname + location.search, name: pageNames[here.id] ?? "previous page" };
+      routerNavigate(target, { state: { from } });
+    },
+    [routerNavigate, pages, pageNames, location.pathname, location.search],
+  );
+  const currentPath = `/${routeParams["*"] || ""}`;
 
   const matched = pages.find((p) => p.route === currentPath);
   if (!matched) {
@@ -214,6 +245,11 @@ function RuntimeDynamicPage({
       navigate={navigate}
     >
       <div className={`page-container${matched.width === "full" ? " page-container-full" : ""}`}>
+        {cameFrom && (
+          <button type="button" className="page-back-link" onClick={() => routerNavigate(cameFrom.route)}>
+            <ArrowLeft size={14} /> Back to {cameFrom.name}
+          </button>
+        )}
         {renderNode(matched.root)}
       </div>
     </PageRuntimeProvider>
@@ -409,7 +445,8 @@ function AppContent({ user }: { user: CurrentUser }) {
     queryFn: () => fetchPageNavigation(user.tenantId),
   });
   const publishedPageIds = new Set(effectivePages.map((page) => page.id));
-  const visibleNavigationPages = (pageNavigation?.pages ?? []).filter((page) => publishedPageIds.has(page.id));
+  // Views (hidden pages) are published and routable but have no sidebar entry
+  const visibleNavigationPages = (pageNavigation?.pages ?? []).filter((page) => publishedPageIds.has(page.id) && !page.hidden);
   const folderPageCount = (folderId: string): number =>
     visibleNavigationPages.filter((page) => page.folderId === folderId).length +
     (pageNavigation?.folders ?? [])
@@ -949,6 +986,17 @@ function AppContent({ user }: { user: CurrentUser }) {
             )}
 
             <nav className="app-sidebar-nav">
+              {!searchTerm && (
+                <SidebarFavorites
+                  onNavigate={() => setMobileMenuOpen(false)}
+                  resolve={(pageId) => {
+                    const page = effectivePages.find((candidate) => candidate.id === pageId);
+                    if (!page) return undefined;
+                    const summary = (pageNavigation?.pages ?? []).find((candidate) => candidate.id === pageId);
+                    return { route: page.route, name: summary?.name?.trim() || getPageTitle(page), icon: getPageIcon(page, metadata) };
+                  }}
+                />
+              )}
               {searchTerm && !desktopCollapsed ? (
                 searchResults.length > 0 ? (
                   searchResults
@@ -1009,7 +1057,8 @@ function AppContent({ user }: { user: CurrentUser }) {
                 path="/"
                 element={
                   effectivePages.length > 0 ? (
-                    <Navigate to={effectivePages[0].route} replace />
+                    // The first page in the sidebar; views are only reached by links
+                    <Navigate to={(visibleNavigationPages[0] && effectivePages.find((page) => page.id === visibleNavigationPages[0].id)?.route) ?? effectivePages[0].route} replace />
                   ) : (
                     <Navigate to="/studio/pages" replace />
                   )
@@ -1020,6 +1069,7 @@ function AppContent({ user }: { user: CurrentUser }) {
                 element={
                   <RuntimeDynamicPage
                     pages={effectivePages}
+                    pageNames={Object.fromEntries((pageNavigation?.pages ?? []).map((page) => [page.id, page.name]))}
                     tenantId={user.tenantId}
                   />
                 }

@@ -864,6 +864,8 @@ export interface PageSummary {
   updatedAt: string;
   folderId?: string | null;
   position?: number;
+  /** A view: opened from links on other pages, with no sidebar entry. */
+  hidden?: boolean;
   allowedRoles?: string[] | null;
   /** Navigation icon override; null/absent = derived automatically. */
   icon?: string | null;
@@ -888,6 +890,8 @@ export interface PageSettingsUpdate {
   width?: "theme" | "full";
   /** null clears the override. */
   icon?: string | null;
+  /** True = a view (not listed in the sidebar). */
+  hidden?: boolean;
 }
 
 export async function updatePageSettings(pageId: string, data: PageSettingsUpdate): Promise<PageSummary> {

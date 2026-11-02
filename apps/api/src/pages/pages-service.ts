@@ -33,6 +33,8 @@ export interface PageSummary {
   updatedAt: string;
   folderId?: string | null;
   position?: number;
+  /** A view: opened from links on other pages, with no sidebar entry. */
+  hidden?: boolean;
   allowedRoles?: string[] | null;
   /** Navigation icon override (null = derived automatically). */
   icon?: string | null;
@@ -57,6 +59,8 @@ export interface PageSettingsInput {
   folderId?: string | null;
   width?: PageWidth;
   icon?: string | null;
+  /** True = a view (not listed in the sidebar). */
+  hidden?: boolean;
 }
 
 const FOLDER_COLUMNS = `id, parent_id AS "parentId", name, slug, position, icon`;
@@ -289,6 +293,7 @@ export class PagesService {
   async listPages(tenantId: string): Promise<PageSummary[]> {
     const res = await pool.query(
       `SELECT id, name, route, version, nav_folder_id AS "folderId", nav_position AS position,
+              nav_hidden AS hidden,
               allowed_roles AS "allowedRoles",
               COALESCE(draft->>'icon', published->>'icon') AS icon,
               COALESCE(draft->>'width', published->>'width') AS width,
@@ -505,6 +510,10 @@ export class PagesService {
           `UPDATE public.page_def SET nav_folder_id = $3, nav_position = $4 WHERE tenant_id = $1 AND id = $2`,
           [tenantId, pageId, folderId, nextPosition.rows[0].position]
         );
+      }
+
+      if (input.hidden !== undefined) {
+        await client.query(`UPDATE public.page_def SET nav_hidden = $3 WHERE tenant_id = $1 AND id = $2`, [tenantId, pageId, input.hidden]);
       }
 
       // Width/icon live in the page definition; set or remove the key in draft and published.

@@ -169,6 +169,8 @@ export interface PageSettingsValues {
   slug: string;
   width: "theme" | "full";
   icon: string | null;
+  /** A view: no sidebar entry, opened from links on other pages. */
+  hidden: boolean;
 }
 
 export function PageSettingsDialog({
@@ -193,6 +195,7 @@ export function PageSettingsDialog({
   const [slugTouched, setSlugTouched] = useState(isEdit);
   const [width, setWidth] = useState<"theme" | "full">(page?.width === "full" ? "full" : "theme");
   const [icon, setIcon] = useState<string | null>(page?.icon ?? null);
+  const [hidden, setHidden] = useState(page?.hidden ?? false);
 
   const route = `/${[...folderPath(folders, folderId), slug].filter(Boolean).join("/")}`;
   const slugValid = /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug);
@@ -209,7 +212,7 @@ export function PageSettingsDialog({
             type="button"
             className="btn btn-primary"
             disabled={!canSubmit}
-            onClick={() => onSubmit({ name: name.trim(), folderId, slug, width, icon })}
+            onClick={() => onSubmit({ name: name.trim(), folderId, slug, width, icon, hidden })}
           >
             {isEdit ? "Save Changes" : "Create Page"}
           </button>
@@ -262,6 +265,15 @@ export function PageSettingsDialog({
           : "Off: follows the content width in Theme → Layout."}
         checked={width === "full"}
         onChange={(full) => setWidth(full ? "full" : "theme")}
+      />
+      <SwitchField
+        label="Sidebar"
+        title="Show in sidebar"
+        description={hidden
+          ? "Off: this page is a view. It has no sidebar entry and is opened from links on other pages."
+          : "On: listed in the sidebar under its group."}
+        checked={!hidden}
+        onChange={(show) => setHidden(!show)}
       />
       <IconOverrideField
         icon={icon}

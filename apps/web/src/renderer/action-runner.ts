@@ -1,6 +1,7 @@
 import type { ActionDefinition } from '@config-platform/schema';
 import { evaluateExpression, resolveTemplate, type ExpressionScope } from '@config-platform/schema';
 import * as apiClient from '../api/client';
+import { buildPageLink } from './page-link';
 
 export interface ActionExecutionContext {
   tenantId: string;
@@ -75,6 +76,15 @@ export async function executeActionChain(
 
       switch (action.type) {
         case 'navigate': {
+          // "Open a page": the page by id, with values (each may be an expression) for its params
+          if (params.pageId) {
+            const values: Record<string, string> = {};
+            for (const [key, value] of Object.entries(params.with || {})) {
+              values[key] = String(resolveValue(value, scope) ?? '');
+            }
+            context.navigate(buildPageLink(String(params.pageId), values));
+            break;
+          }
           const rawUrl = params.url || params.to || '/';
           const resolvedUrl = String(resolveValue(rawUrl, scope));
           context.navigate(resolvedUrl);

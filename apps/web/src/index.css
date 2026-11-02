@@ -1806,3 +1806,121 @@ input:-webkit-autofill:active {
 .visual-card-delete:focus-visible {
   opacity: 1;
 }
+
+/* "Back to …" on a page opened from a link on another page */
+.page-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  margin-bottom: var(--spacing-3);
+  padding: var(--spacing-1) var(--spacing-2);
+  border: none;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.page-back-link:hover {
+  background-color: var(--surface-hover);
+  color: var(--accent);
+}
+
+/* Favorites: the status bar star, and the sidebar's Favorites section */
+.app-favorite-toggle.is-saved svg {
+  fill: var(--warning);
+  color: var(--warning);
+}
+
+.app-favorite-toggle:not(.is-saved):hover svg {
+  color: var(--warning);
+}
+
+.app-sidebar-favorites {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-1);
+  padding-bottom: var(--spacing-2);
+  margin-bottom: var(--spacing-1);
+  border-bottom: var(--border-width-sm) solid var(--border-subtle);
+}
+
+.app-sidebar-favorites-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: var(--spacing-1) var(--spacing-3);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.app-sidebar-favorites-title svg {
+  color: var(--warning);
+  fill: var(--warning);
+}
+
+.app-sidebar-favorite {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.app-sidebar-favorite .app-sidebar-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-sidebar-favorite-remove {
+  position: absolute;
+  right: var(--spacing-2);
+  display: inline-flex;
+  padding: var(--spacing-1);
+  border: none;
+  border-radius: var(--radius-control);
+  background: var(--surface-hover);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.app-sidebar-favorite:hover .app-sidebar-favorite-remove,
+.app-sidebar-favorite-remove:focus-visible {
+  opacity: 1;
+}
+
+.app-sidebar-favorite-remove:hover {
+  color: var(--danger);
+}
+
+.app-sidebar-favorite-edit {
+  margin: 0 var(--spacing-2);
+  padding: var(--spacing-1) var(--spacing-2);
+  border: var(--border-width-sm) solid var(--accent);
+  border-radius: var(--radius-control);
+  background: var(--bg);
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-subtle);
+}
+
+/* Icon-only sidebar: the page icons, with no title or remove button */
+.app-sidebar.collapsed .app-sidebar-favorites {
+  align-items: center;
+}
+
+.app-sidebar.collapsed .app-sidebar-favorites-title span,
+.app-sidebar.collapsed .app-sidebar-favorite-remove,
+.app-sidebar.collapsed .app-sidebar-favorite-edit {
+  display: none;
+}
+
+.app-sidebar.collapsed .app-sidebar-favorites-title {
+  padding: var(--spacing-1) 0;
+}

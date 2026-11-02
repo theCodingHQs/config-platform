@@ -10,6 +10,7 @@ import { useOptionalAuth } from "../context/auth-context";
 import { useOnline } from "./use-online";
 import { useServerHealth, type ServerHealth } from "./use-server-health";
 import { useLiveHealth, type LiveHealth } from "./use-live-health";
+import { FavoriteToggle } from "../favorites/FavoriteToggle";
 
 type Tone = "ok" | "warn" | "bad" | "idle";
 type Panel = "internet" | "server" | "live";
@@ -141,6 +142,7 @@ export function StatusIndicators() {
 
   return (
     <div ref={ref} className="app-statusbar-indicators" role="group" aria-label="Connection status">
+      <FavoriteToggle />
       <Indicator label={online ? "Internet: online" : "Internet: offline"} open={open === "internet"} onClick={() => toggle("internet")}>
         {online ? <Wifi className="app-status-icon-ok" size="1.15em" aria-hidden="true" /> : <WifiOff className="app-status-icon-bad" size="1.15em" aria-hidden="true" />}
       </Indicator>

@@ -660,6 +660,41 @@ export const catalogMigrations: CatalogMigration[] = [
       `);
     },
   },
+  {
+    version: 28,
+    name: '028_page_hidden_from_sidebar',
+    up: async (client: PoolClient) => {
+      // A "view" is a page opened from links on other pages; it has no sidebar entry
+      await client.query(`
+        ALTER TABLE public.page_def
+          ADD COLUMN IF NOT EXISTS nav_hidden BOOLEAN NOT NULL DEFAULT FALSE;
+      `);
+    },
+  },
+  {
+    version: 29,
+    name: '029_user_favorite',
+    up: async (client: PoolClient) => {
+      // A person's favorite pages (with the values a view was opened with); gone with the user,
+      // the workspace or the page
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS public.user_favorite (
+          id VARCHAR(64) PRIMARY KEY,
+          tenant_id VARCHAR(64) NOT NULL REFERENCES public.tenant(id) ON DELETE CASCADE,
+          user_id VARCHAR(64) NOT NULL REFERENCES public.app_user(id) ON DELETE CASCADE,
+          page_id VARCHAR(64) NOT NULL REFERENCES public.page_def(id) ON DELETE CASCADE,
+          params JSONB NOT NULL DEFAULT '{}'::jsonb,
+          label VARCHAR(128),
+          position INT NOT NULL DEFAULT 0,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_user_favorite_unique
+          ON public.user_favorite(tenant_id, user_id, page_id, params);
+        CREATE INDEX IF NOT EXISTS idx_user_favorite_user
+          ON public.user_favorite(tenant_id, user_id, position);
+      `);
+    },
+  },
 ];
 
 /**

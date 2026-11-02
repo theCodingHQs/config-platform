@@ -161,8 +161,11 @@ export async function pagesRoutes(fastify: FastifyInstance) {
     if (body.icon !== undefined && body.icon !== null && typeof body.icon !== 'string') {
       return reply.status(400).send({ error: 'icon must be an icon name or null' });
     }
-    const { name, slug, folderId, width, icon } = body;
-    const updated = await pagesService.updatePageSettings(tenantId, id, { name, slug, folderId, width, icon });
+    if (body.hidden !== undefined && typeof body.hidden !== 'boolean') {
+      return reply.status(400).send({ error: 'hidden must be true or false' });
+    }
+    const { name, slug, folderId, width, icon, hidden } = body;
+    const updated = await pagesService.updatePageSettings(tenantId, id, { name, slug, folderId, width, icon, hidden });
 
     await auditLogService.log({
       tenantId,
@@ -171,7 +174,7 @@ export async function pagesRoutes(fastify: FastifyInstance) {
       action: 'page.settings',
       entityType: 'page',
       entityId: id,
-      afterState: { name: updated.name, route: updated.route, folderId: updated.folderId, width: updated.width, icon: updated.icon },
+      afterState: { name: updated.name, route: updated.route, folderId: updated.folderId, width: updated.width, icon: updated.icon, hidden: updated.hidden },
     });
 
     return updated;

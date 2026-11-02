@@ -415,6 +415,23 @@ describe('Pages Service & Publishing', () => {
     await pagesService.deleteFolder(tenantId, group.id);
   });
 
+  it('makes a page a view: still published and routable, flagged hidden from the sidebar', async () => {
+    const page = await pagesService.createPage(tenantId, { name: 'Machine Detail View', route: '/machine-detail-view' });
+    await pagesService.publishPage(tenantId, page.id);
+    expect((await pagesService.listPages(tenantId)).find((p) => p.id === page.id)?.hidden).toBe(false);
+
+    const res = await server.inject({ method: 'PUT', url: `/api/pages/${page.id}/settings`, headers: auth.headers, payload: { hidden: true } });
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toMatchObject({ hidden: true, route: '/machine-detail-view' });
+    expect((await pagesService.listPublishedPages(tenantId)).some((p) => p.id === page.id)).toBe(true);
+
+    const bad = await server.inject({ method: 'PUT', url: `/api/pages/${page.id}/settings`, headers: auth.headers, payload: { hidden: 'yes' } });
+    expect(bad.statusCode).toBe(400);
+
+    expect((await pagesService.updatePageSettings(tenantId, page.id, { hidden: false })).hidden).toBe(false);
+    await pagesService.deletePage(tenantId, page.id);
+  });
+
   it('deletes a page definition', async () => {
     const res = await pagesService.deletePage(tenantId, createdPageId);
     expect(res.success).toBe(true);

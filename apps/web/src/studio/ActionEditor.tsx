@@ -2,6 +2,7 @@ import React from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 import type { ActionDefinition, ActionType } from '@config-platform/schema';
 import { ExpressionInput } from './ExpressionInput';
+import { NavigateActionFields } from './NavigateActionFields';
 
 export interface ActionEditorProps {
   label: string;
@@ -255,16 +256,7 @@ function ActionParamsFields({
       );
 
     case 'navigate':
-      return (
-        <div>
-          <ExpressionInput
-            label="URL / Path"
-            value={params.url || ''}
-            placeholder="e.g. /items/{{ row.id }}"
-            onChange={(url) => onChange({ ...params, url })}
-          />
-        </div>
-      );
+      return <NavigateActionFields params={params} onChange={onChange} />;
 
     case 'refetch':
       return (
