@@ -42,7 +42,7 @@ export const devOutbox: SentMail[] = [];
 
 export class EmailNotConfiguredError extends Error {
   constructor() {
-    super('Email is not set up on this server yet. A platform owner can set it up under Platform setup, or use your own email account under Settings → Email.');
+    super('Email is not set up on this server yet. A platform admin can set it up under Platform setup, or use your own email account under Settings → Email.');
   }
 }
 

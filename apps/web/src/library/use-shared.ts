@@ -1,35 +1,24 @@
-/** Shared items of one kind, and the changes their owners make to them */
+/** The workspace's shared items of one kind, and taking one out of the library */
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { SharedKind } from "@config-platform/schema";
-import { useOptionalAuth } from "../context/auth-context";
 import { SHARED_KEY, sharedApi, sharedListKey } from "./shared-api";
 
-/** Platform owners see every workspace's items, to choose which every workspace gets */
 export function useSharedItems(kind: SharedKind) {
-  const everyWorkspace = Boolean(useOptionalAuth()?.isPlatformAdmin);
-  const query = useQuery({ queryKey: sharedListKey(kind, everyWorkspace), queryFn: () => sharedApi.list(kind, everyWorkspace) });
-  return { ...query, everyWorkspace };
+  return useQuery({ queryKey: sharedListKey(kind), queryFn: () => sharedApi.list(kind) });
 }
 
-/** Sharing with every workspace (platform owners) and stopping sharing (the publishing workspace) */
+/** Stopping sharing (refused while something still uses it, and says what) */
 export function useSharedChange() {
   const queryClient = useQueryClient();
   const [problem, setProblem] = useState<string | null>(null);
-  const onSettled = () => queryClient.invalidateQueries({ queryKey: SHARED_KEY });
-  const everywhere = useMutation({
-    mutationFn: ({ id, on }: { id: string; on: boolean }) => sharedApi.setEverywhere(id, on),
-    onMutate: () => setProblem(null),
-    onError: (err: Error) => setProblem(err.message),
-    onSettled,
-  });
   const unpublish = useMutation({
     mutationFn: (id: string) => sharedApi.unpublish(id),
     onMutate: () => setProblem(null),
     onError: (err: Error) => setProblem(err.message),
-    onSettled,
+    onSettled: () => queryClient.invalidateQueries({ queryKey: SHARED_KEY }),
   });
-  return { everywhere, unpublish, problem };
+  return { unpublish, problem };
 }
 
 export type SharedChange = ReturnType<typeof useSharedChange>;

@@ -135,7 +135,7 @@ class PlatformSettingsService {
     if (!email || email.provider === 'none') return null;
     const from = formatFrom(senderName || email.fromName || '', email.fromAddress || DEFAULT_FROM);
     if (email.provider === 'resend') {
-      if (!email.resendApiKeyEncrypted) throw new Error('The email service key is missing. A platform owner needs to enter it under Platform setup.');
+      if (!email.resendApiKeyEncrypted) throw new Error('The email service key is missing. A platform admin needs to enter it under Platform setup.');
       await this.sendResend(decryptSecret(email.resendApiKeyEncrypted), from, mail);
       return { from, via: 'platform-resend' };
     }
@@ -266,7 +266,7 @@ class PlatformSettingsService {
        WHERE id = $1 AND (SELECT COUNT(*) FROM public.app_user WHERE is_platform_admin) > 1`,
       [userId]
     );
-    if (!res.rowCount) throw new PlatformSettingsError('The server needs at least one platform owner.', 409);
+    if (!res.rowCount) throw new PlatformSettingsError('The server needs at least one platform admin.', 409);
   }
 }
 

@@ -1,7 +1,8 @@
 /**
- * The shared library: things a workspace has published for reuse (symbols for now; templates
- * later). Published items are frozen releases: changing the working copy changes nothing until
- * it's published again. A platform owner can share any item with every workspace.
+ * The shared library: things a workspace has published for its own people to reuse (symbols, page
+ * and export templates, solutions). Published items are frozen releases: changing the working copy
+ * changes nothing until it's published again. Nothing is shared between workspaces: they're run by
+ * people who don't know each other; what every workspace gets is Built-in, shipped in code.
  *
  * Three levels, everywhere in the app: Built-in (ships with the app), Shared (published), Mine
  * (the workspace's own, being worked on).
@@ -11,7 +12,7 @@ import { z } from 'zod';
 export const SHARED_KINDS = ['symbol', 'page-template', 'export-template', 'solution'] as const;
 export type SharedKind = (typeof SHARED_KINDS)[number];
 
-/** Kinds tied to the publishing workspace's entities, which another workspace maps onto its own */
+/** Kinds built on the workspace's entities: using one points it at them as they are now (one may have been deleted or replaced since) */
 export const TEMPLATE_KINDS: readonly SharedKind[] = ['page-template', 'export-template'];
 
 /** Drawings place a shared symbol by `shared:<item id>`, always showing its latest release */
@@ -38,13 +39,7 @@ export interface SharedItemSummary {
   description: string;
   /** Release number: 1 when first published, one more each time it's published again */
   version: number;
-  /** Shared with every workspace (by a platform owner), not only the one that published it */
-  everywhere: boolean;
-  /** Name of the workspace that published it */
-  workspace: string;
-  /** Published by the signed-in person's workspace */
-  own: boolean;
-  /** What it was published from, for the publishing workspace only */
+  /** What it was published from (a symbol, page, export template; a solution's name key) */
   sourceId: string | null;
   publishedAt: string;
 }
@@ -53,7 +48,7 @@ export interface SharedItem extends SharedItemSummary {
   content: unknown;
 }
 
-/** An entity a template uses, as it was in the publishing workspace */
+/** An entity a template uses, as it was when the template was shared */
 export interface TemplateEntity {
   id: string;
   name: string;

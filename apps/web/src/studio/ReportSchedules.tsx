@@ -118,7 +118,7 @@ export function ReportSchedules() {
                 {user?.isPlatformAdmin ? (
                   <>, or set up built-in sending under <Link to="/studio/platform">Platform setup</Link>.</>
                 ) : (
-                  ", or ask your platform owner to set up built-in sending."
+                  ", or ask your platform admin to set up built-in sending."
                 )}
               </>
             ) : (

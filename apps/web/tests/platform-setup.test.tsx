@@ -90,7 +90,7 @@ describe('Platform setup screen', () => {
     await waitFor(() => expect(update).toHaveBeenCalledWith({ signupMode: 'open', publicUrl: 'https://apps.acme.com/' }));
   });
 
-  it('adds another platform owner; the only owner cannot be removed', async () => {
+  it('adds another platform admin; the only owner cannot be removed', async () => {
     vi.spyOn(apiClient, 'fetchPlatformSettings').mockResolvedValue(baseView);
     const add = vi.spyOn(apiClient, 'addPlatformAdmin').mockResolvedValue([
       { id: 'u1', email: 'owner@factoryapps.io' },
@@ -99,7 +99,7 @@ describe('Platform setup screen', () => {
     renderPage();
     expect(await screen.findByText('(you)')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Remove owner@/ })).toBeNull();
-    fireEvent.change(screen.getByLabelText('Email of the new platform owner'), { target: { value: 'ops@factoryapps.io' } });
+    fireEvent.change(screen.getByLabelText('Email of the new platform admin'), { target: { value: 'ops@factoryapps.io' } });
     fireEvent.click(screen.getByRole('button', { name: /Add owner/ }));
     await waitFor(() => expect(add).toHaveBeenCalledWith('ops@factoryapps.io'));
     expect(await screen.findByText('ops@factoryapps.io')).toBeTruthy();

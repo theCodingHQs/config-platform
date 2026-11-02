@@ -6,8 +6,8 @@ import React, { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { InstallResult, SharedItemSummary } from "@config-platform/schema";
 import { useOptionalMetadata } from "../context/metadata-context";
-import { SHARED_KEY, sharedApi, usable } from "./shared-api";
-import { EverywhereButton, SharedBadges, StopSharingButton } from "./SharedControls";
+import { SHARED_KEY, sharedApi } from "./shared-api";
+import { SharedBadges, StopSharingButton } from "./SharedControls";
 import { SolutionInstall } from "./SolutionInstall";
 import { useSharedChange, useSharedItems } from "./use-shared";
 
@@ -72,7 +72,7 @@ function ShareSolutionForm({ onDone }: { onDone: () => void }) {
 }
 
 export function SharedSolutions({ onInstalled }: { onInstalled: (result: InstallResult, name: string) => void }) {
-  const { data = [], everyWorkspace, isLoading } = useSharedItems("solution");
+  const { data = [], isLoading } = useSharedItems("solution");
   const change = useSharedChange();
   const [sharing, setSharing] = useState(false);
   const [installing, setInstalling] = useState<SharedItemSummary | null>(null);
@@ -83,7 +83,7 @@ export function SharedSolutions({ onInstalled }: { onInstalled: (result: Install
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-        <p style={{ ...muted, margin: 0, flex: 1 }}>Solutions a workspace shared: its entities, with their pages and Excel templates. Installing adds a copy you can change; the shared one doesn't change.</p>
+        <p style={{ ...muted, margin: 0, flex: 1 }}>Solutions shared in this workspace: entities, with their pages and Excel templates. Installing adds a copy you can change; the shared one doesn't change.</p>
         {!sharing && (
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => setSharing(true)}>
             Share a solution…
@@ -106,13 +106,10 @@ export function SharedSolutions({ onInstalled }: { onInstalled: (result: Install
               </span>
               {s.description && <span style={muted}>{s.description}</span>}
               <div style={{ display: "flex", gap: "var(--space-1)", flexWrap: "wrap", marginTop: "auto" }}>
-                {usable(s) && (
-                  <button type="button" className="btn btn-primary btn-sm" onClick={() => setInstalling(s)}>
-                    Install…
-                  </button>
-                )}
-                {everyWorkspace && <EverywhereButton item={s} change={change} small />}
-                {s.own && <StopSharingButton item={s} change={change} small />}
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => setInstalling(s)}>
+                  Install…
+                </button>
+                <StopSharingButton item={s} change={change} small />
               </div>
             </div>
           ))}

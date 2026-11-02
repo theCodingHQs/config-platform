@@ -84,7 +84,7 @@ function RadioCard({ name, checked, disabled, onChange, title, body }: { name: s
   );
 }
 
-/** Studio → Platform: settings for the whole server (every workspace), for platform owners. */
+/** Studio → Platform: settings for the whole server (every workspace), for platform admins. */
 export function PlatformSetup() {
   const { data: view, isLoading, error } = useQuery({ queryKey: PLATFORM_KEY, queryFn: fetchPlatformSettings });
 
@@ -98,7 +98,7 @@ export function PlatformSetup() {
           <Server size="1em" style={{ color: "var(--accent)" }} /> Platform setup
         </h1>
         <p style={{ margin: "var(--space-1) 0 0", color: "var(--text-muted)", fontSize: "var(--font-size-sm)" }}>
-          Settings for this whole server: they apply to every workspace on it. Only platform owners see this page.
+          Settings for this whole server: they apply to every workspace on it. Only platform admins see this page.
         </p>
       </div>
       <EmailServiceSection view={view} />
@@ -352,7 +352,7 @@ function OwnersSection({ view }: { view: PlatformSettingsView }) {
     mutationFn: () => addPlatformAdmin(email.trim()),
     onSuccess: (admins) => {
       setAdmins(admins);
-      notify("success", `${email.trim()} is now a platform owner.`);
+      notify("success", `${email.trim()} is now a platform admin.`);
       setEmail("");
     },
     onError: (err: Error) => notify("error", err.message),
@@ -361,13 +361,13 @@ function OwnersSection({ view }: { view: PlatformSettingsView }) {
     mutationFn: (userId: string) => removePlatformAdmin(userId),
     onSuccess: (admins) => {
       setAdmins(admins);
-      notify("success", "Platform owner removed.");
+      notify("success", "Platform admin removed.");
     },
     onError: (err: Error) => notify("error", err.message),
   });
 
   return (
-    <Section icon={<Users size="1em" />} title="Platform owners" intro="People who can open this page. Being a platform owner doesn't give access to any workspace's data.">
+    <Section icon={<Users size="1em" />} title="Platform admins" intro="People who can open this page. Being a platform admin doesn't give access to any workspace's data.">
       <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
         {view.platformAdmins.map((a) => (
           <li key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "var(--space-2)", padding: "var(--space-2) var(--space-3)", border: "var(--border-width) solid var(--border)", borderRadius: "var(--radius-control)" }}>
@@ -381,8 +381,8 @@ function OwnersSection({ view }: { view: PlatformSettingsView }) {
                 className="btn btn-ghost btn-sm btn-icon"
                 style={{ color: "var(--danger)" }}
                 aria-label={`Remove ${a.email}`}
-                title="Remove as platform owner"
-                onClick={() => confirm(`Remove ${a.email} as a platform owner?`) && remove.mutate(a.id)}
+                title="Remove as platform admin"
+                onClick={() => confirm(`Remove ${a.email} as a platform admin?`) && remove.mutate(a.id)}
               >
                 <Trash2 size="1em" />
               </button>
@@ -403,7 +403,7 @@ function OwnersSection({ view }: { view: PlatformSettingsView }) {
           style={{ flex: "1 1 16rem", width: "auto" }}
           value={email}
           placeholder="Email of an existing account"
-          aria-label="Email of the new platform owner"
+          aria-label="Email of the new platform admin"
           onChange={(ev) => setEmail(ev.target.value)}
         />
         <button type="submit" className="btn btn-secondary" disabled={!email.trim() || add.isPending}>

@@ -27,17 +27,12 @@ function parseKind(raw: unknown): SharedKind {
 
 /** "used by …" for a refusal; null when nothing uses it (templates are copied when used, so never) */
 async function inUse(tenantId: string, id: string): Promise<string | null> {
-  const { here, elsewhere } = await sharedRepository.usage(tenantId, sharedRef(id));
-  const parts = [
-    ...(here.length ? [quoted(here)] : []),
-    ...(elsewhere ? [`${elsewhere} ${elsewhere === 1 ? 'visual' : 'visuals'} in other workspaces`] : []),
-  ];
-  return parts.length ? parts.join(' and ') : null;
+  const names = await sharedRepository.usage(tenantId, sharedRef(id));
+  return names.length ? quoted(names) : null;
 }
 
 export const sharedService = {
-  /** `everyWorkspace`: platform owners see every workspace's items, to choose which to share everywhere */
-  list: (tenantId: string, kind: unknown, everyWorkspace = false): Promise<SharedItemSummary[]> => sharedRepository.list(tenantId, parseKind(kind), everyWorkspace),
+  list: (tenantId: string, kind: unknown): Promise<SharedItemSummary[]> => sharedRepository.list(tenantId, parseKind(kind)),
 
   async get(tenantId: string, id: string): Promise<SharedItem> {
     return (await sharedRepository.get(tenantId, id)) ?? Promise.reject(notFound());
@@ -48,7 +43,7 @@ export const sharedService = {
     const parsed = PublishInputSchema.safeParse(body);
     if (!parsed.success) throw problems(parsed.error.issues);
     const { kind, sourceId, description } = parsed.data;
-    const published = (await sharedRepository.list(tenantId, kind)).find((s) => s.own && s.sourceId === sourceId);
+    const published = (await sharedRepository.list(tenantId, kind)).find((s) => s.sourceId === sourceId);
     const { name, content } = await PUBLISHERS[kind](tenantId, parsed.data, published?.id);
     const id = await sharedRepository.publish(tenantId, userId, { kind, sourceId, name, description, content });
     return this.get(tenantId, id);
@@ -73,22 +68,9 @@ export const sharedService = {
     return installSolution(tenantId, await solutionContent(this.get(tenantId, id)), body, session);
   },
 
-  /** Platform owners: share with every workspace, or stop (not while other workspaces use it) */
-  async setEverywhere(id: string, everywhere: boolean): Promise<{ id: string; everywhere: boolean }> {
-    const owner = await sharedRepository.ownerOf(id);
-    if (!owner) throw notFound();
-    if (!everywhere) {
-      const users = (await sharedRepository.usage(owner, sharedRef(id))).elsewhere;
-      if (users) throw new LiveSettingsError(`${users} ${users === 1 ? 'visual' : 'visuals'} in other workspaces use it. They need to stop using it before it can stop being shared everywhere.`, 409);
-    }
-    await sharedRepository.setEverywhere(id, everywhere);
-    return { id, everywhere };
-  },
-
-  /** The publishing workspace takes it out of the library (not while anything uses it) */
+  /** Taking it out of the library (not while anything uses it) */
   async unpublish(tenantId: string, id: string): Promise<SharedItem> {
     const before = await this.get(tenantId, id);
-    if (!before.own) throw new LiveSettingsError('Only the workspace that shared it can stop sharing it', 403);
     const users = await inUse(tenantId, id);
     if (users) throw new LiveSettingsError(`It's used by ${users}. Remove it from there first.`, 409);
     await sharedRepository.remove(tenantId, id);

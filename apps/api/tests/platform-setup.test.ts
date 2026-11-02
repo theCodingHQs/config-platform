@@ -10,11 +10,11 @@ import { platformSettings } from '../src/platform/platform-settings.js';
 import { workspaceMailer } from '../src/email/workspace-mailer.js';
 import { createTestSession, cleanupTestUser, type TestSession } from './test-session-helper.js';
 
-describe('Platform setup (server-wide settings for platform owners)', () => {
+describe('Platform setup (server-wide settings for platform admins)', () => {
   let server: FastifyInstance;
   const tenantId = `plat_${crypto.randomBytes(3).toString('hex')}`;
   const storageKey = `test_${crypto.randomBytes(4).toString('hex')}`;
-  let owner: TestSession; // platform owner
+  let owner: TestSession; // platform admin
   let workspaceOwner: TestSession; // owns a workspace, not the platform
   const ENV_KEYS = ['RESEND_API_KEY', 'SMTP_URL', 'EMAIL_FROM', 'SIGNUP_MODE', 'PUBLIC_URL', 'APP_URL'] as const;
   const savedEnv: Record<string, string | undefined> = {};
@@ -49,7 +49,7 @@ describe('Platform setup (server-wide settings for platform owners)', () => {
   const api = (s: TestSession, method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, payload?: any) =>
     server.inject({ method, url: `/api${url}`, headers: s.headers, payload });
 
-  it('only platform owners can open it, whatever their workspace role', async () => {
+  it('only platform admins can open it, whatever their workspace role', async () => {
     expect((await api(workspaceOwner, 'GET', '/platform/settings')).statusCode).toBe(403);
     expect((await api(workspaceOwner, 'PUT', '/platform/settings', { signupMode: 'open' })).statusCode).toBe(403);
     const me = JSON.parse((await api(owner, 'GET', '/auth/me')).body);

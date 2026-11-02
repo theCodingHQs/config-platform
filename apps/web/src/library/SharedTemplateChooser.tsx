@@ -1,13 +1,13 @@
 /**
- * Shared page or export templates to start from: pick one, choose stand-ins for its entities when
- * it came from another workspace, and use it. The publishing workspace and platform owners manage
- * sharing from here too.
+ * The workspace's shared page or export templates to start from: pick one, choose stand-ins for
+ * any of its entities that aren't in the workspace any more, and use it. Sharing can be stopped
+ * from here too.
  */
 import React, { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { SharedKind, TemplateContent, UsedTemplate } from "@config-platform/schema";
-import { sharedApi, usable } from "./shared-api";
-import { EverywhereButton, SharedBadges, StopSharingButton } from "./SharedControls";
+import { sharedApi } from "./shared-api";
+import { SharedBadges, StopSharingButton } from "./SharedControls";
 import { EntityMapper, allChosen, defaultEntityMap, type LocalEntity } from "./EntityMapper";
 import { useSharedChange, useSharedItems } from "./use-shared";
 
@@ -24,7 +24,7 @@ interface Props {
 const muted = { fontSize: "var(--font-size-xs)", color: "var(--text-muted)" } as const;
 
 export function SharedTemplateChooser({ kind, entities, fixedFor, onUse, emptyHint }: Props) {
-  const { data = [], everyWorkspace, isLoading } = useSharedItems(kind);
+  const { data = [], isLoading } = useSharedItems(kind);
   const change = useSharedChange();
   const [chosenId, setChosenId] = useState<string | null>(null);
   const [entityMap, setEntityMap] = useState<Record<string, string>>({});
@@ -53,8 +53,8 @@ export function SharedTemplateChooser({ kind, entities, fixedFor, onUse, emptyHi
           const selected = s.id === chosenId;
           return (
             <div key={s.id} style={{ padding: "var(--space-3)", borderRadius: "var(--radius-surface)", border: `var(--border-width-sm) solid ${selected ? "var(--accent)" : "var(--border)"}`, background: selected ? "var(--accent-subtle)" : "transparent", display: "flex", flexDirection: "column", gap: "var(--space-1)" }}>
-              <label style={{ display: "flex", gap: "var(--space-2)", alignItems: "flex-start", cursor: usable(s) ? "pointer" : "default" }}>
-                <input type="radio" name={`shared-${kind}`} checked={selected} disabled={!usable(s)} onChange={() => setChosenId(s.id)} />
+              <label style={{ display: "flex", gap: "var(--space-2)", alignItems: "flex-start", cursor: "pointer" }}>
+                <input type="radio" name={`shared-${kind}`} checked={selected} onChange={() => setChosenId(s.id)} />
                 <span style={{ display: "flex", flexDirection: "column", gap: "var(--space-1)", minWidth: 0 }}>
                   <strong style={{ fontSize: "var(--font-size-sm)" }}>{s.name}</strong>
                   <span style={{ display: "flex", gap: "var(--space-1)", flexWrap: "wrap" }}>
@@ -63,12 +63,9 @@ export function SharedTemplateChooser({ kind, entities, fixedFor, onUse, emptyHi
                   {s.description && <span style={muted}>{s.description}</span>}
                 </span>
               </label>
-              {(everyWorkspace || s.own) && (
-                <div style={{ display: "flex", gap: "var(--space-1)", flexWrap: "wrap" }}>
-                  {everyWorkspace && <EverywhereButton item={s} change={change} small />}
-                  {s.own && <StopSharingButton item={s} change={change} small onStopped={() => setChosenId(null)} />}
-                </div>
-              )}
+              <div>
+                <StopSharingButton item={s} change={change} small onStopped={() => setChosenId(null)} />
+              </div>
             </div>
           );
         })}

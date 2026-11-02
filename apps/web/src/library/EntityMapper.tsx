@@ -1,4 +1,4 @@
-/** Using a template built on another workspace's entities: which of this workspace's entities stands in for each */
+/** Using a template whose entities aren't all in the workspace any more (deleted or replaced since): which entity stands in for each */
 import React from "react";
 import type { TemplateEntity } from "@config-platform/schema";
 
@@ -36,10 +36,10 @@ export function EntityMapper({ used, local, value, onChange, fixed = {} }: Props
   return (
     <fieldset style={{ border: 0, margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "var(--space-2)" }}>
       <legend className="form-label" style={{ fontWeight: 600, marginBottom: "var(--space-1)" }}>
-        Use your own entities
+        Choose the entities to use
       </legend>
       <p style={{ margin: 0, fontSize: "var(--font-size-xs)", color: "var(--text-muted)" }}>
-        The template was built on entities from another workspace. Choose which of yours takes each one's place; fields are matched by name.
+        The template was built on entities that aren't in the workspace any more. Choose which entity takes each one's place; fields are matched by name.
       </p>
       {toChoose.map((e) => (
         <label key={e.id} style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.4fr)", gap: "var(--space-2)", alignItems: "center", fontSize: "var(--font-size-sm)" }}>

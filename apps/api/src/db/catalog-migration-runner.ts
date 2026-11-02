@@ -483,7 +483,7 @@ export const catalogMigrations: CatalogMigration[] = [
         ALTER TABLE public.app_user
         ADD COLUMN IF NOT EXISTS is_platform_admin BOOLEAN NOT NULL DEFAULT FALSE;
       `);
-      // An existing server's first account (whoever set it up) becomes its platform owner
+      // An existing server's first account (whoever set it up) becomes its platform admin
       await client.query(`
         UPDATE public.app_user SET is_platform_admin = TRUE
         WHERE id = (SELECT id FROM public.app_user ORDER BY created_at, id LIMIT 1)
@@ -626,7 +626,7 @@ export const catalogMigrations: CatalogMigration[] = [
     name: '026_shared_items',
     up: async (client: PoolClient) => {
       // The shared library: published releases of a workspace's symbols (and later templates);
-      // `everywhere` (set by a platform owner) shares one with every workspace
+      // (migration 27 removed sharing with every workspace)
       await client.query(`
         CREATE TABLE IF NOT EXISTS public.shared_item (
           id VARCHAR(64) PRIMARY KEY,
@@ -645,6 +645,18 @@ export const catalogMigrations: CatalogMigration[] = [
         CREATE INDEX IF NOT EXISTS idx_shared_item_tenant ON public.shared_item(tenant_id);
         CREATE INDEX IF NOT EXISTS idx_shared_item_everywhere ON public.shared_item(everywhere) WHERE everywhere;
         CREATE UNIQUE INDEX IF NOT EXISTS uq_shared_item_source ON public.shared_item(tenant_id, kind, source_id) WHERE source_id IS NOT NULL;
+      `);
+    },
+  },
+  {
+    version: 27,
+    name: '027_shared_items_workspace_only',
+    up: async (client: PoolClient) => {
+      // Sharing stays inside the workspace that shared it: workspaces are run by people who don't
+      // know each other, so nothing passes between them (Built-in, shipped in code, is for everyone)
+      await client.query(`
+        DROP INDEX IF EXISTS public.idx_shared_item_everywhere;
+        ALTER TABLE public.shared_item DROP COLUMN IF EXISTS everywhere;
       `);
     },
   },

@@ -11,12 +11,12 @@ export function testRecipient(req: FastifyRequest): string | null {
   return z.string().email().safeParse(to).success ? to : null;
 }
 
-/** Platform setup: server-wide settings, for platform owners only (whatever their workspace role). */
+/** Platform setup: server-wide settings, for platform admins only (whatever their workspace role). */
 export async function platformRoutes(fastify: FastifyInstance) {
   const requireOwner = async (req: FastifyRequest, reply: FastifyReply) => {
     // Checked against the database, not just the session, so a removed owner loses access at once
     if (!(await platformSettings.isPlatformAdmin(req.session.userId))) {
-      return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'Only platform owners can open Platform setup' });
+      return reply.status(403).send({ statusCode: 403, error: 'Forbidden', message: 'Only platform admins can open Platform setup' });
     }
   };
   const fail = (reply: FastifyReply, err: unknown) => {

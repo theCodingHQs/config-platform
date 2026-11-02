@@ -112,7 +112,7 @@ export class AuthService {
 
       const userId = `u_${crypto.randomBytes(8).toString('hex')}`;
       await client.query(
-        // The server's first account becomes its platform owner
+        // The server's first account becomes its platform admin
         `INSERT INTO public.app_user (id, email, password_hash, last_tenant_id, email_verified, is_platform_admin, created_at, updated_at)
          VALUES ($1, $2, $3, $4, FALSE, NOT EXISTS (SELECT 1 FROM public.app_user WHERE is_platform_admin), NOW(), NOW())`,
         [userId, normalizedEmail, hash, tenantId]

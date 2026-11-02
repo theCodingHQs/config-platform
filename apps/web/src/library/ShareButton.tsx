@@ -29,7 +29,7 @@ export function ShareButton({ kind, sourceId, dirty, onMessage, onShared, classN
   const words = WORDS[kind];
   const [open, setOpen] = useState(false);
   const { data = [] } = useQuery({ queryKey: sharedListKey(kind), queryFn: () => sharedApi.list(kind) });
-  const shared = data.find((s) => s.own && s.sourceId === sourceId);
+  const shared = data.find((s) => s.sourceId === sourceId);
   const [description, setDescription] = useState("");
 
   const publish = useMutation({

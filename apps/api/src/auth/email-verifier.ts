@@ -121,7 +121,7 @@ export function buildInviteEmailHtml(inviteUrl: string, inviterEmail?: string, t
 export class ProductionEmailSender implements EmailSender {
   async sendMail(options: { to: string; subject: string; html: string; text: string }): Promise<void> {
     const sent = await platformSettings.send({ to: [options.to], subject: options.subject, html: options.html, text: options.text });
-    if (!sent) throw new Error('No email service is set up. A platform owner can set one up under Platform setup.');
+    if (!sent) throw new Error('No email service is set up. A platform admin can set one up under Platform setup.');
   }
 
   async sendVerificationEmail(email: string, token: string): Promise<void> {
@@ -207,7 +207,7 @@ export function validateEmailConfig(): void {
   const isProd = process.env.NODE_ENV === 'production';
   if (!isProd) return;
   if (!platformSettings.emailConfigured()) {
-    // Not fatal: a platform owner can set up email on the Platform setup screen after start-up
+    // Not fatal: a platform admin can set up email on the Platform setup screen after start-up
     console.warn('[email] No email service is set up: invites and confirmation emails are not sent. Set one up under Platform setup (or RESEND_API_KEY / SMTP_URL).');
     return;
   }

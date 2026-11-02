@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkAuth();
   }, []);
 
-  // The sign-in replies carry only the basics; /auth/me adds platform owner, theme and date settings
+  // The sign-in replies carry only the basics; /auth/me adds platform admin, theme and date settings
   const signedIn = async (basic: CurrentUser) => {
     const full = (await fetchMe()) ?? basic;
     setUser(full);

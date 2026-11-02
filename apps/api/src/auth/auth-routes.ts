@@ -121,7 +121,7 @@ export async function authRoutes(fastify: FastifyInstance) {
     preHandler: [createRateLimitHook(5, 15 * 60 * 1000), csrfCheckHook],
   }, async (req: FastifyRequest, reply: FastifyReply) => {
     const mode = getSignupMode();
-    // A brand-new server (no accounts yet) lets its first person sign up: they become its platform owner
+    // A brand-new server (no accounts yet) lets its first person sign up: they become its platform admin
     if (mode === 'invite_only' && !(await authService.isFirstAccount())) {
       return reply.status(403).send({
         statusCode: 403,

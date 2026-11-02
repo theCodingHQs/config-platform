@@ -59,7 +59,7 @@ describe('Shared library API', () => {
     symbolId = (await createVisual(builderA, 'Lamp', 'symbol', symbolDef())).id;
     const first = await call(builderA, 'POST', '/shared', { kind: 'symbol', sourceId: symbolId, description: 'A lamp' });
     expect(first.statusCode).toBe(201);
-    expect(first.json()).toMatchObject({ name: 'Lamp', description: 'A lamp', version: 1, everywhere: false, own: true, sourceId: symbolId, workspace: 'Workspace A' });
+    expect(first.json()).toMatchObject({ name: 'Lamp', description: 'A lamp', version: 1, sourceId: symbolId });
     sharedId = first.json().id;
 
     // Changing the working copy changes nothing shared until it's published again
@@ -96,33 +96,19 @@ describe('Shared library API', () => {
     expect((await call(builderA, 'DELETE', `/shared/${ok.json().id}`)).statusCode).toBe(204);
   });
 
-  it('other workspaces see it only once a platform owner shares it everywhere', async () => {
+  it('stays inside its workspace: no other workspace can list, load, use or remove it, platform admins included', async () => {
+    for (const who of [builderB, owner]) {
+      expect((await call(who, 'GET', '/shared?kind=symbol')).json()).toEqual([]);
+      expect((await call(who, 'GET', '/shared?kind=symbol&all=true')).json()).toEqual([]);
+      expect((await call(who, 'GET', `/shared/${sharedId}`)).statusCode).toBe(404);
+    }
+    expect((await call(builderB, 'DELETE', `/shared/${sharedId}`)).statusCode).toBe(404);
+    // Sharing with every workspace is gone
+    expect((await call(owner, 'PUT', `/shared/${sharedId}/everywhere`, { everywhere: true })).statusCode).toBe(404);
     expect((await call(builderB, 'GET', '/shared?kind=symbol')).json()).toEqual([]);
-    expect((await call(builderB, 'GET', `/shared/${sharedId}`)).statusCode).toBe(404);
-
-    // Platform owners can list every workspace's items to choose from; nobody else can
-    expect((await call(builderB, 'GET', '/shared?kind=symbol&all=true')).json()).toEqual([]);
-    const all = (await call(owner, 'GET', '/shared?kind=symbol&all=true')).json();
-    expect(all.find((s: any) => s.id === sharedId)).toMatchObject({ own: false, sourceId: null, workspace: 'Workspace A' });
-
-    expect((await call(builderA, 'PUT', `/shared/${sharedId}/everywhere`, { everywhere: true })).statusCode).toBe(403);
-    expect((await call(owner, 'PUT', `/shared/${sharedId}/everywhere`, { everywhere: true })).statusCode).toBe(200);
-    const seen = (await call(builderB, 'GET', '/shared?kind=symbol')).json();
-    expect(seen).toHaveLength(1);
-    expect(seen[0]).toMatchObject({ id: sharedId, everywhere: true, own: false, sourceId: null });
-    expect((await call(builderB, 'GET', `/shared/${sharedId}`)).json().content.nodes).toHaveLength(1);
   });
 
-  it("keeps it shared while other workspaces' drawings use it, and lets nobody else unpublish it", async () => {
-    const board = await createVisual(builderB, 'Board B', 'drawing', { nodes: [{ id: 'l', kind: 'symbol', ref: `shared:${sharedId}`, attrs: { x: 0, y: 0 } }] });
-    expect((await call(owner, 'PUT', `/shared/${sharedId}/everywhere`, { everywhere: false })).statusCode).toBe(409);
-    expect((await call(builderB, 'DELETE', `/shared/${sharedId}`)).statusCode).toBe(403);
-    expect((await call(builderA, 'DELETE', `/shared/${sharedId}`)).statusCode).toBe(409);
-
-    expect((await call(builderB, 'DELETE', `/visuals/${board.id}`)).statusCode).toBe(204);
-    expect((await call(owner, 'PUT', `/shared/${sharedId}/everywhere`, { everywhere: false })).statusCode).toBe(200);
-    expect((await call(builderB, 'GET', `/shared/${sharedId}`)).statusCode).toBe(404);
-    // Its own workspace still places it in Panel 2
+  it('keeps it shared while its workspace still places it', async () => {
     expect((await call(builderA, 'DELETE', `/shared/${sharedId}`)).json().message).toContain('"Panel 2"');
     expect((await call(builderA, 'DELETE', `/visuals/${panelId}`)).statusCode).toBe(204);
     expect((await call(builderA, 'DELETE', `/shared/${sharedId}`)).statusCode).toBe(204);

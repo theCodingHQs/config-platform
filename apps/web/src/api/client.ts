@@ -1372,7 +1372,7 @@ export async function sendTestEmail(to?: string): Promise<{ sentTo: string; from
   );
 }
 
-// ─── Platform setup (platform owners) ────────────────────────────────────────
+// ─── Platform setup (platform admins) ────────────────────────────────────────
 
 export async function fetchPlatformSettings(): Promise<PlatformSettingsView> {
   return handleResponse<PlatformSettingsView>(await apiFetch(`${API_BASE_URL}/platform/settings`));

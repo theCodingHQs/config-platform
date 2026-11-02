@@ -1,5 +1,5 @@
 /**
- * Platform setup: settings for the whole server (every workspace), changed by platform owners
+ * Platform setup: settings for the whole server (every workspace), changed by platform admins
  * on the Platform setup screen. A value set in the server's environment wins and is shown locked.
  */
 import { z } from 'zod';

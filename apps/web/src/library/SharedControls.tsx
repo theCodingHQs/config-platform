@@ -1,12 +1,10 @@
-/** Small pieces shown with any shared item: where it's shared, its release, and the owners' buttons */
+/** Small pieces shown with any shared item: its release, and stopping sharing */
 import React from "react";
-import { Globe, Undo2 } from "lucide-react";
+import { Undo2 } from "lucide-react";
 import type { SharedItemSummary } from "@config-platform/schema";
 import type { SharedChange } from "./use-shared";
 
-export const whereShared = (s: SharedItemSummary) => (s.everywhere ? "Every workspace" : s.own ? "This workspace" : `Only in ${s.workspace}`);
-
-/** A small label: "v3", "Every workspace" */
+/** A small label: "v3", "Built-in" */
 export const Badge = ({ children, tone = "muted" }: { children: React.ReactNode; tone?: "muted" | "accent" }) => (
   <span
     style={{
@@ -23,23 +21,8 @@ export const Badge = ({ children, tone = "muted" }: { children: React.ReactNode;
   </span>
 );
 
-export function SharedBadges({ item }: { item: SharedItemSummary }) {
-  return (
-    <>
-      <Badge tone={item.everywhere ? "accent" : "muted"}>{whereShared(item)}</Badge>
-      <Badge>v{item.version}</Badge>
-      {!item.own && item.everywhere && <Badge>From {item.workspace}</Badge>}
-    </>
-  );
-}
-
-export function EverywhereButton({ item, change, small }: { item: SharedItemSummary; change: SharedChange; small?: boolean }) {
-  return (
-    <button type="button" className={small ? "btn btn-ghost btn-sm" : "btn btn-secondary"} disabled={change.everywhere.isPending} onClick={() => change.everywhere.mutate({ id: item.id, on: !item.everywhere })}>
-      <Globe size="1em" /> {item.everywhere ? "Stop sharing with every workspace" : "Share with every workspace"}
-    </button>
-  );
-}
+/** Which release it is */
+export const SharedBadges = ({ item }: { item: SharedItemSummary }) => <Badge>v{item.version}</Badge>;
 
 export function StopSharingButton({ item, change, small, onStopped }: { item: SharedItemSummary; change: SharedChange; small?: boolean; onStopped?: () => void }) {
   return (

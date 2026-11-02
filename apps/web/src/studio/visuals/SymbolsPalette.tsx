@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { sharedRef } from "@config-platform/schema";
 import { BUILTIN_SYMBOLS } from "@config-platform/schema/visual-library";
-import { sharedApi, sharedListKey, usable } from "../../library/shared-api";
+import { sharedApi, sharedListKey } from "../../library/shared-api";
 import { VISUALS_KEY, visualKey, visualsApi } from "../../visuals/visuals-api";
 import { VisualScene } from "../../visuals/VisualScene";
 import { useSymbols } from "../../visuals/use-symbols";
@@ -46,7 +46,7 @@ export function SymbolsPalette({ exclude, onAdd }: { exclude?: string; onAdd: (i
   const { data: sharedItems = [] } = useQuery({ queryKey: sharedListKey("symbol"), queryFn: () => sharedApi.list("symbol") });
   const mine = visuals.filter((v) => v.kind === "symbol" && v.id !== exclude);
   // A symbol being edited can't place its own shared release
-  const shared = sharedItems.filter((s) => usable(s) && !(exclude && s.sourceId === exclude));
+  const shared = sharedItems.filter((s) => !(exclude && s.sourceId === exclude));
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--space-3)" }}>
       <section aria-label="Built-in symbols">
