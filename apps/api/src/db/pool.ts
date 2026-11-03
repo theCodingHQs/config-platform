@@ -143,13 +143,33 @@ export function coerceStatementTimeout(
   return fallback;
 }
 
-export const pool = new Pool({
+/**
+ * A hosted database (Neon, for one) closes connections that sit idle, and a laptop waking from
+ * sleep or changing network drops them too. The driver reports that as an 'error' on the
+ * connection; with nobody listening, Node treats it as fatal and the whole server stops. That
+ * happens to idle connections in the pool and also to ones some code has checked out and holds
+ * between queries (the pool stops listening while a connection is lent out). So every connection
+ * gets its own listener when it is made. A dead connection is thrown away and the next query
+ * opens a fresh one; whoever was using it gets the error from their own query. Keep-alive
+ * packets also stop idle connections being cut in the first place.
+ */
+function survivePoolErrors(label: string, target: pg.Pool): pg.Pool {
+  const log = (err: Error) => console.warn(`[db] ${label}: a connection dropped (${err.message}); a new one opens on the next query`);
+  target.on('error', log);
+  target.on('connect', (client) => client.on('error', log));
+  return target;
+}
+
+const KEEP_ALIVE = { keepAlive: true, keepAliveInitialDelayMillis: 10000 };
+
+export const pool = survivePoolErrors('pool', new Pool({
   connectionString: databaseUrl,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
   ssl: getPoolSslConfig(databaseUrl),
-});
+  ...KEEP_ALIVE,
+}));
 
 export const ALLOWED_TEST_DB_HOSTS = new Set([
   'localhost',
@@ -228,13 +248,28 @@ export function getDirectDatabaseUrl(): string {
   return stripPoolerFromUrl(base);
 }
 
-export const directPool = new Pool({
+export const directPool = survivePoolErrors('direct pool', new Pool({
   connectionString: getDirectDatabaseUrl(),
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000,
   ssl: getPoolSslConfig(getDirectDatabaseUrl()),
-});
+  ...KEEP_ALIVE,
+}));
+
+/**
+ * Live data is announced between servers with one NOTIFY per push, many a second. On their own
+ * small pool they can queue behind a slow database without taking connections from the app's
+ * requests (sign-in, pages, records), which would then time out as "Internal Server Error".
+ */
+export const liveNotifyPool = survivePoolErrors('live notify pool', new Pool({
+  connectionString: databaseUrl,
+  max: 3,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+  ssl: getPoolSslConfig(databaseUrl),
+  ...KEEP_ALIVE,
+}));
 
 /**
  * Execute query with SET LOCAL statement_timeout inside a transaction block

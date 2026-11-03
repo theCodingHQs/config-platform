@@ -2,7 +2,7 @@
  * The server's live cluster. By default servers share live data through Postgres (any number of
  * servers, no extra infrastructure); LIVE_CLUSTER=off runs this server on its own.
  */
-import { directPool, pool } from '../../db/pool.js';
+import { directPool, liveNotifyPool } from '../../db/pool.js';
 import { liveHub } from '../live-hub.js';
 import { ruleEngine } from '../rules/rule-engine-instance.js';
 import { connectionRepository } from '../connection-repository.js';
@@ -20,7 +20,7 @@ const solo = process.env.LIVE_CLUSTER === 'off';
 export const liveCluster = new LiveCluster(
   liveHub,
   ruleEngine,
-  new LiveBus(solo ? new MemoryBusHub().transport() : new PgBusTransport(directPool, pool)),
+  new LiveBus(solo ? new MemoryBusHub().transport() : new PgBusTransport(directPool, liveNotifyPool)),
   solo ? new SoloLeaderLock() : new PgLeaderLock(directPool),
   {
     loadConnection: (tenantId, id) => connectionRepository.get(tenantId, id),
